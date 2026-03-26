@@ -3702,7 +3702,14 @@ ReactDOM.createRoot(document.getElementById('root')).render( /*#__PURE__*/React.
 const{useState,useEffect,useRef}=React;
 
 /* ═══ FIREBASE CONFIG ═══ */
-const FIREBASE_CONFIG={apiKey:"",authDomain:"",projectId:"",storageBucket:"",messagingSenderId:"",appId:""};
+const firebaseConfig = {
+  apiKey: "AIza...",
+  authDomain: "absidifinance.firebaseapp.com",
+  projectId: "absidifinance-xxxxx",
+  storageBucket: "absidifinance.appspot.com",
+  messagingSenderId: "12345...",
+  appId: "1:12345..."
+};
 let db=null;
 try{if(FIREBASE_CONFIG.apiKey&&typeof firebase!=='undefined'){firebase.initializeApp(FIREBASE_CONFIG);db=firebase.firestore();}}catch(e){}
 
