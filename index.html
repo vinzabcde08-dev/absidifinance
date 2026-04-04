@@ -206,6 +206,7 @@ const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
 const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const getWeekKey=()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;};
 
 /* converts a username into a valid Firebase Auth email */
 const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifinance.app';
@@ -650,6 +651,9 @@ function MainApp({onLogout}){
   const[payroll,setPayroll]=useState(()=>ls.get(uk('ph_payroll'),[]));
   const[settings,setSettings]=useState(()=>ls.get(uk('ph_settings'),DEFAULT_SETTINGS));
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
+  const[titheLog,setTitheLog]=useState(()=>ls.get(uk('ph_tithe_log'),[]));
+  const[savingsLog,setSavingsLog]=useState(()=>ls.get(uk('ph_savings_log'),[]));
+  const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
   const[year,setYear]=useState(String(CUR_YEAR));
   const[month,setMonth]=useState(CUR_MONTH);
   const[fxRates,setFxRates]=useState({USD:57,AUD:37,GBP:72,EUR:62,CAD:42,SGD:43,PHP:1});
@@ -689,6 +693,9 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_payroll'),payroll);},[payroll]);
   useEffect(()=>{ls.set(uk('ph_settings'),settings);},[settings]);
   useEffect(()=>{ls.set(uk('ph_debts'),debts);},[debts]);
+  useEffect(()=>{ls.set(uk('ph_tithe_log'),titheLog);},[titheLog]);
+  useEffect(()=>{ls.set(uk('ph_savings_log'),savingsLog);},[savingsLog]);
+  useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
 
   /* ── Real-time cross-device sync via Firestore onSnapshot ── */
   useEffect(()=>{
@@ -706,6 +713,8 @@ function MainApp({onLogout}){
       {k:'ph_payroll',set:setPayroll,def:[]},
       {k:'ph_settings',set:setSettings,def:DEFAULT_SETTINGS},
       {k:'ph_debts',set:setDebts,def:[]},
+      {k:'ph_tithe_log',set:setTitheLog,def:[]},
+      {k:'ph_savings_log',set:setSavingsLog,def:[]},
     ];
     const unsubs=watches.map(({k,set})=>{
       const docKey=k+'_'+userId;
@@ -768,6 +777,15 @@ function MainApp({onLogout}){
   const dailyCap=daysLeft>0?Math.max(0,(spendBudget-mExp)/daysLeft):0;
   const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct;
 
+  /* Per-account tithe breakdown */
+  const mIncByAcct=byMonth(income).filter(x=>x.accountId);
+  const totalMInc=mIncByAcct.reduce((s,x)=>s+(x.amount||0),0);
+  const byAcctTithe=accounts.map(a=>{
+    const aInc=mIncByAcct.filter(x=>x.accountId===a.id).reduce((s,x)=>s+(x.amount||0),0);
+    if(!aInc)return null;
+    return{acct:a,inc:aInc,titheAmt:totalMInc>0?(aInc/totalMInc)*tithe:0};
+  }).filter(Boolean);
+
   const accBal=id=>{
     const a=accounts.find(x=>x.id===id);if(!a)return 0;
     const i=income.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
@@ -802,6 +820,7 @@ function MainApp({onLogout}){
     {id:'subs',icon:'calendar',label:'Subs'},
     {id:'payroll',icon:'users',label:'Payroll'},
     {id:'budget',icon:'chart',label:'Budget'},
+    {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
   ];
 
@@ -905,7 +924,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -914,6 +933,7 @@ function MainApp({onLogout}){
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV}/>}
+        {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
       </div>
 
@@ -942,7 +962,7 @@ function MainApp({onLogout}){
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -978,6 +998,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   const totalUnlinked=(unlinkedIncome||0)+(unlinkedExpenses||0);
 
   /* quick-add modal */
+  const[showTitheBreakdown,setShowTitheBreakdown]=useState(false);
   const[qaMode,setQaMode]=useState(null); /* null | 'income' | 'expense' */
   const[qaDate,setQaDate]=useState(TODAY);
   const[qaAmount,setQaAmount]=useState('');
@@ -1008,6 +1029,125 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   ];
   return(
     <div className="col fade" style={{gap:'16px'}}>
+      {/* TITHE ACTION CARD */}
+      {(()=>{
+        const wk=getWeekKey();
+        const entry=titheLog.find(t=>t.week===wk);
+        const isDone=entry&&entry.done;
+        const isSkipped=entry&&entry.skipped;
+        if(isSkipped)return null;
+        if(isDone)return(
+          <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #10b981',background:'#f0fdf4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <p style={{fontWeight:'800',color:'#16a34a',margin:'0 0 2px',fontSize:'14px'}}>✓ Tithes prepared for this week</p>
+              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Week {wk} · {P(tithe)} · Great job!</p>
+            </div>
+            <button onClick={()=>setTitheLog(prev=>prev.filter(t=>t.week!==wk))} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+          </div>
+        );
+        return(
+          <div className="card" style={{padding:'18px 20px',border:'2px solid #f59e0b',background:'#fffbeb'}}>
+            {/* Header row */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+              <div>
+                <p style={{fontWeight:'900',color:'#92400e',margin:'0 0 2px',fontSize:'15px'}}>🙏 Weekly Tithes</p>
+                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of income (excl. investment) · Non-negotiable</p>
+              </div>
+              {/* Total amount badge */}
+              <div style={{textAlign:'right'}}>
+                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(tithe)}</p>
+                <p style={{fontSize:'10px',color:'#d97706',margin:'2px 0 0',fontWeight:'700',textTransform:'uppercase'}}>to withdraw</p>
+              </div>
+            </div>
+
+            {/* Per-account dropdown toggle */}
+            <button
+              onClick={()=>setShowTitheBreakdown(v=>!v)}
+              style={{width:'100%',background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',borderRadius:'8px',padding:'8px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: showTitheBreakdown&&byAcctTithe.length>0?'0':'10px',transition:'margin .2s'}}
+            >
+              <span style={{fontSize:'13px',fontWeight:'700',color:'#92400e'}}>
+                {byAcctTithe.length>0?`Withdraw from ${byAcctTithe.length} account${byAcctTithe.length>1?'s':''}:`:'Which account to withdraw from?'}
+              </span>
+              <span style={{fontSize:'16px',color:'#b45309',transition:'transform .2s',display:'inline-block',transform:showTitheBreakdown?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
+            </button>
+
+            {/* Dropdown content */}
+            {showTitheBreakdown&&(
+              <div style={{marginBottom:'12px',border:'1px solid rgba(245,158,11,.25)',borderTop:'none',borderRadius:'0 0 8px 8px',overflow:'hidden'}}>
+                {byAcctTithe.length>0?(
+                  byAcctTithe.map(({acct,inc,titheAmt},i)=>(
+                    <div key={acct.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',background:i%2===0?'rgba(245,158,11,.05)':'rgba(245,158,11,.1)',borderTop:i>0?'1px solid rgba(245,158,11,.15)':'none'}}>
+                      <div>
+                        <p style={{fontSize:'13px',fontWeight:'800',color:'#92400e',margin:'0 0 1px'}}>{acctLabel(acct)}</p>
+                        <p style={{fontSize:'11px',color:'#d97706',margin:0}}>Income this month: {P(inc)} ({totalMInc>0?Math.round(inc/totalMInc*100):0}% of total)</p>
+                      </div>
+                      <div style={{textAlign:'right'}}>
+                        <p style={{fontSize:'16px',fontWeight:'900',color:'#b45309',margin:0}}>{P(titheAmt)}</p>
+                        <p style={{fontSize:'10px',color:'#d97706',margin:'1px 0 0',fontWeight:'700'}}>withdraw</p>
+                      </div>
+                    </div>
+                  ))
+                ):(
+                  <div style={{padding:'12px 14px',background:'rgba(245,158,11,.05)'}}>
+                    <p style={{fontSize:'12px',color:'#b45309',margin:0,fontStyle:'italic'}}>💡 Link your income entries to accounts in the Income tab — then we can tell you exactly which account to withdraw from.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn" style={{background:'#d97706',color:'#fff',flex:1,justifyContent:'center'}} onClick={()=>setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}])}>
+                ✓ Done — Tithes Prepared
+              </button>
+              <button className="btn bs" onClick={()=>setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,skipped:true,date:TODAY}])}>
+                Skip
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* SAVINGS ACTION CARD */}
+      {(()=>{
+        const entry=savingsLog.find(s=>s.month===curMonthKey);
+        const isDone=entry&&entry.done;
+        const isSkipped=entry&&entry.skipped;
+        const savAcct=accounts.find(a=>a.id===savingsAcctId);
+        if(isSkipped)return null;
+        if(isDone)return(
+          <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #6366f1',background:'#f5f3ff',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <p style={{fontWeight:'800',color:'#4f46e5',margin:'0 0 2px',fontSize:'14px'}}>✓ Savings transferred this month</p>
+              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>{MONTH_NAMES[parseInt(curMonthKey.split('-')[1])-1]} · {P(savings)}{savAcct?` → ${acctLabel(savAcct)}`:''}</p>
+            </div>
+            <button onClick={()=>setSavingsLog(prev=>prev.filter(s=>s.month!==curMonthKey))} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+          </div>
+        );
+        if(savings<=0)return null;
+        return(
+          <div className="card" style={{padding:'18px 20px',border:'2px solid #6366f1',background:'#f5f3ff'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
+              <div>
+                <p style={{fontWeight:'900',color:'#3730a3',margin:'0 0 2px',fontSize:'15px'}}>💰 Monthly Savings — Transfer {P(savings)}</p>
+                <p style={{fontSize:'12px',color:'#6366f1',margin:0}}>{settings.savingsPct}% of this month's income{savAcct?` → ${acctLabel(savAcct)}`:' (no savings account set)'}</p>
+              </div>
+            </div>
+            {!savAcct&&(
+              <p style={{fontSize:'12px',color:'#6366f1',margin:'0 0 12px',fontStyle:'italic'}}>💡 Go to the Savings tab to set your dedicated savings account.</p>
+            )}
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={()=>setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}])}>
+                ✓ Done — Transferred
+              </button>
+              <button className="btn bs" onClick={()=>setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,skipped:true,date:TODAY}])}>
+                Skip this month
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* QUICK ADD BUTTONS */}
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
         <button className="btn bg-btn" style={{fontSize:'14px',padding:'10px 20px'}} onClick={()=>setQaMode('income')}><Ico n="income" s={15} c="#fff"/>+ Quick Income</button>
@@ -2139,6 +2279,98 @@ function DebtTab({debts,setDebts}){
           <Section title="Credit Card Debt" items={ccDebts} color="#ef4444"/>
           <Section title="Personal Debt" items={personalDebts} color="#f59e0b"/>
           <Section title="Loans" items={loanDebts} color="#4f46e5"/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════  SAVINGS  ════════ */
+function SavingsTab({savingsLog,setSavingsLog,savingsAcctId,setSavingsAcctId,accounts,savings,savingsPct,curMonthKey,income,byMonth}){
+  const savAcct=accounts.find(a=>a.id===savingsAcctId);
+  const totalSaved=savingsLog.filter(s=>s.done).reduce((t,s)=>t+(s.amount||0),0);
+  const doneEntries=savingsLog.filter(s=>s.done).sort((a,b)=>b.month.localeCompare(a.month));
+  const skippedCount=savingsLog.filter(s=>s.skipped).length;
+
+  return(
+    <div className="col fade" style={{gap:'16px'}}>
+      {/* SUMMARY CARDS */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px'}}>
+        <div className="card" style={{padding:'18px 20px',background:'#f5f3ff'}}>
+          <p style={{fontSize:'11px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>Total Saved (all time)</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#6366f1',margin:0}}>{P(totalSaved)}</p>
+        </div>
+        <div className="card" style={{padding:'18px 20px',background:'#f0fdf4'}}>
+          <p style={{fontSize:'11px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>This Month Target</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#10b981',margin:0}}>{P(savings)}</p>
+        </div>
+        <div className="card" style={{padding:'18px 20px',background:'#fffbeb'}}>
+          <p style={{fontSize:'11px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>Times Skipped</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#f59e0b',margin:0}}>{skippedCount}</p>
+        </div>
+      </div>
+
+      {/* SAVINGS ACCOUNT SETTING */}
+      <div className="card" style={{padding:'22px'}}>
+        <p className="sect">Your Savings Account</p>
+        <p style={{fontSize:'13px',color:'#64748b',margin:'0 0 12px'}}>Select the bank account you transfer your savings to each month. This helps track your savings goal separately from spending.</p>
+        <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}}>
+          <select className="fi" style={{maxWidth:'320px'}} value={savingsAcctId} onChange={e=>setSavingsAcctId(e.target.value)}>
+            <option value="">— Pick your savings account —</option>
+            {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+          </select>
+          {savAcct&&<span style={{fontSize:'13px',fontWeight:'700',color:'#10b981'}}>✓ {acctLabel(savAcct)} set as savings account</span>}
+        </div>
+        {!savingsAcctId&&(
+          <p style={{fontSize:'12px',color:'#f59e0b',margin:'10px 0 0',fontWeight:'600'}}>⚠ No savings account selected — the dashboard reminder won't know where to send the money.</p>
+        )}
+      </div>
+
+      {/* TRANSFER HISTORY */}
+      <div className="card" style={{padding:'22px'}}>
+        <p className="sect">Transfer History</p>
+        {doneEntries.length===0?(
+          <div style={{padding:'30px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No savings transfers recorded yet. Mark your first one done from the dashboard!</div>
+        ):(
+          <div className="col" style={{gap:'10px'}}>
+            {doneEntries.map(e=>{
+              const [yr,mo]=e.month.split('-');
+              const mName=MONTH_NAMES[parseInt(mo)-1];
+              return(
+                <div key={e.month} className="card row" style={{padding:'14px 16px',background:'#f8fafc'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                    <div style={{width:'40px',height:'40px',borderRadius:'10px',background:'#f5f3ff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px'}}>💰</div>
+                    <div>
+                      <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 2px',fontSize:'14px'}}>{mName} {yr}</p>
+                      <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Transferred on {e.date}</p>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                    <span style={{fontSize:'16px',fontWeight:'900',color:'#6366f1'}}>{P(e.amount)}</span>
+                    <button className="ib" onClick={()=>setSavingsLog(prev=>prev.filter(s=>s.month!==e.month))}><Ico n="trash" s={14}/></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* SKIPPED MONTHS */}
+      {savingsLog.filter(s=>s.skipped).length>0&&(
+        <div className="card" style={{padding:'22px'}}>
+          <p className="sect">Skipped Months</p>
+          <div className="col" style={{gap:'8px'}}>
+            {savingsLog.filter(s=>s.skipped).sort((a,b)=>b.month.localeCompare(a.month)).map(e=>{
+              const [yr,mo]=e.month.split('-');
+              return(
+                <div key={e.month} className="row" style={{padding:'10px 12px',borderRadius:'10px',background:'#fffbeb'}}>
+                  <span style={{fontSize:'13px',fontWeight:'700',color:'#92400e'}}>{MONTH_NAMES[parseInt(mo)-1]} {yr} — skipped</span>
+                  <button style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'3px 8px',cursor:'pointer'}} onClick={()=>setSavingsLog(prev=>prev.filter(s=>s.month!==e.month))}>Clear</button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
