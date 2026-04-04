@@ -102,6 +102,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
 const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 /* converts a username into a valid Firebase Auth email */
 const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifinance.app';
@@ -526,6 +527,7 @@ function MainApp({onLogout}){
   const[settings,setSettings]=useState(()=>ls.get(uk('ph_settings'),DEFAULT_SETTINGS));
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[year,setYear]=useState(String(CUR_YEAR));
+  const[month,setMonth]=useState(CUR_MONTH);
   const[tab,setTab]=useState('home');
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
@@ -549,9 +551,11 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_debts'),debts);},[debts]);
 
   const yr=parseInt(year)||CUR_YEAR;
-  const daysInMonth=new Date(yr,CUR_MONTH+1,0).getDate();
-  const daysLeft=daysInMonth-CUR_DAY;
-  const curMonthKey=`${yr}-${String(CUR_MONTH+1).padStart(2,'0')}`;
+  const selMonth=parseInt(month);
+  const daysInMonth=new Date(yr,selMonth+1,0).getDate();
+  const isCurrentMonth=yr===CUR_YEAR&&selMonth===CUR_MONTH;
+  const daysLeft=isCurrentMonth?daysInMonth-CUR_DAY:daysInMonth;
+  const curMonthKey=`${yr}-${String(selMonth+1).padStart(2,'0')}`;
 
   const byYear=arr=>arr.filter(x=>x.date&&yK(x.date)===yr);
   const byMonth=arr=>arr.filter(x=>x.date&&mK(x.date)===curMonthKey);
@@ -562,7 +566,7 @@ function MainApp({onLogout}){
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
 
   const last3=[0,1,2].map(i=>{
-    const d=new Date(yr,CUR_MONTH-i,1);
+    const d=new Date(yr,selMonth-i,1);
     return income.filter(x=>{const xd=new Date(x.date);return xd.getFullYear()===d.getFullYear()&&xd.getMonth()===d.getMonth();}).reduce((s,x)=>s+(x.amount||0),0);
   });
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
@@ -630,8 +634,10 @@ function MainApp({onLogout}){
             </div>
             {/* RIGHT CONTROLS */}
             <div className="__hdr-right" style={{display:'flex',alignItems:'center',gap:'10px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
-                <span style={{fontSize:'11px',color:'rgba(255,255,255,.65)',fontWeight:'600',letterSpacing:'.02em'}}>YEAR</span>
+              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                <select value={month} onChange={e=>setMonth(parseInt(e.target.value))} style={{padding:'5px 8px',border:'1.5px solid rgba(255,255,255,.3)',borderRadius:'8px',fontSize:'13px',fontWeight:'700',color:'#fff',background:'rgba(255,255,255,.15)',outline:'none',cursor:'pointer'}}>
+                  {MONTH_NAMES.map((m,i)=><option key={i} value={i} style={{color:'#1e293b',background:'#fff'}}>{m}</option>)}
+                </select>
                 <input type="number" className="yr-input" value={year} onChange={e=>setYear(e.target.value)} min="2020" max="2035" title="Type a year"/>
               </div>
               <div style={{position:'relative'}} ref={settingsRef}>
@@ -685,17 +691,17 @@ function MainApp({onLogout}){
           <span style={{color:'#cbd5e1'}}>·</span>
           <span style={{fontSize:'12px',color:'#64748b'}}>Editable allocations</span>
           <span style={{color:'#cbd5e1'}}>·</span>
-          <span style={{fontSize:'12px',color:'#64748b'}}>Year: {yr}</span>
+          <span style={{fontSize:'12px',color:'#64748b'}}>{MONTH_NAMES[selMonth]} {yr}</span>
           {db&&<><span style={{color:'#cbd5e1'}}>·</span><span style={{fontSize:'12px',color:'#10b981',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase synced</span></>}
         </div>
       </div>
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
-        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)}/>}
+        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards}/>}
@@ -729,11 +735,12 @@ function MainApp({onLogout}){
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
+  const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
   const STATS=[
-    {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income'},
+    {label:'Total On Hand',value:P(totalOnHand),color:'#10b981',bg:'#f0fdf4',icon:'bank'},
     {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses'},
     {label:'Net This Month',value:P(net),color:net>=0?'#4f46e5':'#ef4444',bg:'#f5f3ff',icon:'trend-up'},
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar'},
@@ -754,7 +761,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px'}}>
         <div className="card" style={{padding:'20px'}}>
-          <p className="sect">Budget Snapshot — {new Date().toLocaleString('en-US',{month:'long'})}</p>
+          <p className="sect">Budget Snapshot — {monthName||new Date().toLocaleString('en-US',{month:'long'})}</p>
           {[
             {label:`Tithes (${settings.tithePct}%)`,val:tithe,color:'#f59e0b',icon:'cross'},
             {label:`Investments (${settings.investPct}%)`,val:invest,color:'#4f46e5',icon:'trend-up'},
@@ -907,42 +914,124 @@ function CardsTab({cards,setCards,expenses}){
 }
 
 /* ════════  CLIENTS  ════════ */
-function ClientsTab({clients,setClients,income}){
+function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
   const[name,setName]=useState('');const[rate,setRate]=useState('');const[currency,setCurrency]=useState('USD');
   const add=()=>{if(!name.trim())return;setClients([...clients,{id:uid(),name:name.trim(),rate:parseFloat(rate)||0,currency}]);setName('');setRate('');};
+
+  /* graph data */
+  const totalPaid=income.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+  const totalPending=income.filter(i=>i.status==='Pending').reduce((s,i)=>s+i.amount,0);
+  const totalExpected=totalPaid+totalPending;
+  const totalExpenses=mExp||0;
+  const graphMax=Math.max(totalExpected,totalExpenses,1);
+  const pct=(v)=>Math.min(100,Math.round((v/graphMax)*100));
+
+  /* simple bar chart */
+  const bars=[
+    {label:'Expected Income',sublabel:'(Paid + Pending)',value:totalExpected,paidPart:totalPaid,pendingPart:totalPending,color:'#6366f1',bg:'#eef2ff',mixed:true},
+    {label:'Actual Received',sublabel:'(Paid only)',value:totalPaid,color:'#10b981',bg:'#f0fdf4',mixed:false},
+    {label:'Total Expenses',sublabel:'(Expenses + Subs + Payroll)',value:totalExpenses,color:'#ef4444',bg:'#fff5f5',mixed:false},
+  ];
+  const net=totalPaid-totalExpenses;
+
   return(
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Add Client</p>
-        <div className="col">
-          <div><span className="fl">Client Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. John Smith"/></div>
-          <div><span className="fl">Rate (foreign currency)</span><input className="fi" type="number" value={rate} onChange={e=>setRate(e.target.value)} placeholder="0.00"/></div>
-          <div><span className="fl">Currency</span><select className="fi" value={currency} onChange={e=>setCurrency(e.target.value)}><option>USD</option><option>AUD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>SGD</option><option>PHP</option></select></div>
-          <button className="btn bp" onClick={add}><Ico n="user" s={14} c="#fff"/>Add Client</button>
+    <div className="fade col" style={{gap:'16px'}}>
+
+      {/* GRAPH CARD */}
+      <div className="card" style={{padding:'24px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px',marginBottom:'20px'}}>
+          <div>
+            <p className="sect" style={{margin:0}}>Income vs Expenses — {monthName||'This Month'}</p>
+            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>How your billed income compares to what you actually received and what you spent.</p>
+          </div>
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            {[{c:'#6366f1',l:'Expected'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+              <span key={x.l} style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'11px',fontWeight:'700',color:'#64748b'}}>
+                <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
+                {x.l}
+              </span>
+            ))}
+          </div>
         </div>
+
+        {income.length===0&&totalExpenses===0?(
+          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'24px 0'}}>No income or expenses recorded this month yet.</p>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:'18px'}}>
+            {bars.map(b=>(
+              <div key={b.label}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
+                  <div>
+                    <span style={{fontSize:'13px',fontWeight:'700',color:'#1e293b'}}>{b.label}</span>
+                    <span style={{fontSize:'11px',color:'#94a3b8',marginLeft:'6px'}}>{b.sublabel}</span>
+                  </div>
+                  <span style={{fontSize:'15px',fontWeight:'800',color:b.color}}>{P(b.value)}</span>
+                </div>
+                <div style={{height:'28px',background:'#f1f5f9',borderRadius:'8px',overflow:'hidden',position:'relative'}}>
+                  {b.mixed?(
+                    <>
+                      <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${pct(b.value)}%`,background:'#c7d2fe',borderRadius:'8px',transition:'width .5s'}}/>
+                      <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${pct(b.paidPart)}%`,background:'#6366f1',borderRadius:'8px',transition:'width .5s'}}/>
+                    </>
+                  ):(
+                    <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${pct(b.value)}%`,background:b.color,borderRadius:'8px',transition:'width .5s'}}/>
+                  )}
+                </div>
+                {b.mixed&&b.pendingPart>0&&(
+                  <div style={{display:'flex',gap:'12px',marginTop:'5px'}}>
+                    <span style={{fontSize:'11px',color:'#6366f1',fontWeight:'600'}}>● Paid: {P(b.paidPart)}</span>
+                    <span style={{fontSize:'11px',color:'#a5b4fc',fontWeight:'600'}}>● Pending: {P(b.pendingPart)}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Net result */}
+            <div style={{marginTop:'4px',padding:'14px 18px',borderRadius:'10px',background:net>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{net>=0?'✓ Surplus this month':'⚠ Shortfall this month'}</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Received income minus all expenses</p>
+              </div>
+              <span style={{fontSize:'20px',fontWeight:'900',color:net>=0?'#10b981':'#ef4444'}}>{net>=0?'+':''}{P(net)}</span>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="col" style={{gap:'10px'}}>
-        {clients.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No clients yet.</div>}
-        {clients.map(c=>{
-          const paid=income.filter(i=>i.clientId===c.id&&i.status==='Paid').reduce((s,i)=>s+i.amount,0);
-          const pending=income.filter(i=>i.clientId===c.id&&i.status==='Pending').reduce((s,i)=>s+i.amount,0);
-          return(
-            <div key={c.id} className="card row" style={{padding:'16px 20px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                <div style={{width:'40px',height:'40px',background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
-                <div>
-                  <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
-                  <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{c.currency} {c.rate}/rate</span>
-                  <div style={{display:'flex',gap:'8px',marginTop:'6px'}}>
-                    <span className="badge" style={{background:'#f0fdf4',color:'#10b981'}}><Ico n="check" s={10} c="#10b981"/>Paid {P(paid)}</span>
-                    {pending>0&&<span className="badge" style={{background:'#fff7ed',color:'#f59e0b'}}>Pending {P(pending)}</span>}
+
+      {/* CLIENT LIST + ADD FORM */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="__form-grid">
+        <div className="card" style={{padding:'22px'}}>
+          <p className="sect">Add Client</p>
+          <div className="col">
+            <div><span className="fl">Client Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. John Smith"/></div>
+            <div><span className="fl">Rate (foreign currency)</span><input className="fi" type="number" value={rate} onChange={e=>setRate(e.target.value)} placeholder="0.00"/></div>
+            <div><span className="fl">Currency</span><select className="fi" value={currency} onChange={e=>setCurrency(e.target.value)}><option>USD</option><option>AUD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>SGD</option><option>PHP</option></select></div>
+            <button className="btn bp" onClick={add}><Ico n="user" s={14} c="#fff"/>Add Client</button>
+          </div>
+        </div>
+        <div className="col" style={{gap:'10px'}}>
+          {clients.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No clients yet. Add one to start tracking income per client.</div>}
+          {clients.map(c=>{
+            const paid=income.filter(i=>i.clientId===c.id&&i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+            const pending=income.filter(i=>i.clientId===c.id&&i.status==='Pending').reduce((s,i)=>s+i.amount,0);
+            return(
+              <div key={c.id} className="card row" style={{padding:'16px 20px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                  <div style={{width:'40px',height:'40px',background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
+                  <div>
+                    <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
+                    <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{c.currency} {c.rate}/rate</span>
+                    <div style={{display:'flex',gap:'8px',marginTop:'6px'}}>
+                      <span className="badge" style={{background:'#f0fdf4',color:'#10b981'}}><Ico n="check" s={10} c="#10b981"/>Paid {P(paid)}</span>
+                      {pending>0&&<span className="badge" style={{background:'#fff7ed',color:'#f59e0b'}}>Pending {P(pending)}</span>}
+                    </div>
                   </div>
                 </div>
+                <button className="ib" onClick={()=>setClients(clients.filter(x=>x.id!==c.id))}><Ico n="trash" s={15}/></button>
               </div>
-              <button className="ib" onClick={()=>setClients(clients.filter(x=>x.id!==c.id))}><Ico n="trash" s={15}/></button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
