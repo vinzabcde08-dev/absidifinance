@@ -17,44 +17,63 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <style>
+    /* ── CSS VARIABLES (light default) ── */
+    :root{
+      --bg:#f1f5f9;--card:#fff;--card2:#f8fafc;--border:#e2e8f0;
+      --text:#1e293b;--text2:#475569;--text3:#64748b;--text4:#94a3b8;
+      --input-bg:#fff;--input-border:#e2e8f0;--hover-bg:#f8fafc;
+      --sub-bar:#fff;--sub-bar-border:#e2e8f0;--pbar-bg:#e2e8f0;
+      --shadow:0 1px 4px rgba(0,0,0,.07);--shadow-lg:0 8px 30px rgba(0,0,0,.12);
+    }
+    [data-theme="dark"]{
+      --bg:#0f172a;--card:#1e293b;--card2:#263252;--border:#334155;
+      --text:#f1f5f9;--text2:#cbd5e1;--text3:#94a3b8;--text4:#64748b;
+      --input-bg:#0f172a;--input-border:#334155;--hover-bg:#1a2540;
+      --sub-bar:#1e293b;--sub-bar-border:#334155;--pbar-bg:#334155;
+      --shadow:0 1px 4px rgba(0,0,0,.3);--shadow-lg:0 8px 30px rgba(0,0,0,.4);
+    }
     *{box-sizing:border-box}
-    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f1f5f9;margin:0}
-    .card{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);margin:0;color:var(--text);transition:background .2s,color .2s}
+    .card{background:var(--card);border-radius:14px;box-shadow:var(--shadow);transition:background .2s}
     .tab-btn{padding:7px 14px;border-radius:8px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;background:transparent;font-size:13px;white-space:nowrap;color:rgba(255,255,255,.7);display:flex;align-items:center;gap:6px}
     .tab-btn.active{background:rgba(255,255,255,.18);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);border-color:rgba(255,255,255,.3)}
     .tab-btn:not(.active):hover{background:rgba(255,255,255,.1);color:#fff}
-    .fi{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s;color:#1e293b;background:#fff}
+    .fi{width:100%;padding:9px 12px;border:1.5px solid var(--input-border);border-radius:9px;font-size:14px;outline:none;transition:border-color .15s,box-shadow .15s;color:var(--text);background:var(--input-bg)}
     .fi:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
-    .fl{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block}
+    .fl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:block}
     .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-weight:600;font-size:13px;border:none;cursor:pointer;transition:all .15s}
     .bp{background:#4f46e5;color:#fff}.bp:hover{background:#4338ca;transform:translateY(-1px)}
-    .bs{background:#f1f5f9;color:#475569}.bs:hover{background:#e2e8f0}
+    .bs{background:var(--card2);color:var(--text2)}.bs:hover{background:var(--border)}
     .bg-btn{background:#10b981;color:#fff}.bg-btn:hover{background:#059669}
     .br{background:#ef4444;color:#fff}.br:hover{background:#dc2626}
     .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
-    .ib{background:none;border:none;cursor:pointer;padding:5px 7px;border-radius:6px;color:#94a3b8;display:flex;align-items:center;transition:all .15s}
+    .ib{background:none;border:none;cursor:pointer;padding:5px 7px;border-radius:6px;color:var(--text4);display:flex;align-items:center;transition:all .15s}
     .ib:hover{background:#fee2e2;color:#ef4444}
-    .pct-input{width:64px;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:14px;font-weight:700;text-align:center;outline:none;color:#4f46e5}
+    .pct-input{width:64px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;font-weight:700;text-align:center;outline:none;color:#4f46e5;background:var(--input-bg)}
     .pct-input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
     .yr-input{width:72px;padding:5px 8px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:14px;font-weight:700;text-align:center;outline:none;color:#fff;background:rgba(255,255,255,.15)}
     .yr-input:focus{border-color:rgba(255,255,255,.7);background:rgba(255,255,255,.25)}
-    .pbar{height:6px;border-radius:99px;background:#e2e8f0;overflow:hidden}
+    .pbar{height:6px;border-radius:99px;background:var(--pbar-bg);overflow:hidden}
     .pfill{height:100%;border-radius:99px;transition:width .4s}
     .row{display:flex;justify-content:space-between;align-items:center}
     .col{display:flex;flex-direction:column;gap:10px}
-    .sect{font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+    .sect{font-size:10.5px;font-weight:700;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
     .fade{animation:fi .2s ease}
     @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     @keyframes spin{to{transform:rotate(360deg)}}
     ::-webkit-scrollbar{width:5px;height:5px}
-    ::-webkit-scrollbar-track{background:#f1f5f9}
-    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+    ::-webkit-scrollbar-track{background:var(--bg)}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
     input[type=number]{-moz-appearance:textfield}
     input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none}
-    .hr:hover{background:#f8fafc;cursor:pointer}
-    .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);padding:16px}
-    .settings-dropdown{position:absolute;right:0;top:calc(100% + 8px);width:230px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.12);border:1px solid #e2e8f0;z-index:100;overflow:hidden}
-    .dmi-btn{width:100%;text-align:left;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;transition:background .1s}
+    .hr:hover{background:var(--hover-bg);cursor:pointer}
+    .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);padding:16px}
+    .settings-dropdown{position:absolute;right:0;top:calc(100% + 8px);width:230px;background:var(--card);border-radius:12px;box-shadow:var(--shadow-lg);border:1px solid var(--border);z-index:100;overflow:hidden}
+    .dmi-btn{width:100%;text-align:left;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;transition:background .1s;color:var(--text)}
+    .dmi-btn:hover{background:var(--hover-bg)}
+    /* dark mode overrides for inline-style-heavy areas */
+    [data-theme="dark"] .card{border:1px solid var(--border)}
+    [data-theme="dark"] input::placeholder,[data-theme="dark"] select option{color:var(--text3)}
     /* ── MOBILE ── */
     @media(max-width:640px){
       .card{border-radius:12px}
@@ -116,6 +135,42 @@
     var fav=document.createElement('link');fav.rel='icon';fav.type='image/png';fav.sizes='32x32';fav.href=url;document.head.appendChild(fav);
   })();
   </script>
+  <script>
+  /* ── Service Worker registration for offline support ── */
+  if('serviceWorker' in navigator){
+    const SW_SRC=`
+const CACHE='absidifinance-v1';
+const URLS=[
+  self.location.pathname,
+  'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
+];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(URLS).catch(()=>{})));self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  e.respondWith(
+    caches.match(e.request).then(cached=>{
+      const fresh=fetch(e.request).then(res=>{
+        if(res&&res.status===200){
+          const clone=res.clone();
+          caches.open(CACHE).then(c=>c.put(e.request,clone));
+        }
+        return res;
+      }).catch(()=>cached);
+      return cached||fresh;
+    })
+  );
+});`;
+    const blob=new Blob([SW_SRC],{type:'application/javascript'});
+    const swUrl=URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }
+  </script>
 </head>
 <body>
 <div id="root"></div>
@@ -131,6 +186,11 @@ try{
     db=firebase.firestore();
     auth=firebase.auth();
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+    /* ── Offline persistence: queue writes when offline, auto-sync on reconnect ── */
+    db.enablePersistence({synchronizeTabs:true}).catch(err=>{
+      if(err.code==='failed-precondition'){/* multiple tabs open — only one can use persistence */}
+      else if(err.code==='unimplemented'){/* browser doesn't support it (rare) */}
+    });
   }
 }catch(e){}
 
@@ -141,6 +201,7 @@ const CUR_MONTH=new Date().getMonth();
 const CUR_DAY=new Date().getDate();
 const P=(n)=>'₱'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
+const acctLabel=a=>a?`${a.name}${a.subtype?` · ${a.subtype}`:a.type==='Cash on Hand'?' · Cash':''}`:'';
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
 const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
@@ -591,10 +652,26 @@ function MainApp({onLogout}){
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[year,setYear]=useState(String(CUR_YEAR));
   const[month,setMonth]=useState(CUR_MONTH);
+  const[fxRates,setFxRates]=useState({USD:57,AUD:37,GBP:72,EUR:62,CAD:42,SGD:43,PHP:1});
+  const[fxLoaded,setFxLoaded]=useState(false);
+  const[fxUpdatedAt,setFxUpdatedAt]=useState(null);
   const[tab,setTab]=useState('home');
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
   const[showSettings,setShowSettings]=useState(false);
+  const[isOnline,setIsOnline]=useState(navigator.onLine);
+  useEffect(()=>{
+    const on=()=>setIsOnline(true);
+    const off=()=>setIsOnline(false);
+    window.addEventListener('online',on);
+    window.addEventListener('offline',off);
+    return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',off);};
+  },[]);
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem('absidi_dark')==='1');
+  useEffect(()=>{
+    document.documentElement.setAttribute('data-theme',darkMode?'dark':'light');
+    localStorage.setItem('absidi_dark',darkMode?'1':'0');
+  },[darkMode]);
   const settingsRef=useRef(null);
 
   useEffect(()=>{
@@ -641,6 +718,25 @@ function MainApp({onLogout}){
     return()=>unsubs.forEach(u=>u());
   },[]);
 
+  /* ── Live FX rates for client expected income ── */
+  const fetchFx=()=>{
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then(r=>r.json())
+      .then(d=>{
+        if(d.rates&&d.rates.PHP){
+          const php=d.rates.PHP;
+          const r={PHP:1};
+          Object.keys(d.rates).forEach(k=>{r[k]=php/(d.rates[k]||1);});
+          setFxRates(r);setFxLoaded(true);setFxUpdatedAt(new Date());
+        }
+      }).catch(()=>{});
+  };
+  useEffect(()=>{
+    fetchFx();
+    const timer=setInterval(fetchFx,30*60*1000); /* refresh every 30 min */
+    return()=>clearInterval(timer);
+  },[]);
+
   const yr=parseInt(year)||CUR_YEAR;
   const selMonth=parseInt(month);
   const daysInMonth=new Date(yr,selMonth+1,0).getDate();
@@ -652,6 +748,8 @@ function MainApp({onLogout}){
   const byMonth=arr=>arr.filter(x=>x.date&&mK(x.date)===curMonthKey);
 
   const mInc=byMonth(income).reduce((s,x)=>s+(x.amount||0),0);
+  const expectedFromClients=clients.reduce((s,c)=>s+(c.rate||0)*(fxRates[c.currency]||57),0);
+  const netClientExpected=expectedFromClients-mPay;
   const mExp=byMonth(expenses).reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
@@ -662,8 +760,8 @@ function MainApp({onLogout}){
   });
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
   const base=settings.budgetMode==='avg'?avg3:mInc;
-  const tithe=(base*settings.tithePct)/100;
   const invest=(base*settings.investPct)/100;
+  const tithe=((base-invest)*settings.tithePct)/100; /* tithe on income minus investment */
   const desires=(base*settings.desiresPct)/100;
   const savings=(base*settings.savingsPct)/100;
   const spendBudget=base-tithe-invest-desires-savings-mSub-mPay;
@@ -731,6 +829,16 @@ function MainApp({onLogout}){
                 </select>
                 <input type="number" className="yr-input" value={year} onChange={e=>setYear(e.target.value)} min="2020" max="2035" title="Type a year"/>
               </div>
+              {/* Dark / Light toggle */}
+              <button
+                onClick={()=>setDarkMode(v=>!v)}
+                title={darkMode?'Switch to light mode':'Switch to dark mode'}
+                style={{background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.2)',borderRadius:'8px',padding:'7px',cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',transition:'background .15s',fontSize:'16px',lineHeight:1}}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.22)'}
+                onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,.12)'}
+              >
+                {darkMode?'☀️':'🌙'}
+              </button>
               <div style={{position:'relative'}} ref={settingsRef}>
                 <button
                   onClick={()=>setShowSettings(v=>!v)}
@@ -742,21 +850,18 @@ function MainApp({onLogout}){
                 </button>
                 {showSettings&&(
                   <div className="settings-dropdown fade">
-                    <div style={{padding:'12px 16px',borderBottom:'1px solid #f1f5f9'}}>
-                      <p style={{fontSize:'10px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em',margin:'0 0 4px'}}>Signed in as</p>
-                      <p style={{fontWeight:'700',color:'#1e293b',fontSize:'14px',margin:0}}>{getCurrentUsername()}</p>
+                    <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)'}}>
+                      <p style={{fontSize:'10px',fontWeight:'700',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'.06em',margin:'0 0 4px'}}>Signed in as</p>
+                      <p style={{fontWeight:'700',color:'var(--text)',fontSize:'14px',margin:0}}>{getCurrentUsername()}</p>
                     </div>
-                    <button className="dmi-btn" onClick={exportCSV} style={{color:'#4f46e5'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#f5f3ff'}
-                      onMouseLeave={e=>e.currentTarget.style.background='none'}
+                    <button className="dmi-btn" onClick={()=>setDarkMode(v=>!v)}>
+                      <span style={{fontSize:'15px'}}>{darkMode?'☀️':'🌙'}</span>{darkMode?'Light Mode':'Dark Mode'}
+                    </button>
+                    <button className="dmi-btn" onClick={exportCSV} style={{color:'#4f46e5',borderTop:'1px solid var(--border)'}}
                     ><Ico n="download" s={15} c="#4f46e5"/>Export CSV ({yr})</button>
-                    <button className="dmi-btn" onClick={()=>{setShowSettings(false);setShowReset(true);}} style={{color:'#ef4444',borderTop:'1px solid #f1f5f9'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#fff5f5'}
-                      onMouseLeave={e=>e.currentTarget.style.background='none'}
+                    <button className="dmi-btn" onClick={()=>{setShowSettings(false);setShowReset(true);}} style={{color:'#ef4444',borderTop:'1px solid var(--border)'}}
                     ><Ico n="warning" s={15} c="#ef4444"/>Reset All Data</button>
-                    <button className="dmi-btn" onClick={onLogout} style={{color:'#64748b',borderTop:'1px solid #f1f5f9'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
-                      onMouseLeave={e=>e.currentTarget.style.background='none'}
+                    <button className="dmi-btn" onClick={onLogout} style={{color:'#64748b',borderTop:'1px solid var(--border)'}}
                     ><Ico n="logout" s={15} c="#64748b"/>Logout</button>
                   </div>
                 )}
@@ -776,25 +881,36 @@ function MainApp({onLogout}){
       </div>
 
       {/* SUBTITLE */}
-      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 0'}}>
+      <div style={{background:'var(--sub-bar)',borderBottom:'1px solid var(--sub-bar-border)',padding:'8px 0'}}>
         <div style={{maxWidth:'1100px',margin:'0 auto',padding:'0 20px',display:'flex',alignItems:'center',gap:'6px'}}>
-          <span style={{fontSize:'12px',color:'#64748b'}}>All in ₱</span>
-          <span style={{color:'#cbd5e1'}}>·</span>
-          <span style={{fontSize:'12px',color:'#64748b'}}>Editable allocations</span>
-          <span style={{color:'#cbd5e1'}}>·</span>
-          <span style={{fontSize:'12px',color:'#64748b'}}>{MONTH_NAMES[selMonth]} {yr}</span>
-          {db&&<><span style={{color:'#cbd5e1'}}>·</span><span style={{fontSize:'12px',color:'#10b981',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase synced</span></>}
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>All in ₱</span>
+          <span style={{color:'var(--border)'}}>·</span>
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>Editable allocations</span>
+          <span style={{color:'var(--border)'}}>·</span>
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>{MONTH_NAMES[selMonth]} {yr}</span>
+          {db&&<><span style={{color:'var(--border)'}}>·</span><span style={{fontSize:'12px',color:'#10b981',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase synced</span></>}
+          <span style={{color:'var(--border)'}}>·</span>
+          <span style={{fontSize:'12px',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px',color:isOnline?'#10b981':'#f59e0b'}}>
+            <span style={{width:'7px',height:'7px',borderRadius:'50%',background:isOnline?'#10b981':'#f59e0b',display:'inline-block'}}/>
+            {isOnline?'Online':'Offline — changes saved locally'}
+          </span>
         </div>
       </div>
+      {/* OFFLINE BANNER */}
+      {!isOnline&&(
+        <div style={{background:'#fffbeb',borderBottom:'2px solid #fbbf24',padding:'8px 20px',textAlign:'center',fontSize:'13px',color:'#92400e',fontWeight:'600'}}>
+          📴 You're offline — all changes are saved on this device and will sync to the cloud automatically when you reconnect.
+        </div>
+      )}
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
-        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]}/>}
+        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
-        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards}/>}
+        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV}/>}
@@ -826,19 +942,62 @@ function MainApp({onLogout}){
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
+
+  /* ── Quarterly trend ── */
+  const curQ=Math.floor((selMonth!==undefined?selMonth:CUR_MONTH)/3); /* 0=Q1,1=Q2,2=Q3,3=Q4 */
+  const qStartMonth=curQ*3; /* 0,3,6,9 */
+  const qMonths=[qStartMonth,qStartMonth+1,qStartMonth+2];
+  const qYear=yr||CUR_YEAR;
+  const qData=qMonths.map(m=>{
+    const key=`${qYear}-${String(m+1).padStart(2,'0')}`;
+    const inc=(allIncome||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const exp=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const sub=(allSubs||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const pay=(allPayroll||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const isFuture=qYear>CUR_YEAR||(qYear===CUR_YEAR&&m>CUR_MONTH);
+    return{month:MONTH_NAMES[m].substring(0,3),inc,totalExp:exp+sub+pay,net:inc-(exp+sub+pay),isFuture,isCurrent:qYear===CUR_YEAR&&m===CUR_MONTH};
+  });
+  const qMaxVal=Math.max(...qData.map(d=>Math.max(d.inc,d.totalExp)),1);
+  const qTotalInc=qData.reduce((s,d)=>s+d.inc,0);
+  const qTotalExp=qData.reduce((s,d)=>s+d.totalExp,0);
+  const qNet=qTotalInc-qTotalExp;
+  const Q_NAMES=['Q1 (Jan–Mar)','Q2 (Apr–Jun)','Q3 (Jul–Sep)','Q4 (Oct–Dec)'];
   /* graph */
   const inc=income||[];
   const gPaid=inc.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+(i.amount||0),0);
   const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
   const gExpected=gPaid+gPending;
   const gExp=mExp+mSub+mPay;
-  const gMax=Math.max(gExpected,gExp,1);
+  const gMax=Math.max(gExpected,gExp,expectedFromClients||0,1);
   const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
   const gNet=gPaid-gExp;
+  const totalUnlinked=(unlinkedIncome||0)+(unlinkedExpenses||0);
+
+  /* quick-add modal */
+  const[qaMode,setQaMode]=useState(null); /* null | 'income' | 'expense' */
+  const[qaDate,setQaDate]=useState(TODAY);
+  const[qaAmount,setQaAmount]=useState('');
+  const[qaType,setQaType]=useState('VA Salary');
+  const[qaCategory,setQaCategory]=useState('Food');
+  const[qaAccount,setQaAccount]=useState('');
+  const[qaCard,setQaCard]=useState('');
+  const[qaStatus,setQaStatus]=useState('Paid');
+  const qaClose=()=>{setQaMode(null);setQaAmount('');setQaDate(TODAY);setQaAccount('');setQaCard('');};
+  const qaSubmit=()=>{
+    if(!qaAmount)return;
+    if(qaMode==='income'){
+      setIncome([...(allIncome||[]),{id:uid(),date:qaDate,amount:parseFloat(qaAmount),type:qaType,clientId:'',accountId:qaAccount,status:qaStatus}]);
+    }else{
+      setExpenses([...(allExpenses||[]),{id:uid(),date:qaDate,amount:parseFloat(qaAmount),category:qaCategory,accountId:qaAccount,cardId:qaCard}]);
+    }
+    qaClose();
+  };
+  const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
+
   const STATS=[
     {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank'},
@@ -847,9 +1006,17 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar'},
     {label:'Total Debt',value:P(totalDebt),color:totalDebt>0?'#ef4444':'#10b981',bg:totalDebt>0?'#fff5f5':'#f0fdf4',icon:'warning'},
   ];
-  const totalUnlinked=(unlinkedIncome||0)+(unlinkedExpenses||0);
   return(
     <div className="col fade" style={{gap:'16px'}}>
+      {/* QUICK ADD BUTTONS */}
+      <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+        <button className="btn bg-btn" style={{fontSize:'14px',padding:'10px 20px'}} onClick={()=>setQaMode('income')}><Ico n="income" s={15} c="#fff"/>+ Quick Income</button>
+        <button className="btn br" style={{fontSize:'14px',padding:'10px 20px'}} onClick={()=>setQaMode('expense')}><Ico n="expenses" s={15} c="#fff"/>+ Quick Expense</button>
+        <button onClick={()=>setTab('income')} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:'9px',padding:'10px 16px',fontSize:'13px',color:'#64748b',cursor:'pointer',fontWeight:'600'}}>Go to Income tab →</button>
+        <button onClick={()=>setTab('expenses')} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:'9px',padding:'10px 16px',fontSize:'13px',color:'#64748b',cursor:'pointer',fontWeight:'600'}}>Go to Expenses tab →</button>
+      </div>
+
+      {/* UNLINKED WARNING */}
       {totalUnlinked>0&&(
         <div style={{background:'#fffbeb',border:'1.5px solid #f59e0b',borderRadius:'12px',padding:'14px 18px',display:'flex',alignItems:'center',gap:'12px'}}>
           <Ico n="warning" s={20} c="#f59e0b" sw={2}/>
@@ -864,7 +1031,9 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           </div>
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'12px'}}>
+
+      {/* STAT CARDS */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px'}}>
         {STATS.map(s=>(
           <div key={s.label} className="card" style={{padding:'18px 20px',background:s.bg}}>
             <div style={{width:'34px',height:'34px',background:'rgba(255,255,255,.7)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'10px'}}>
@@ -875,6 +1044,8 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           </div>
         ))}
       </div>
+
+      {/* BUDGET + ACCOUNTS GRID */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px'}}>
         <div className="card" style={{padding:'20px'}}>
           <p className="sect">Budget Snapshot — {monthName||new Date().toLocaleString('en-US',{month:'long'})}</p>
@@ -914,11 +1085,11 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
               <div key={a.id} className="row hr" style={{padding:'10px 6px',borderBottom:'1px solid #f8fafc',borderRadius:'6px'}}>
                 <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                   <div style={{width:'32px',height:'32px',background:'#f5f3ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <Ico n={a.type==='Bank'?'bank':a.type==='E-Wallet'?'dollar':'dollar'} s={14} c="#4f46e5" sw={2}/>
+                    <Ico n={a.type==='Bank'?'bank':'dollar'} s={14} c="#4f46e5" sw={2}/>
                   </div>
                   <div>
                     <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{a.name}</p>
-                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{a.type}</p>
+                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{a.subtype||a.type}</p>
                   </div>
                 </div>
                 <span style={{fontWeight:'800',fontSize:'14px',color:bal>=0?'#1e293b':'#ef4444'}}>{P(bal)}</span>
@@ -928,15 +1099,17 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
         </div>
       </div>
 
-      {/* INCOME VS EXPENSES GRAPH */}
+      {/* INCOME vs EXPENSES vs CLIENT EXPECTED GRAPH */}
       <div className="card" style={{padding:'24px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px',marginBottom:'20px'}}>
           <div>
             <p className="sect" style={{margin:0}}>Income vs Expenses — {monthName||'This Month'}</p>
-            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>Did your income cover your expenses this month?</p>
+            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>
+              {fxLoaded?`Live FX rates · updated ${fxUpdatedAt?fxUpdatedAt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'just now'}`:'Using estimated FX rates for client expected income.'}
+            </p>
           </div>
           <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
-            {[{c:'#6366f1',l:'Expected'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+            {[{c:'#8b5cf6',l:'Client Expected'},{c:'#6366f1',l:'Billed'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
               <span key={x.l} style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'11px',fontWeight:'700',color:'#64748b'}}>
                 <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
                 {x.l}
@@ -944,13 +1117,14 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
             ))}
           </div>
         </div>
-        {gExpected===0&&gExp===0?(
-          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'16px 0'}}>No income or expenses recorded this month yet.</p>
+        {gExpected===0&&gExp===0&&!expectedFromClients?(
+          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'16px 0'}}>No data for this month yet.</p>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
             {[
-              {label:'Expected Income',sub:'Paid + Pending',value:gExpected,color:'#6366f1',mixed:true,paid:gPaid,pending:gPending},
-              {label:'Actual Received',sub:'Paid only',value:gPaid,color:'#10b981',mixed:false},
+              {label:'Client Expected Income',sub:`From ${clients.length} client(s) · after payroll: ${P(netClientExpected||0)}`,value:expectedFromClients||0,color:'#8b5cf6',mixed:false},
+              {label:'Billed Income',sub:'Paid + Pending entries',value:gExpected,color:'#6366f1',mixed:true,paid:gPaid,pending:gPending},
+              {label:'Actual Received',sub:'Paid entries only',value:gPaid,color:'#10b981',mixed:false},
               {label:'Total Expenses',sub:'Expenses + Subs + Payroll',value:gExp,color:'#ef4444',mixed:false},
             ].map(b=>(
               <div key={b.label}>
@@ -989,6 +1163,142 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           </div>
         )}
       </div>
+
+      {/* QUARTERLY TREND */}
+      <div className="card" style={{padding:'22px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px',marginBottom:'20px'}}>
+          <div>
+            <p className="sect" style={{margin:0}}>Quarterly Trend — {Q_NAMES[curQ]} · {qYear}</p>
+            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>Resets every quarter. Future months shown as empty.</p>
+          </div>
+          <div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}>
+            {[{c:'#6366f1',l:'Income'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+              <span key={x.l} style={{fontSize:'11px',fontWeight:'700',color:x.c,display:'flex',alignItems:'center',gap:'5px'}}>
+                <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
+                {x.l}
+              </span>
+            ))}
+          </div>
+        </div>
+        {/* Grouped bar chart */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'20px'}}>
+          {qData.map((d,i)=>{
+            const incH=d.isFuture?0:Math.round((d.inc/qMaxVal)*100);
+            const expH=d.isFuture?0:Math.round((d.totalExp/qMaxVal)*100);
+            const BAR_H=100;
+            return(
+              <div key={i} style={{textAlign:'center'}}>
+                <div style={{fontSize:'11px',color:d.isCurrent?'#6366f1':'#94a3b8',fontWeight:d.isCurrent?'800':'600',marginBottom:'6px',letterSpacing:'.03em'}}>
+                  {d.month}{d.isCurrent?'*':''}
+                </div>
+                {/* bars */}
+                <div style={{display:'flex',justifyContent:'center',alignItems:'flex-end',gap:'4px',height:`${BAR_H}px`,marginBottom:'8px'}}>
+                  <div style={{width:'32%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}}>
+                    {!d.isFuture&&d.inc>0&&(
+                      <span style={{fontSize:'9px',color:'#6366f1',fontWeight:'700',marginBottom:'2px',whiteSpace:'nowrap'}}>
+                        {d.inc>=1000?`${(d.inc/1000).toFixed(1)}k`:Math.round(d.inc)}
+                      </span>
+                    )}
+                    <div style={{
+                      width:'100%',height:`${Math.max(incH,d.isFuture?0:2)}%`,
+                      background:d.isFuture?'#f1f5f9':'#6366f1',
+                      borderRadius:'5px 5px 0 0',
+                      transition:'height .5s',
+                      minHeight:d.isFuture?'4px':'0',
+                      opacity:d.isFuture?.3:1
+                    }}/>
+                  </div>
+                  <div style={{width:'32%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}}>
+                    {!d.isFuture&&d.totalExp>0&&(
+                      <span style={{fontSize:'9px',color:'#ef4444',fontWeight:'700',marginBottom:'2px',whiteSpace:'nowrap'}}>
+                        {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
+                      </span>
+                    )}
+                    <div style={{
+                      width:'100%',height:`${Math.max(expH,d.isFuture?0:2)}%`,
+                      background:d.isFuture?'#f1f5f9':'#ef4444',
+                      borderRadius:'5px 5px 0 0',
+                      transition:'height .5s',
+                      minHeight:d.isFuture?'4px':'0',
+                      opacity:d.isFuture?.3:1
+                    }}/>
+                  </div>
+                </div>
+                {/* net pill */}
+                {!d.isFuture&&(
+                  <div style={{padding:'3px 6px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',display:'inline-block',
+                    background:d.net>=0?'#dcfce7':'#fee2e2',color:d.net>=0?'#16a34a':'#dc2626'}}>
+                    {d.net>=0?'+':''}{d.net>=1000||d.net<=-1000?`${(d.net/1000).toFixed(1)}k`:Math.round(d.net)}
+                  </div>
+                )}
+                {d.isFuture&&<div style={{padding:'3px 6px',fontSize:'10px',color:'#cbd5e1',fontWeight:'600'}}>upcoming</div>}
+              </div>
+            );
+          })}
+        </div>
+        {/* Quarter summary row */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px'}}>
+          {[
+            {label:'Q Income',val:qTotalInc,color:'#6366f1',bg:'#eef2ff'},
+            {label:'Q Expenses',val:qTotalExp,color:'#ef4444',bg:'#fff5f5'},
+            {label:'Q Net',val:qNet,color:qNet>=0?'#10b981':'#ef4444',bg:qNet>=0?'#f0fdf4':'#fff5f5'},
+          ].map(s=>(
+            <div key={s.label} style={{background:s.bg,borderRadius:'10px',padding:'10px 12px',textAlign:'center'}}>
+              <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>{s.label}</p>
+              <p style={{fontSize:'16px',fontWeight:'900',color:s.color,margin:0}}>{s.val>=0&&s.label==='Q Net'?'+':''}{P(s.val)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* QUICK-ADD MODAL */}
+      {qaMode&&(
+        <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)qaClose();}}>
+          <div className="card fade" style={{width:'100%',maxWidth:'420px',padding:'24px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
+              <h3 style={{margin:0,fontWeight:'800',fontSize:'17px',color:qaMode==='income'?'#10b981':'#ef4444'}}>
+                {qaMode==='income'?'Quick Add Income':'Quick Add Expense'}
+              </h3>
+              <button onClick={qaClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:'20px',color:'#94a3b8',lineHeight:1}}>×</button>
+            </div>
+            <div className="col" style={{gap:'10px'}}>
+              <div><span className="fl">Date</span><input className="fi" type="date" value={qaDate} onChange={e=>setQaDate(e.target.value)}/></div>
+              {qaMode==='income'?(
+                <div><span className="fl">Type</span><select className="fi" value={qaType} onChange={e=>setQaType(e.target.value)}><option>VA Salary</option><option>Commission</option><option>Business Income</option><option>Bonus</option><option>Refund</option><option>Other</option></select></div>
+              ):(
+                <div><span className="fl">Category</span><select className="fi" value={qaCategory} onChange={e=>setQaCategory(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select></div>
+              )}
+              <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={qaAmount} onChange={e=>setQaAmount(e.target.value)} placeholder="0.00" autoFocus/></div>
+              <div>
+                <span className="fl">Account</span>
+                <select className="fi" value={qaAccount} onChange={e=>{setQaAccount(e.target.value);setQaCard('');}}>
+                  <option value="">— Select account —</option>
+                  {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+                </select>
+              </div>
+              {qaMode==='expense'&&(
+                <div>
+                  <span className="fl">or Card</span>
+                  <select className="fi" value={qaCard} onChange={e=>{setQaCard(e.target.value);setQaAccount('');}}>
+                    <option value="">— Select card —</option>
+                    {(cards||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {qaMode==='income'&&(
+                <div><span className="fl">Status</span><select className="fi" value={qaStatus} onChange={e=>setQaStatus(e.target.value)}><option>Paid</option><option>Pending</option></select></div>
+              )}
+              <div style={{display:'flex',gap:'8px',marginTop:'4px'}}>
+                <button className={`btn ${qaMode==='income'?'bg-btn':'br'}`} style={{flex:1,justifyContent:'center'}} onClick={qaSubmit}>Save</button>
+                <button className="btn bs" onClick={qaClose}>Cancel</button>
+              </div>
+              <button onClick={()=>{qaClose();setTab(qaMode==='income'?'income':'expenses');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:'12px',color:'#94a3b8',textDecoration:'underline',textAlign:'center'}}>
+                Need more fields? Go to full {qaMode} form →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -996,25 +1306,39 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
 /* ════════  ACCOUNTS  ════════ */
 function AccountsTab({accounts,setAccounts,accBal}){
   const[name,setName]=useState('');const[type,setType]=useState('Bank');const[bank,setBank]=useState('BDO');const[opening,setOpening]=useState('');
-  const BANKS=['BDO','BPI','Metrobank','UnionBank','Landbank','PNB','RCBC','Security Bank','Eastwest'];
-  const EW=['GCash','Maya','ShopeePay','GrabPay'];
-  const add=()=>{if(!name.trim())return;setAccounts([...accounts,{id:uid(),name:name.trim(),type,subtype:type!=='Cash on Hand'?bank:'',openingBalance:parseFloat(opening)||0}]);setName('');setOpening('');};
+  const[editId,setEditId]=useState(null);
+  const BANKS=['BDO','BPI','Metrobank','UnionBank','Landbank','PNB','RCBC','Security Bank','Eastwest','Other'];
+  const EW=['GCash','Maya','ShopeePay','GrabPay','PayPal','Wise'];
+  const reset=()=>{setEditId(null);setName('');setType('Bank');setBank('BDO');setOpening('');};
+  const startEdit=(a)=>{setEditId(a.id);setName(a.name);setType(a.type);setBank(a.subtype||'BDO');setOpening(String(a.openingBalance||0));};
+  const save=()=>{
+    if(!name.trim())return;
+    if(editId){
+      setAccounts(accounts.map(a=>a.id===editId?{...a,name:name.trim(),type,subtype:type!=='Cash on Hand'?bank:'',openingBalance:parseFloat(opening)||0}:a));
+    }else{
+      setAccounts([...accounts,{id:uid(),name:name.trim(),type,subtype:type!=='Cash on Hand'?bank:'',openingBalance:parseFloat(opening)||0}]);
+    }
+    reset();
+  };
   return(
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Add Account</p>
+      <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+        <p className="sect">{editId?'Edit Account':'Add Account'}</p>
         <div className="col">
           <div><span className="fl">Account Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. BDO Savings"/></div>
           <div><span className="fl">Type</span><select className="fi" value={type} onChange={e=>setType(e.target.value)}><option>Bank</option><option>E-Wallet</option><option>Cash on Hand</option></select></div>
           {type!=='Cash on Hand'&&<div><span className="fl">{type}</span><select className="fi" value={bank} onChange={e=>setBank(e.target.value)}>{(type==='Bank'?BANKS:EW).map(b=><option key={b}>{b}</option>)}</select></div>}
           <div><span className="fl">Opening Balance (₱)</span><input className="fi" type="number" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0.00"/></div>
-          <button className="btn bp" onClick={add}><Ico n="bank" s={14} c="#fff"/>Add Account</button>
+          <div style={{display:'flex',gap:'8px'}}>
+            <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}><Ico n={editId?'check':'bank'} s={14} c="#fff"/>{editId?'Save Changes':'Add Account'}</button>
+            {editId&&<button className="btn bs" onClick={reset}>Cancel</button>}
+          </div>
         </div>
       </div>
       <div className="col" style={{gap:'10px'}}>
         {accounts.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No accounts yet.</div>}
-        {accounts.map(a=>{const bal=accBal(a.id);return(
-          <div key={a.id} className="card row" style={{padding:'16px 20px'}}>
+        {accounts.map(a=>{const bal=accBal(a.id);const isEditing=editId===a.id;return(
+          <div key={a.id} className="card row" style={{padding:'16px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
               <div style={{width:'40px',height:'40px',background:'#f5f3ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="bank" s={18} c="#4f46e5" sw={1.75}/></div>
               <div>
@@ -1023,12 +1347,13 @@ function AccountsTab({accounts,setAccounts,accBal}){
                 <p style={{fontSize:'11px',color:'#94a3b8',margin:'4px 0 0'}}>Opening: {P(a.openingBalance)}</p>
               </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 2px'}}>Current Balance</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 2px'}}>Balance</p>
                 <p style={{fontSize:'18px',fontWeight:'800',color:bal>=0?'#4f46e5':'#ef4444',margin:0}}>{P(bal)}</p>
               </div>
-              <button className="ib" onClick={()=>setAccounts(accounts.filter(x=>x.id!==a.id))}><Ico n="trash" s={15}/></button>
+              <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(a)}><Ico n="edit" s={15}/></button>
+              <button className="ib" onClick={()=>{if(isEditing)reset();setAccounts(accounts.filter(x=>x.id!==a.id));}}><Ico n="trash" s={15}/></button>
             </div>
           </div>
         );})}
@@ -1040,17 +1365,31 @@ function AccountsTab({accounts,setAccounts,accBal}){
 /* ════════  CARDS  ════════ */
 function CardsTab({cards,setCards,expenses}){
   const[name,setName]=useState('');const[limit,setLimit]=useState('');const[billingDay,setBillingDay]=useState('');const[dueDay,setDueDay]=useState('');
-  const add=()=>{if(!name.trim())return;setCards([...cards,{id:uid(),name:name.trim(),limit:parseFloat(limit)||0,billingDay:parseInt(billingDay)||1,dueDay:parseInt(dueDay)||20}]);setName('');setLimit('');setBillingDay('');setDueDay('');};
+  const[editId,setEditId]=useState(null);
+  const reset=()=>{setEditId(null);setName('');setLimit('');setBillingDay('');setDueDay('');};
+  const startEdit=(c)=>{setEditId(c.id);setName(c.name);setLimit(String(c.limit||''));setBillingDay(String(c.billingDay||''));setDueDay(String(c.dueDay||''));};
+  const save=()=>{
+    if(!name.trim())return;
+    if(editId){
+      setCards(cards.map(c=>c.id===editId?{...c,name:name.trim(),limit:parseFloat(limit)||0,billingDay:parseInt(billingDay)||1,dueDay:parseInt(dueDay)||20}:c));
+    }else{
+      setCards([...cards,{id:uid(),name:name.trim(),limit:parseFloat(limit)||0,billingDay:parseInt(billingDay)||1,dueDay:parseInt(dueDay)||20}]);
+    }
+    reset();
+  };
   return(
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Add Credit Card</p>
+      <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+        <p className="sect">{editId?'Edit Card':'Add Credit Card'}</p>
         <div className="col">
           <div><span className="fl">Card Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. BPI Visa Platinum"/></div>
           <div><span className="fl">Credit Limit (₱)</span><input className="fi" type="number" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0.00"/></div>
           <div><span className="fl">Billing Statement Day</span><input className="fi" type="number" value={billingDay} onChange={e=>setBillingDay(e.target.value)} placeholder="e.g. 5"/></div>
           <div><span className="fl">Payment Due Day</span><input className="fi" type="number" value={dueDay} onChange={e=>setDueDay(e.target.value)} placeholder="e.g. 25"/></div>
-          <button className="btn bp" onClick={add}><Ico n="card" s={14} c="#fff"/>Add Card</button>
+          <div style={{display:'flex',gap:'8px'}}>
+            <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}><Ico n={editId?'check':'card'} s={14} c="#fff"/>{editId?'Save Changes':'Add Card'}</button>
+            {editId&&<button className="btn bs" onClick={reset}>Cancel</button>}
+          </div>
         </div>
       </div>
       <div className="col" style={{gap:'10px'}}>
@@ -1060,8 +1399,9 @@ function CardsTab({cards,setCards,expenses}){
           const util=c.limit?Math.min(100,(spent/c.limit)*100):0;
           const today=new Date().getDate();
           const dtd=c.dueDay>=today?c.dueDay-today:30-(today-c.dueDay);
+          const isEditing=editId===c.id;
           return(
-            <div key={c.id} className="card" style={{padding:'18px 20px'}}>
+            <div key={c.id} className="card" style={{padding:'18px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
               <div className="row" style={{marginBottom:'12px'}}>
                 <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
                   <div style={{width:'40px',height:'40px',background:'#faf5ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="card" s={18} c="#7c3aed" sw={1.75}/></div>
@@ -1073,7 +1413,10 @@ function CardsTab({cards,setCards,expenses}){
                     </div>
                   </div>
                 </div>
-                <button className="ib" onClick={()=>setCards(cards.filter(x=>x.id!==c.id))}><Ico n="trash" s={15}/></button>
+                <div style={{display:'flex',gap:'6px'}}>
+                  <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(c)}><Ico n="edit" s={15}/></button>
+                  <button className="ib" onClick={()=>{if(isEditing)reset();setCards(cards.filter(x=>x.id!==c.id));}}><Ico n="trash" s={15}/></button>
+                </div>
               </div>
               <div style={{marginBottom:'6px'}}>
                 <div className="row" style={{marginBottom:'4px'}}>
@@ -1092,38 +1435,47 @@ function CardsTab({cards,setCards,expenses}){
 }
 
 /* ════════  CLIENTS  ════════ */
-function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
+function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedFromClients,fxRates,fxLoaded,fxUpdatedAt,mPay}){
   const[name,setName]=useState('');const[rate,setRate]=useState('');const[currency,setCurrency]=useState('USD');
-  const add=()=>{if(!name.trim())return;setClients([...clients,{id:uid(),name:name.trim(),rate:parseFloat(rate)||0,currency}]);setName('');setRate('');};
+  const[editId,setEditId]=useState(null);
+  const reset=()=>{setEditId(null);setName('');setRate('');setCurrency('USD');};
+  const startEdit=(c)=>{setEditId(c.id);setName(c.name);setRate(String(c.rate||''));setCurrency(c.currency||'USD');};
+  const save=()=>{
+    if(!name.trim())return;
+    if(editId){
+      setClients(clients.map(x=>x.id===editId?{...x,name:name.trim(),rate:parseFloat(rate)||0,currency}:x));
+    }else{
+      setClients([...clients,{id:uid(),name:name.trim(),rate:parseFloat(rate)||0,currency}]);
+    }
+    reset();
+  };
 
-  /* graph data */
   const totalPaid=income.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+i.amount,0);
   const totalPending=income.filter(i=>i.status==='Pending').reduce((s,i)=>s+i.amount,0);
   const totalExpected=totalPaid+totalPending;
   const totalExpenses=mExp||0;
-  const graphMax=Math.max(totalExpected,totalExpenses,1);
+  const netClientExpected=(expectedFromClients||0)-(mPay||0);
+  const graphMax=Math.max(totalExpected,totalExpenses,expectedFromClients||0,1);
   const pct=(v)=>Math.min(100,Math.round((v/graphMax)*100));
+  const net=totalPaid-totalExpenses;
 
-  /* simple bar chart */
   const bars=[
-    {label:'Expected Income',sublabel:'(Paid + Pending)',value:totalExpected,paidPart:totalPaid,pendingPart:totalPending,color:'#6366f1',bg:'#eef2ff',mixed:true},
+    {label:'Client Expected Income',sublabel:`(${fxLoaded?'Live':'Est.'} FX · after payroll: ${P(netClientExpected)})`,value:expectedFromClients||0,color:'#8b5cf6',bg:'#f5f3ff',mixed:false},
+    {label:'Billed Income',sublabel:'(Paid + Pending)',value:totalExpected,paidPart:totalPaid,pendingPart:totalPending,color:'#6366f1',bg:'#eef2ff',mixed:true},
     {label:'Actual Received',sublabel:'(Paid only)',value:totalPaid,color:'#10b981',bg:'#f0fdf4',mixed:false},
     {label:'Total Expenses',sublabel:'(Expenses + Subs + Payroll)',value:totalExpenses,color:'#ef4444',bg:'#fff5f5',mixed:false},
   ];
-  const net=totalPaid-totalExpenses;
 
   return(
     <div className="fade col" style={{gap:'16px'}}>
-
-      {/* GRAPH CARD */}
       <div className="card" style={{padding:'24px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px',marginBottom:'20px'}}>
           <div>
             <p className="sect" style={{margin:0}}>Income vs Expenses — {monthName||'This Month'}</p>
-            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>How your billed income compares to what you actually received and what you spent.</p>
+            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>{fxLoaded?`Live FX · updated ${fxUpdatedAt?fxUpdatedAt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'just now'} · refreshes every 30 min`:'Using estimated exchange rates.'} — Client expected = sum of client rates × FX rate.</p>
           </div>
           <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-            {[{c:'#6366f1',l:'Expected'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+            {[{c:'#8b5cf6',l:'Client Exp.'},{c:'#6366f1',l:'Billed'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
               <span key={x.l} style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'11px',fontWeight:'700',color:'#64748b'}}>
                 <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
                 {x.l}
@@ -1131,9 +1483,8 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
             ))}
           </div>
         </div>
-
-        {income.length===0&&totalExpenses===0?(
-          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'24px 0'}}>No income or expenses recorded this month yet.</p>
+        {clients.length===0?(
+          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'24px 0'}}>Add clients to see expected income.</p>
         ):(
           <div style={{display:'flex',flexDirection:'column',gap:'18px'}}>
             {bars.map(b=>(
@@ -1163,8 +1514,6 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
                 )}
               </div>
             ))}
-
-            {/* Net result */}
             <div style={{marginTop:'4px',padding:'14px 18px',borderRadius:'10px',background:net>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div>
                 <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{net>=0?'✓ Surplus this month':'⚠ Shortfall this month'}</p>
@@ -1176,36 +1525,50 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
         )}
       </div>
 
-      {/* CLIENT LIST + ADD FORM */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="__form-grid">
-        <div className="card" style={{padding:'22px'}}>
-          <p className="sect">Add Client</p>
+        <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+          <p className="sect">{editId?'Edit Client':'Add Client'}</p>
           <div className="col">
             <div><span className="fl">Client Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. John Smith"/></div>
-            <div><span className="fl">Rate (foreign currency)</span><input className="fi" type="number" value={rate} onChange={e=>setRate(e.target.value)} placeholder="0.00"/></div>
+            <div><span className="fl">Monthly Rate (foreign currency)</span><input className="fi" type="number" value={rate} onChange={e=>setRate(e.target.value)} placeholder="0.00"/></div>
             <div><span className="fl">Currency</span><select className="fi" value={currency} onChange={e=>setCurrency(e.target.value)}><option>USD</option><option>AUD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>SGD</option><option>PHP</option></select></div>
-            <button className="btn bp" onClick={add}><Ico n="user" s={14} c="#fff"/>Add Client</button>
+            {rate&&currency!=='PHP'&&(
+              <p style={{fontSize:'12px',color:'#6366f1',margin:'0',fontWeight:'600'}}>
+                ≈ {P((parseFloat(rate)||0)*(fxRates[currency]||57))} / month at {fxLoaded?'live':'est.'} rate
+              </p>
+            )}
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}><Ico n={editId?'check':'user'} s={14} c="#fff"/>{editId?'Save Changes':'Add Client'}</button>
+              {editId&&<button className="btn bs" onClick={reset}>Cancel</button>}
+            </div>
           </div>
         </div>
         <div className="col" style={{gap:'10px'}}>
-          {clients.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No clients yet. Add one to start tracking income per client.</div>}
+          {clients.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No clients yet. Add one to start tracking expected income.</div>}
           {clients.map(c=>{
-            const paid=income.filter(i=>i.clientId===c.id&&i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+            const paid=income.filter(i=>i.clientId===c.id&&(i.status==='Paid'||!i.status)).reduce((s,i)=>s+i.amount,0);
             const pending=income.filter(i=>i.clientId===c.id&&i.status==='Pending').reduce((s,i)=>s+i.amount,0);
+            const expectedPhp=(c.rate||0)*(fxRates[c.currency]||57);
+            const isEditing=editId===c.id;
             return(
-              <div key={c.id} className="card row" style={{padding:'16px 20px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                  <div style={{width:'40px',height:'40px',background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
-                  <div>
-                    <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
-                    <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{c.currency} {c.rate}/rate</span>
-                    <div style={{display:'flex',gap:'8px',marginTop:'6px'}}>
-                      <span className="badge" style={{background:'#f0fdf4',color:'#10b981'}}><Ico n="check" s={10} c="#10b981"/>Paid {P(paid)}</span>
-                      {pending>0&&<span className="badge" style={{background:'#fff7ed',color:'#f59e0b'}}>Pending {P(pending)}</span>}
+              <div key={c.id} className="card" style={{padding:'16px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
+                <div className="row" style={{marginBottom:'8px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                    <div style={{width:'40px',height:'40px',background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
+                    <div>
+                      <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
+                      <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{c.currency} {c.rate}/mo ≈ {P(expectedPhp)}</span>
                     </div>
                   </div>
+                  <div style={{display:'flex',gap:'6px'}}>
+                    <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(c)}><Ico n="edit" s={15}/></button>
+                    <button className="ib" onClick={()=>{if(isEditing)reset();setClients(clients.filter(x=>x.id!==c.id));}}><Ico n="trash" s={15}/></button>
+                  </div>
                 </div>
-                <button className="ib" onClick={()=>setClients(clients.filter(x=>x.id!==c.id))}><Ico n="trash" s={15}/></button>
+                <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                  <span className="badge" style={{background:'#f0fdf4',color:'#10b981'}}><Ico n="check" s={10} c="#10b981"/>Paid {P(paid)}</span>
+                  {pending>0&&<span className="badge" style={{background:'#fff7ed',color:'#f59e0b'}}>Pending {P(pending)}</span>}
+                </div>
               </div>
             );
           })}
@@ -1245,7 +1608,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
           <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
           <div><span className="fl">Type</span><select className="fi" value={type} onChange={e=>setType(e.target.value)}><option>VA Salary</option><option>Commission</option><option>Business Income</option><option>Bonus</option><option>Refund</option><option>Other</option></select></div>
           <div><span className="fl">Client (optional)</span><select className="fi" value={clientId} onChange={e=>setClientId(e.target.value)}><option value="">— Select client —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><span className="fl">Deposited To</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          <div><span className="fl">Deposited To</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
           <div><span className="fl">Status</span><select className="fi" value={status} onChange={e=>setStatus(e.target.value)}><option>Paid</option><option>Pending</option></select></div>
           <div style={{display:'flex',gap:'8px'}}>
@@ -1289,7 +1652,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
 }
 
 /* ════════  EXPENSES  ════════ */
-function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
+function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,employees}){
   const[date,setDate]=useState(TODAY);
   const[amount,setAmount]=useState('');
   const[category,setCategory]=useState('Food');
@@ -1317,7 +1680,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
         <div className="col">
           <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
           <div><span className="fl">Category</span><select className="fi" value={category} onChange={e=>setCategory(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select></div>
-          <div><span className="fl">Pay from Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          <div><span className="fl">Pay from Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">or Charge to Card</span><select className="fi" value={cardId} onChange={e=>{setCardId(e.target.value);if(e.target.value)setAccountId('');}}><option value="">— Select card —</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
           <div style={{display:'flex',gap:'8px'}}>
@@ -1329,7 +1692,23 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
         </div>
       </div>
       <div className="col" style={{gap:'8px',maxHeight:'70vh',overflowY:'auto'}}>
-        {expenses.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No expenses recorded this month.</div>}
+        {(payroll||[]).map(p=>{const em=(employees||[]).find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);return(
+          <div key={'pay-'+p.id} className="card row" style={{padding:'14px 18px',borderLeft:'3px solid #7c3aed',background:'#faf5ff'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+              <div style={{width:'34px',height:'34px',background:'#f5f3ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="users" s={15} c="#7c3aed" sw={1.75}/></div>
+              <div>
+                <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'3px'}}>
+                  <span style={{fontWeight:'700',color:'#1e293b',fontSize:'13px'}}>Payroll</span>
+                  <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{em?.name||'Employee'}</span>
+                </div>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{p.date}{ac?` · ${acctLabel(ac)}`:''} · Go to Payroll tab to edit</p>
+              </div>
+            </div>
+            <span style={{fontWeight:'800',fontSize:'15px',color:'#7c3aed'}}>{P(p.amount)}</span>
+          </div>
+        );})}
+        {expenses.length===0&&(payroll||[]).length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No expenses recorded this month.</div>}
+        {expenses.length===0&&(payroll||[]).length>0&&<p style={{fontSize:'12px',color:'#94a3b8',textAlign:'center'}}>No manual expenses this month.</p>}
         {[...expenses].reverse().map(e=>{
           const ac=accounts.find(a=>a.id===e.accountId);const cd=cards.find(c=>c.id===e.cardId);
           const noAcct=!e.accountId&&!e.cardId;
@@ -1362,19 +1741,33 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
 /* ════════  SUBS  ════════ */
 function SubsTab({subs,allSubs,setSubs,accounts,cards}){
   const[name,setName]=useState('');const[amount,setAmount]=useState('');const[date,setDate]=useState(TODAY);const[freq,setFreq]=useState('monthly');const[accountId,setAccountId]=useState('');const[cardId,setCardId]=useState('');
-  const add=()=>{if(!name.trim()||!amount)return;setSubs([...allSubs,{id:uid(),name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}]);setName('');setAmount('');};
+  const[editId,setEditId]=useState(null);
+  const reset=()=>{setEditId(null);setName('');setAmount('');setDate(TODAY);setFreq('monthly');setAccountId('');setCardId('');};
+  const startEdit=(s)=>{setEditId(s.id);setName(s.name);setAmount(String(s.amount||''));setDate(s.date);setFreq(s.freq||'monthly');setAccountId(s.accountId||'');setCardId(s.cardId||'');};
+  const save=()=>{
+    if(!name.trim()||!amount)return;
+    if(editId){
+      setSubs(allSubs.map(x=>x.id===editId?{...x,name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}:x));
+    }else{
+      setSubs([...allSubs,{id:uid(),name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}]);
+    }
+    reset();
+  };
   return(
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Add Subscription</p>
+      <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+        <p className="sect">{editId?'Edit Subscription':'Add Subscription'}</p>
         <div className="col">
           <div><span className="fl">Service Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Netflix, Spotify"/></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
           <div><span className="fl">Next Billing Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
           <div><span className="fl">Frequency</span><select className="fi" value={freq} onChange={e=>setFreq(e.target.value)}><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="quarterly">Quarterly</option></select></div>
-          <div><span className="fl">Charged to Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          <div><span className="fl">Charged to Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">or Card</span><select className="fi" value={cardId} onChange={e=>{setCardId(e.target.value);if(e.target.value)setAccountId('');}}><option value="">— Select card —</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <button className="btn bp" onClick={add}><Ico n="calendar" s={14} c="#fff"/>Add Subscription</button>
+          <div style={{display:'flex',gap:'8px'}}>
+            <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}><Ico n={editId?'check':'calendar'} s={14} c="#fff"/>{editId?'Save Changes':'Add Subscription'}</button>
+            {editId&&<button className="btn bs" onClick={reset}>Cancel</button>}
+          </div>
         </div>
       </div>
       <div className="col" style={{gap:'10px'}}>
@@ -1382,8 +1775,9 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
         {subs.map(s=>{
           const ac=accounts.find(a=>a.id===s.accountId);const cd=cards.find(c=>c.id===s.cardId);
           const dl=Math.round((new Date(s.date)-new Date(TODAY))/(864e5));
+          const isEditing=editId===s.id;
           return(
-            <div key={s.id} className="card row" style={{padding:'14px 18px'}}>
+            <div key={s.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                 <div style={{width:'34px',height:'34px',background:'#faf5ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="calendar" s={15} c="#7c3aed" sw={1.75}/></div>
                 <div>
@@ -1391,12 +1785,13 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
                     <span style={{fontWeight:'700',color:'#1e293b'}}>{s.name}</span>
                     {dl>=0&&dl<=5&&<span className="badge" style={{background:'#fef2f2',color:'#ef4444'}}><Ico n="warning" s={10} c="#ef4444"/>Due in {dl}d</span>}
                   </div>
-                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{s.freq} · {s.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}</p>
+                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{s.freq} · {s.date}{ac?` · ${acctLabel(ac)}`:''}{cd?` · ${cd.name}`:''}</p>
                 </div>
               </div>
-              <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                 <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(s.amount)}</span>
-                <button className="ib" onClick={()=>setSubs(allSubs.filter(x=>x.id!==s.id))}><Ico n="trash" s={15}/></button>
+                <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(s)}><Ico n="edit" s={15}/></button>
+                <button className="ib" onClick={()=>{if(isEditing)reset();setSubs(allSubs.filter(x=>x.id!==s.id));}}><Ico n="trash" s={15}/></button>
               </div>
             </div>
           );
@@ -1408,18 +1803,39 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
 
 /* ════════  PAYROLL  ════════ */
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
-  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');
-  const addEmp=()=>{if(!empName.trim())return;setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim()}]);setEmpName('');setEmpRole('');};
-  const addPay=()=>{if(!amount)return;setPayroll([...allPayroll,{id:uid(),date,employeeId,amount:parseFloat(amount),accountId}]);setAmount('');};
+  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[editEmpId,setEditEmpId]=useState(null);
+  const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');const[editPayId,setEditPayId]=useState(null);
+
+  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');};
+  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');};
+  const saveEmp=()=>{
+    if(!empName.trim())return;
+    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim()}:x));}
+    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim()}]);}
+    resetEmp();
+  };
+
+  const resetPay=()=>{setEditPayId(null);setDate(TODAY);setEmployeeId('');setAmount('');setAccountId('');};
+  const startEditPay=(p)=>{setEditPayId(p.id);setDate(p.date);setEmployeeId(p.employeeId||'');setAmount(String(p.amount||''));setAccountId(p.accountId||'');};
+  const savePay=()=>{
+    if(!amount)return;
+    if(editPayId){setPayroll(allPayroll.map(x=>x.id===editPayId?{...x,date,employeeId,amount:parseFloat(amount),accountId}:x));}
+    else{setPayroll([...allPayroll,{id:uid(),date,employeeId,amount:parseFloat(amount),accountId}]);}
+    resetPay();
+  };
+
   return(
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="col" style={{gap:'16px'}}>
-        <div className="card" style={{padding:'22px'}}>
-          <p className="sect">Add Employee</p>
+        <div className="card" style={{padding:'22px',border:editEmpId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+          <p className="sect">{editEmpId?'Edit Employee':'Add Employee'}</p>
           <div className="col">
             <div><span className="fl">Name</span><input className="fi" value={empName} onChange={e=>setEmpName(e.target.value)} placeholder="Employee name"/></div>
             <div><span className="fl">Role</span><input className="fi" value={empRole} onChange={e=>setEmpRole(e.target.value)} placeholder="e.g. Virtual Assistant"/></div>
-            <button className="btn bp" onClick={addEmp}><Ico n="users" s={14} c="#fff"/>Add Employee</button>
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={saveEmp}><Ico n={editEmpId?'check':'users'} s={14} c="#fff"/>{editEmpId?'Save Employee':'Add Employee'}</button>
+              {editEmpId&&<button className="btn bs" onClick={resetEmp}>Cancel</button>}
+            </div>
           </div>
           {employees.length>0&&<div style={{marginTop:'16px',borderTop:'1px solid #f1f5f9',paddingTop:'14px'}}>
             {employees.map(e=>(
@@ -1428,19 +1844,25 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                   <div style={{width:'30px',height:'30px',background:'#f5f3ff',borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={14} c="#7c3aed" sw={1.75}/></div>
                   <div><p style={{fontWeight:'700',fontSize:'13px',margin:0}}>{e.name}</p><p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.role}</p></div>
                 </div>
-                <button className="ib" onClick={()=>setEmployees(employees.filter(x=>x.id!==e.id))}><Ico n="trash" s={14}/></button>
+                <div style={{display:'flex',gap:'4px'}}>
+                  <button className="ib" style={{color:editEmpId===e.id?'#6366f1':'#94a3b8'}} onClick={()=>editEmpId===e.id?resetEmp():startEditEmp(e)}><Ico n="edit" s={14}/></button>
+                  <button className="ib" onClick={()=>{if(editEmpId===e.id)resetEmp();setEmployees(employees.filter(x=>x.id!==e.id));}}><Ico n="trash" s={14}/></button>
+                </div>
               </div>
             ))}
           </div>}
         </div>
-        <div className="card" style={{padding:'22px'}}>
-          <p className="sect">Record Payment</p>
+        <div className="card" style={{padding:'22px',border:editPayId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+          <p className="sect">{editPayId?'Edit Payment':'Record Payment'}</p>
           <div className="col">
             <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
             <div><span className="fl">Employee</span><select className="fi" value={employeeId} onChange={e=>setEmployeeId(e.target.value)}><option value="">— Select employee —</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
             <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
-            <div><span className="fl">Paid from Account</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-            <button className="btn bp" onClick={addPay}><Ico n="dollar" s={14} c="#fff"/>Record Payment</button>
+            <div><span className="fl">Paid from Account</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={savePay}><Ico n={editPayId?'check':'dollar'} s={14} c="#fff"/>{editPayId?'Save Payment':'Record Payment'}</button>
+              {editPayId&&<button className="btn bs" onClick={resetPay}>Cancel</button>}
+            </div>
           </div>
         </div>
       </div>
@@ -1448,18 +1870,20 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
         {payroll.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No payroll records this month.</div>}
         {[...payroll].reverse().map(p=>{
           const em=employees.find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);
+          const isEditing=editPayId===p.id;
           return(
-            <div key={p.id} className="card row" style={{padding:'14px 18px'}}>
+            <div key={p.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                 <div style={{width:'34px',height:'34px',background:'#faf5ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="users" s={15} c="#7c3aed" sw={1.75}/></div>
                 <div>
                   <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:'0 0 3px'}}>{em?.name||'Unknown'}</p>
-                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{p.date}{ac?` · ${ac.name}`:''}</p>
+                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{p.date}{ac?` · ${acctLabel(ac)}`:''}</p>
                 </div>
               </div>
-              <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                 <span style={{fontWeight:'800',fontSize:'15px',color:'#ef4444'}}>{P(p.amount)}</span>
-                <button className="ib" onClick={()=>setPayroll(allPayroll.filter(x=>x.id!==p.id))}><Ico n="trash" s={15}/></button>
+                <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?resetPay():startEditPay(p)}><Ico n="edit" s={15}/></button>
+                <button className="ib" onClick={()=>{if(isEditing)resetPay();setPayroll(allPayroll.filter(x=>x.id!==p.id));}}><Ico n="trash" s={15}/></button>
               </div>
             </div>
           );
@@ -1579,6 +2003,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
 
 /* ════════  DEBT  ════════ */
 function DebtTab({debts,setDebts}){
+  const[editId,setEditId]=useState(null);
   const[type,setType]=useState('Credit Card');
   const[name,setName]=useState('');
   const[balance,setBalance]=useState('');
@@ -1588,14 +2013,20 @@ function DebtTab({debts,setDebts}){
   const[lender,setLender]=useState('');
   const[notes,setNotes]=useState('');
 
-  const add=()=>{
+  const reset=()=>{setEditId(null);setType('Credit Card');setName('');setBalance('');setInterestRate('');setMinPayment('');setDueDate('');setLender('');setNotes('');};
+  const startEdit=(d)=>{setEditId(d.id);setType(d.type);setName(d.name);setBalance(String(d.balance||''));setInterestRate(String(d.interestRate||''));setMinPayment(String(d.minPayment||''));setDueDate(d.dueDate||'');setLender(d.lender||'');setNotes(d.notes||'');};
+
+  const save=()=>{
     if(!name.trim()||!balance)return;
-    setDebts(prev=>[...prev,{id:uid(),type,name:name.trim(),balance:parseFloat(balance)||0,interestRate:parseFloat(interestRate)||0,minPayment:parseFloat(minPayment)||0,dueDate,lender:lender.trim(),notes:notes.trim(),dateAdded:TODAY}]);
-    setName('');setBalance('');setInterestRate('');setMinPayment('');setDueDate('');setLender('');setNotes('');
+    if(editId){
+      setDebts(prev=>prev.map(d=>d.id===editId?{...d,type,name:name.trim(),balance:parseFloat(balance)||0,interestRate:parseFloat(interestRate)||0,minPayment:parseFloat(minPayment)||0,dueDate,lender:lender.trim(),notes:notes.trim()}:d));
+    }else{
+      setDebts(prev=>[...prev,{id:uid(),type,name:name.trim(),balance:parseFloat(balance)||0,interestRate:parseFloat(interestRate)||0,minPayment:parseFloat(minPayment)||0,dueDate,lender:lender.trim(),notes:notes.trim(),dateAdded:TODAY}]);
+    }
+    reset();
   };
 
   const del=(id)=>setDebts(prev=>prev.filter(d=>d.id!==id));
-  const updateBalance=(id,val)=>setDebts(prev=>prev.map(d=>d.id===id?{...d,balance:parseFloat(val)||0}:d));
 
   const totalDebt=debts.reduce((s,d)=>s+(d.balance||0),0);
   const totalMin=debts.reduce((s,d)=>s+(d.minPayment||0),0);
@@ -1610,8 +2041,8 @@ function DebtTab({debts,setDebts}){
     'Credit Card':'#fff5f5','Personal':'#fffbeb','Loan':'#f5f3ff'
   };
 
-  const DebtCard=({d})=>(
-    <div className="card" style={{padding:'16px 18px'}}>
+  const DebtCard=({d})=>{const isEditing=editId===d.id;return(
+    <div className="card" style={{padding:'16px 18px',border:isEditing?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
       <div className="row" style={{marginBottom:'10px'}}>
         <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
           <div style={{padding:'6px 10px',background:DTYPE_BG[d.type]||'#f8fafc',borderRadius:'8px',fontSize:'11px',fontWeight:'700',color:DTYPE_COLOR[d.type]||'#64748b'}}>{d.type}</div>
@@ -1620,7 +2051,10 @@ function DebtTab({debts,setDebts}){
             {d.lender&&<p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{d.lender}</p>}
           </div>
         </div>
-        <button className="ib" onClick={()=>del(d.id)}><Ico n="trash" s={14}/></button>
+        <div style={{display:'flex',gap:'6px'}}>
+          <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(d)}><Ico n="edit" s={14}/></button>
+          <button className="ib" onClick={()=>del(d.id)}><Ico n="trash" s={14}/></button>
+        </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:'8px',marginBottom:'10px'}}>
         <div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
@@ -1640,13 +2074,9 @@ function DebtTab({debts,setDebts}){
           <p style={{fontSize:'13px',fontWeight:'700',color:'#1e293b',margin:0}}>{d.dueDate}</p>
         </div>}
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-        <span style={{fontSize:'12px',color:'#64748b',fontWeight:'600',whiteSpace:'nowrap'}}>Update balance:</span>
-        <input className="fi" type="number" defaultValue={d.balance} onBlur={e=>updateBalance(d.id,e.target.value)} style={{maxWidth:'140px',padding:'6px 10px',fontSize:'13px'}} placeholder="New balance"/>
-      </div>
-      {d.notes&&<p style={{fontSize:'12px',color:'#94a3b8',margin:'8px 0 0',fontStyle:'italic'}}>{d.notes}</p>}
+      {d.notes&&<p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0',fontStyle:'italic'}}>{d.notes}</p>}
     </div>
-  );
+  );};
 
   const Section=({title,items,color})=>items.length===0?null:(
     <div>
@@ -1673,9 +2103,9 @@ function DebtTab({debts,setDebts}){
         </div>
       </div>
 
-      {/* ADD FORM */}
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Add Debt</p>
+      {/* ADD / EDIT FORM */}
+      <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+        <p className="sect">{editId?'Edit Debt':'Add Debt'}</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'10px'}}>
           <div>
             <span className="fl">Type</span>
@@ -1693,9 +2123,12 @@ function DebtTab({debts,setDebts}){
           <div><span className="fl">Lender / Bank</span><input className="fi" value={lender} onChange={e=>setLender(e.target.value)} placeholder="e.g. BDO, GCash, Friend"/></div>
           <div><span className="fl">Notes</span><input className="fi" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional"/></div>
         </div>
-        <button className="btn bp" style={{marginTop:'14px'}} onClick={add} disabled={!name.trim()||!balance}>
-          <Ico n="warning" s={14} c="#fff"/>Add Debt
-        </button>
+        <div style={{display:'flex',gap:'8px',marginTop:'14px'}}>
+          <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save} disabled={!name.trim()||!balance}>
+            <Ico n={editId?'check':'warning'} s={14} c="#fff"/>{editId?'Save Changes':'Add Debt'}
+          </button>
+          {editId&&<button className="btn bs" onClick={reset}>Cancel</button>}
+        </div>
       </div>
 
       {/* DEBT LISTS */}
