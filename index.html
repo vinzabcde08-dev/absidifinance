@@ -698,7 +698,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]}/>}
@@ -735,10 +735,19 @@ function MainApp({onLogout}){
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
+  /* graph */
+  const inc=income||[];
+  const gPaid=inc.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.amount||0),0);
+  const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
+  const gExpected=gPaid+gPending;
+  const gExp=mExp+mSub+mPay;
+  const gMax=Math.max(gExpected,gExp,1);
+  const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
+  const gNet=gPaid-gExp;
   const STATS=[
     {label:'Total On Hand',value:P(totalOnHand),color:'#10b981',bg:'#f0fdf4',icon:'bank'},
     {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses'},
@@ -810,6 +819,68 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
             );
           })}
         </div>
+      </div>
+
+      {/* INCOME VS EXPENSES GRAPH */}
+      <div className="card" style={{padding:'24px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'10px',marginBottom:'20px'}}>
+          <div>
+            <p className="sect" style={{margin:0}}>Income vs Expenses — {monthName||'This Month'}</p>
+            <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>Did your income cover your expenses this month?</p>
+          </div>
+          <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+            {[{c:'#6366f1',l:'Expected'},{c:'#10b981',l:'Received'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+              <span key={x.l} style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'11px',fontWeight:'700',color:'#64748b'}}>
+                <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
+                {x.l}
+              </span>
+            ))}
+          </div>
+        </div>
+        {gExpected===0&&gExp===0?(
+          <p style={{textAlign:'center',color:'#94a3b8',fontSize:'13px',padding:'16px 0'}}>No income or expenses recorded this month yet.</p>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+            {[
+              {label:'Expected Income',sub:'Paid + Pending',value:gExpected,color:'#6366f1',mixed:true,paid:gPaid,pending:gPending},
+              {label:'Actual Received',sub:'Paid only',value:gPaid,color:'#10b981',mixed:false},
+              {label:'Total Expenses',sub:'Expenses + Subs + Payroll',value:gExp,color:'#ef4444',mixed:false},
+            ].map(b=>(
+              <div key={b.label}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
+                  <div>
+                    <span style={{fontSize:'13px',fontWeight:'700',color:'#1e293b'}}>{b.label}</span>
+                    <span style={{fontSize:'11px',color:'#94a3b8',marginLeft:'6px'}}>{b.sub}</span>
+                  </div>
+                  <span style={{fontSize:'15px',fontWeight:'800',color:b.color}}>{P(b.value)}</span>
+                </div>
+                <div style={{height:'26px',background:'#f1f5f9',borderRadius:'8px',overflow:'hidden',position:'relative'}}>
+                  {b.mixed?(
+                    <>
+                      <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${gPct(b.value)}%`,background:'#c7d2fe',borderRadius:'8px',transition:'width .5s'}}/>
+                      <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${gPct(b.paid)}%`,background:'#6366f1',borderRadius:'8px',transition:'width .5s'}}/>
+                    </>
+                  ):(
+                    <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${gPct(b.value)}%`,background:b.color,borderRadius:'8px',transition:'width .5s'}}/>
+                  )}
+                </div>
+                {b.mixed&&b.pending>0&&(
+                  <div style={{display:'flex',gap:'12px',marginTop:'4px'}}>
+                    <span style={{fontSize:'11px',color:'#6366f1',fontWeight:'600'}}>● Paid: {P(b.paid)}</span>
+                    <span style={{fontSize:'11px',color:'#a5b4fc',fontWeight:'600'}}>● Pending: {P(b.pending)}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div style={{padding:'14px 18px',borderRadius:'10px',background:gNet>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'4px'}}>
+              <div>
+                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{gNet>=0?'✓ Surplus this month':'⚠ Shortfall this month'}</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Received income minus all expenses</p>
+              </div>
+              <span style={{fontSize:'20px',fontWeight:'900',color:gNet>=0?'#10b981':'#ef4444'}}>{gNet>=0?'+':''}{P(gNet)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
