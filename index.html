@@ -55,13 +55,31 @@
     .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);padding:16px}
     .settings-dropdown{position:absolute;right:0;top:calc(100% + 8px);width:230px;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.12);border:1px solid #e2e8f0;z-index:100;overflow:hidden}
     .dmi-btn{width:100%;text-align:left;padding:11px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;transition:background .1s}
+    /* ── MOBILE ── */
+    @media(max-width:640px){
+      .card{border-radius:12px}
+      .tab-btn{padding:6px 10px;font-size:12px}
+      .tab-btn svg{display:none}
+      .yr-input{width:58px;font-size:13px}
+      .settings-dropdown{width:200px}
+      .modal-overlay{padding:12px;align-items:flex-end}
+      .modal-overlay .card{border-radius:16px 16px 0 0;max-height:90vh;overflow-y:auto}
+    }
+    @media(max-width:640px){
+      .__hdr-inner{flex-wrap:wrap;gap:8px}
+      .__hdr-right{gap:6px}
+      .__content{padding:16px 12px}
+      .__subtitle{padding:6px 12px;font-size:11px}
+      .__grid2{grid-template-columns:1fr!important}
+      .__form-grid{grid-template-columns:1fr!important}
+    }
   </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
- 
+
 /* ═══ FIREBASE CONFIG — fill these in from your Firebase console ═══ */
 const FIREBASE_CONFIG={apiKey:"AIzaSyAhRAc1CUJZW7n0ZYWFPgIJ4JXbE5fVZX0",authDomain:"absidifinance.firebaseapp.com",projectId:"absidifinance",storageBucket:"absidifinance.firebasestorage.app",messagingSenderId:"774596841212",appId:"1:774596841212:web:06686b8bfb1d7d7d1a9179"};
 let db=null,auth=null;
@@ -73,7 +91,7 @@ try{
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
   }
 }catch(e){}
- 
+
 /* ═══ CONSTANTS ═══ */
 const TODAY=new Date().toISOString().split('T')[0];
 const CUR_YEAR=new Date().getFullYear();
@@ -84,16 +102,16 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
 const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
- 
+
 /* converts a username into a valid Firebase Auth email */
 const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifinance.app';
- 
+
 const ls={
   get:(k,def)=>{try{return JSON.parse(localStorage.getItem(k))??def}catch{return def}},
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));if(db)db.collection('absidifinance').doc(k).set({v:JSON.stringify(v)}).catch(()=>{})}catch{}},
   del:(k)=>{try{localStorage.removeItem(k);}catch{}},
   clearUser:(id)=>{
-    ['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings'].forEach(k=>{
+    ['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts'].forEach(k=>{
       localStorage.removeItem(k+'_'+id);
       if(db)db.collection('absidifinance').doc(k+'_'+id).delete().catch(()=>{});
     });
@@ -102,7 +120,7 @@ const ls={
 const getUid=()=>(auth&&auth.currentUser)?auth.currentUser.uid:ls.get('af_current_id',null);
 const uk=(k)=>k+'_'+(getUid()||'default');
 const checkSession=()=>!!(ls.get('af_current_id',null)&&ls.get('af_loggedIn',false));
- 
+
 /* local list of usernames seen on this device — used for the picker UI */
 const getLocalUsers=()=>ls.get('af_usernames',[]);
 const saveLocalUser=(username,id)=>{
@@ -110,7 +128,7 @@ const saveLocalUser=(username,id)=>{
   ls.set('af_usernames',[...list,{username,id}]);
 };
 const removeLocalUser=(id)=>ls.set('af_usernames',getLocalUsers().filter(u=>u.id!==id));
- 
+
 const getCurrentUsername=()=>{
   if(auth&&auth.currentUser)return auth.currentUser.displayName||'';
   const id=ls.get('af_current_id',null);
@@ -121,7 +139,7 @@ const getCurrentUsername=()=>{
   const acc=accs.find(a=>a.id===id);
   return acc?acc.username:'';
 };
- 
+
 /* ═══════════════════════════════
    SVG ICON SYSTEM
 ═══════════════════════════════ */
@@ -159,7 +177,7 @@ function Ico({n,s=16,c="currentColor",sw=1.75,style={}}){
     </svg>
   );
 }
- 
+
 /* ════════════════
    LOGIN
 ════════════════ */
@@ -172,17 +190,49 @@ function AvatarCircle({name,size=44}){
     </div>
   );
 }
- 
+
 function LoginScreen({onLogin}){
   const[localUsers,setLocalUsers]=useState(()=>auth?getLocalUsers():ls.get('af_accounts',[]));
-  const[mode,setMode]=useState(()=>(auth?getLocalUsers():ls.get('af_accounts',[])).length===0?'create':'pick');
+  const[mode,setMode]=useState(()=>(auth?getLocalUsers():ls.get('af_accounts',[])).length===0?'auth':'pick');
+  const[authTab,setAuthTab]=useState('signin'); /* 'signin' | 'create' */
   const[selectedAcc,setSelectedAcc]=useState(null);
   const[newUser,setNewUser]=useState('');
   const[pass,setPass]=useState('');
   const[err,setErr]=useState('');
   const[busy,setBusy]=useState(false);
   const[showReset,setShowReset]=useState(false);
- 
+
+  const signInWithGoogle=async()=>{
+    if(!auth){setErr('Firebase required for Google sign-in.');return;}
+    setBusy(true);setErr('');
+    try{
+      const provider=new firebase.auth.GoogleAuthProvider();
+      const cred=await auth.signInWithPopup(provider);
+      saveLocalUser(cred.user.displayName||cred.user.email,cred.user.uid);
+    }catch(e){
+      setBusy(false);
+      if(e.code!=='auth/popup-closed-by-user')setErr('Google sign-in failed. Try again.');
+    }
+  };
+
+  const GoogleBtn=()=>(
+    <button onClick={signInWithGoogle} disabled={busy} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',padding:'11px',border:'1.5px solid #e2e8f0',borderRadius:'10px',background:'#fff',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#1e293b',transition:'all .15s',opacity:busy?.6:1}}
+      onMouseEnter={e=>{e.currentTarget.style.background='#f8fafc';e.currentTarget.style.borderColor='#94a3b8';}}
+      onMouseLeave={e=>{e.currentTarget.style.background='#fff';e.currentTarget.style.borderColor='#e2e8f0';}}
+    >
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+      Continue with Google
+    </button>
+  );
+
+  const Divider=()=>(
+    <div style={{display:'flex',alignItems:'center',gap:'10px',margin:'4px 0'}}>
+      <div style={{flex:1,height:'1px',background:'#e2e8f0'}}/>
+      <span style={{fontSize:'12px',color:'#94a3b8',fontWeight:'600'}}>or</span>
+      <div style={{flex:1,height:'1px',background:'#e2e8f0'}}/>
+    </div>
+  );
+
   const fbErr=(code)=>{
     if(code==='auth/email-already-in-use')return'That username is already taken.';
     if(code==='auth/wrong-password'||code==='auth/invalid-credential')return'Incorrect password.';
@@ -190,31 +240,46 @@ function LoginScreen({onLogin}){
     if(code==='auth/weak-password')return'Password must be at least 6 characters.';
     return'Something went wrong. Try again.';
   };
- 
+
   const pickAccount=(acc)=>{setSelectedAcc(acc);setPass('');setErr('');setMode('enter');};
- 
-  /* ── LOGIN ── */
+
+  /* ── LOGIN (from picker) ── */
   const login=async()=>{
     if(!pass.trim()){setErr('Enter your password.');return;}
     setBusy(true);setErr('');
     if(auth){
       try{
         await auth.signInWithEmailAndPassword(toEmail(selectedAcc.username),pass);
-        /* onAuthStateChanged in App will fire and call onLogin */
       }catch(e){setBusy(false);setErr(fbErr(e.code));}
     }else{
-      /* localStorage fallback */
       const accs=ls.get('af_accounts',[]);
       const found=accs.find(a=>a.id===selectedAcc.id);
       if(found&&pass===found.password){ls.set('af_current_id',found.id);ls.set('af_loggedIn',true);onLogin();}
       else{setBusy(false);setErr('Incorrect password.');}
     }
   };
- 
+
+  /* ── SIGN IN (from auth screen, new device) ── */
+  const signIn=async()=>{
+    if(!newUser.trim()||!pass.trim()){setErr('Enter your username and password.');return;}
+    setBusy(true);setErr('');
+    if(auth){
+      try{
+        const cred=await auth.signInWithEmailAndPassword(toEmail(newUser.trim()),pass);
+        saveLocalUser(cred.user.displayName||newUser.trim(),cred.user.uid);
+      }catch(e){setBusy(false);setErr(fbErr(e.code));}
+    }else{
+      const accs=ls.get('af_accounts',[]);
+      const found=accs.find(a=>a.username.toLowerCase()===newUser.trim().toLowerCase());
+      if(found&&pass===found.password){ls.set('af_current_id',found.id);ls.set('af_loggedIn',true);onLogin();}
+      else{setBusy(false);setErr('Incorrect username or password.');}
+    }
+  };
+
   /* ── CREATE ACCOUNT ── */
   const createAccount=async()=>{
     if(!newUser.trim()){setErr('Enter a username.');return;}
-    if(pass.length<4){setErr('Password must be at least 4 characters.');return;}
+    if(pass.length<6){setErr('Password must be at least 6 characters.');return;}
     setBusy(true);setErr('');
     if(auth){
       try{
@@ -232,7 +297,7 @@ function LoginScreen({onLogin}){
       onLogin();
     }
   };
- 
+
   /* ── REMOVE ACCOUNT ── */
   const resetAccount=async()=>{
     setBusy(true);
@@ -251,9 +316,9 @@ function LoginScreen({onLogin}){
     const fresh=auth?getLocalUsers():ls.get('af_accounts',[]);
     setLocalUsers(fresh);
     setShowReset(false);setSelectedAcc(null);setPass('');setErr('');setBusy(false);
-    setMode(fresh.length===0?'create':'pick');
+    setMode(fresh.length===0?'auth':'pick');
   };
- 
+
   const firebaseReady=!!auth;
   const BG={minHeight:'100vh',background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'};
   const CARD={width:'100%',maxWidth:'420px',padding:'36px'};
@@ -266,7 +331,7 @@ function LoginScreen({onLogin}){
       {firebaseReady&&<span style={{fontSize:'11px',color:'#10b981',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px',marginTop:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase connected</span>}
     </div>
   );
- 
+
   /* RESET CONFIRM */
   if(showReset)return(
     <div style={BG}>
@@ -285,7 +350,7 @@ function LoginScreen({onLogin}){
       </div>
     </div>
   );
- 
+
   /* ENTER PASSWORD */
   if(mode==='enter')return(
     <div style={BG}>
@@ -299,6 +364,7 @@ function LoginScreen({onLogin}){
           </div>
         </div>
         <div className="col">
+          {firebaseReady&&<><GoogleBtn/><Divider/></>}
           <div><span className="fl">Password</span><input autoFocus className="fi" type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyPress={e=>e.key==='Enter'&&login()} placeholder="Enter password"/></div>
           {err&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',padding:'10px 14px',borderRadius:'9px',fontSize:'13px'}}>{err}</div>}
           <button className="btn bp" style={{width:'100%',justifyContent:'center',padding:'12px',opacity:busy?.6:1}} onClick={login} disabled={busy}>{busy?'Signing in…':'Login'}</button>
@@ -310,31 +376,47 @@ function LoginScreen({onLogin}){
       </div>
     </div>
   );
- 
-  /* CREATE ACCOUNT */
-  if(mode==='create')return(
+
+  /* AUTH SCREEN — Sign In or Create Account */
+  if(mode==='auth')return(
     <div style={BG}>
       <div className="card fade" style={CARD}>
         <Logo/>
-        <p style={{color:'#64748b',fontSize:'13px',textAlign:'center',margin:'-14px 0 22px'}}>Create a new account</p>
+        {/* TAB TOGGLE */}
+        <div style={{display:'flex',background:'#f1f5f9',borderRadius:'10px',padding:'4px',marginBottom:'22px',gap:'4px'}}>
+          {['signin','create'].map(t=>(
+            <button key={t} onClick={()=>{setAuthTab(t);setErr('');setNewUser('');setPass('');}}
+              style={{flex:1,padding:'8px',borderRadius:'7px',border:'none',cursor:'pointer',fontWeight:'700',fontSize:'13px',transition:'all .15s',
+                background:authTab===t?'#fff':'transparent',
+                color:authTab===t?'#4f46e5':'#64748b',
+                boxShadow:authTab===t?'0 1px 4px rgba(0,0,0,.08)':'none'
+              }}
+            >{t==='signin'?'Sign In':'Create Account'}</button>
+          ))}
+        </div>
         <div className="col">
-          <div><span className="fl">Username</span><input autoFocus className="fi" value={newUser} onChange={e=>setNewUser(e.target.value)} onKeyPress={e=>e.key==='Enter'&&createAccount()} placeholder="Choose a username"/></div>
-          <div><span className="fl">Password</span><input className="fi" type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyPress={e=>e.key==='Enter'&&createAccount()} placeholder="Min 4 characters"/></div>
+          {firebaseReady&&<><GoogleBtn/><Divider/></>}
+          <div><span className="fl">Username</span><input autoFocus className="fi" value={newUser} onChange={e=>setNewUser(e.target.value)} onKeyPress={e=>e.key==='Enter'&&(authTab==='signin'?signIn():createAccount())} placeholder={authTab==='signin'?'Your username':'Choose a username'}/></div>
+          <div><span className="fl">Password</span><input className="fi" type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyPress={e=>e.key==='Enter'&&(authTab==='signin'?signIn():createAccount())} placeholder={authTab==='signin'?'Your password':'Min 6 characters'}/></div>
           {err&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',padding:'10px 14px',borderRadius:'9px',fontSize:'13px'}}>{err}</div>}
-          <button className="btn bp" style={{width:'100%',justifyContent:'center',padding:'12px',opacity:busy?.6:1}} onClick={createAccount} disabled={busy}>{busy?'Creating…':'Create Account'}</button>
-          {localUsers.length>0&&<button onClick={()=>{setMode('pick');setErr('');setNewUser('');setPass('');}} style={{background:'none',border:'none',color:'#94a3b8',fontSize:'12px',cursor:'pointer',textDecoration:'underline',textAlign:'center',padding:'2px 0'}}>← Back to accounts</button>}
+          <button className="btn bp" style={{width:'100%',justifyContent:'center',padding:'12px',opacity:busy?.6:1}}
+            onClick={authTab==='signin'?signIn:createAccount} disabled={busy}>
+            {busy?(authTab==='signin'?'Signing in…':'Creating…'):(authTab==='signin'?'Sign In':'Create Account')}
+          </button>
+          {localUsers.length>0&&<button onClick={()=>{setMode('pick');setErr('');setNewUser('');setPass('');}} style={{background:'none',border:'none',color:'#94a3b8',fontSize:'12px',cursor:'pointer',textDecoration:'underline',textAlign:'center',padding:'2px 0'}}>← Back to saved accounts</button>}
           <p style={{fontSize:'11px',color:firebaseReady?'#10b981':'#94a3b8',textAlign:'center',margin:'2px 0 0',fontWeight:firebaseReady?'700':'400'}}>{firebaseReady?'✓ Credentials stored securely in Firebase':'Credentials saved locally in this browser.'}</p>
         </div>
       </div>
     </div>
   );
- 
+
   /* PICK ACCOUNT */
   return(
     <div style={BG}>
       <div className="card fade" style={CARD}>
         <Logo/>
-        <p style={{color:'#64748b',fontSize:'13px',textAlign:'center',margin:'-14px 0 20px'}}>Choose an account</p>
+        {firebaseReady&&<div className="col" style={{marginBottom:'16px'}}><GoogleBtn/></div>}
+        <p style={{color:'#64748b',fontSize:'13px',textAlign:'center',margin:'0 0 12px'}}>— or choose a saved account —</p>
         <div className="col" style={{gap:'8px',marginBottom:'16px'}}>
           {localUsers.map(acc=>(
             <button key={acc.id||acc.username} onClick={()=>pickAccount(acc)} style={{display:'flex',alignItems:'center',gap:'14px',padding:'13px 16px',border:'1.5px solid #e2e8f0',borderRadius:'12px',background:'#fff',cursor:'pointer',width:'100%',textAlign:'left',transition:'border-color .15s,box-shadow .15s'}}
@@ -350,8 +432,9 @@ function LoginScreen({onLogin}){
             </button>
           ))}
         </div>
+        <Divider/>
         <button
-          onClick={()=>{setMode('create');setErr('');setNewUser('');setPass('');}}
+          onClick={()=>{setMode('auth');setAuthTab('create');setErr('');setNewUser('');setPass('');}}
           style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',padding:'13px',border:'2px dashed #c7d2fe',borderRadius:'12px',background:'#f5f3ff',color:'#4f46e5',fontWeight:'700',fontSize:'14px',cursor:'pointer',transition:'all .15s'}}
           onMouseEnter={e=>{e.currentTarget.style.background='#ede9fe';e.currentTarget.style.borderColor='#818cf8';}}
           onMouseLeave={e=>{e.currentTarget.style.background='#f5f3ff';e.currentTarget.style.borderColor='#c7d2fe';}}
@@ -363,14 +446,14 @@ function LoginScreen({onLogin}){
     </div>
   );
 }
- 
+
 /* ════════════════
    APP ROOT
 ════════════════ */
 function App(){
   const[loggedIn,setLoggedIn]=useState(false);
   const[loading,setLoading]=useState(!!auth);
- 
+
   useEffect(()=>{
     if(!auth){
       /* No Firebase — use localStorage session */
@@ -394,12 +477,12 @@ function App(){
     });
     return unsub;
   },[]);
- 
+
   const handleLogout=async()=>{
     if(auth){await auth.signOut();}
     else{ls.set('af_loggedIn',false);ls.del('af_current_id');setLoggedIn(false);}
   };
- 
+
   if(loading)return(
     <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{textAlign:'center',color:'#fff'}}>
@@ -408,11 +491,11 @@ function App(){
       </div>
     </div>
   );
- 
+
   if(!loggedIn)return<LoginScreen onLogin={()=>setLoggedIn(true)}/>;
   return<MainApp onLogout={handleLogout}/>;
 }
- 
+
 /* ════════════════
    MAIN APP
 ════════════════ */
@@ -426,18 +509,19 @@ function MainApp({onLogout}){
   const[employees,setEmployees]=useState(()=>ls.get(uk('ph_emps'),[]));
   const[payroll,setPayroll]=useState(()=>ls.get(uk('ph_payroll'),[]));
   const[settings,setSettings]=useState(()=>ls.get(uk('ph_settings'),DEFAULT_SETTINGS));
+  const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[year,setYear]=useState(String(CUR_YEAR));
   const[tab,setTab]=useState('home');
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
   const[showSettings,setShowSettings]=useState(false);
   const settingsRef=useRef(null);
- 
+
   useEffect(()=>{
     const h=e=>{if(settingsRef.current&&!settingsRef.current.contains(e.target))setShowSettings(false);};
     document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);
   },[]);
- 
+
   useEffect(()=>{ls.set(uk('ph_subs'),subs);},[subs]);
   useEffect(()=>{ls.set(uk('ph_income'),income);},[income]);
   useEffect(()=>{ls.set(uk('ph_exp'),expenses);},[expenses]);
@@ -447,20 +531,21 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_emps'),employees);},[employees]);
   useEffect(()=>{ls.set(uk('ph_payroll'),payroll);},[payroll]);
   useEffect(()=>{ls.set(uk('ph_settings'),settings);},[settings]);
- 
+  useEffect(()=>{ls.set(uk('ph_debts'),debts);},[debts]);
+
   const yr=parseInt(year)||CUR_YEAR;
   const daysInMonth=new Date(yr,CUR_MONTH+1,0).getDate();
   const daysLeft=daysInMonth-CUR_DAY;
   const curMonthKey=`${yr}-${String(CUR_MONTH+1).padStart(2,'0')}`;
- 
+
   const byYear=arr=>arr.filter(x=>x.date&&yK(x.date)===yr);
   const byMonth=arr=>arr.filter(x=>x.date&&mK(x.date)===curMonthKey);
- 
+
   const mInc=byMonth(income).reduce((s,x)=>s+(x.amount||0),0);
   const mExp=byMonth(expenses).reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
- 
+
   const last3=[0,1,2].map(i=>{
     const d=new Date(yr,CUR_MONTH-i,1);
     return income.filter(x=>{const xd=new Date(x.date);return xd.getFullYear()===d.getFullYear()&&xd.getMonth()===d.getMonth();}).reduce((s,x)=>s+(x.amount||0),0);
@@ -474,7 +559,7 @@ function MainApp({onLogout}){
   const spendBudget=base-tithe-invest-desires-savings-mSub-mPay;
   const dailyCap=daysLeft>0?Math.max(0,(spendBudget-mExp)/daysLeft):0;
   const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct;
- 
+
   const accBal=id=>{
     const a=accounts.find(x=>x.id===id);if(!a)return 0;
     const i=income.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
@@ -482,7 +567,7 @@ function MainApp({onLogout}){
     const p=payroll.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
     return a.openingBalance+i-e-p;
   };
- 
+
   const exportCSV=()=>{
     let csv=`AbsidiFinance Export — Year ${yr}\n\n`;
     csv+=`INCOME\nDate,Type,Client,Account,Amount,Status\n`;
@@ -498,7 +583,7 @@ function MainApp({onLogout}){
     document.body.appendChild(link);setTimeout(()=>{link.click();setTimeout(()=>{document.body.removeChild(link);URL.revokeObjectURL(link.href);},200);},100);
     setShowSettings(false);
   };
- 
+
   const TABS=[
     {id:'home',icon:'home',label:'Home'},
     {id:'accounts',icon:'bank',label:'Accounts'},
@@ -509,14 +594,15 @@ function MainApp({onLogout}){
     {id:'subs',icon:'calendar',label:'Subs'},
     {id:'payroll',icon:'users',label:'Payroll'},
     {id:'budget',icon:'chart',label:'Budget'},
+    {id:'debt',icon:'warning',label:'Debt'},
   ];
- 
+
   return(
     <div style={{minHeight:'100vh'}}>
       {/* HEADER */}
       <div style={{background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',boxShadow:'0 2px 12px rgba(79,70,229,.3)'}}>
         <div style={{maxWidth:'1100px',margin:'0 auto',padding:'0 20px'}}>
-          <div className="row" style={{padding:'14px 0'}}>
+          <div className="row __hdr-inner" style={{padding:'14px 0'}}>
             {/* LOGO */}
             <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
               <div style={{width:'34px',height:'34px',background:'rgba(255,255,255,.15)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid rgba(255,255,255,.2)'}}>
@@ -528,7 +614,7 @@ function MainApp({onLogout}){
               </div>
             </div>
             {/* RIGHT CONTROLS */}
-            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <div className="__hdr-right" style={{display:'flex',alignItems:'center',gap:'10px'}}>
               <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
                 <span style={{fontSize:'11px',color:'rgba(255,255,255,.65)',fontWeight:'600',letterSpacing:'.02em'}}>YEAR</span>
                 <input type="number" className="yr-input" value={year} onChange={e=>setYear(e.target.value)} min="2020" max="2035" title="Type a year"/>
@@ -576,7 +662,7 @@ function MainApp({onLogout}){
           </div>
         </div>
       </div>
- 
+
       {/* SUBTITLE */}
       <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 0'}}>
         <div style={{maxWidth:'1100px',margin:'0 auto',padding:'0 20px',display:'flex',alignItems:'center',gap:'6px'}}>
@@ -588,10 +674,10 @@ function MainApp({onLogout}){
           {db&&<><span style={{color:'#cbd5e1'}}>·</span><span style={{fontSize:'12px',color:'#10b981',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase synced</span></>}
         </div>
       </div>
- 
+
       {/* CONTENT */}
-      <div style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed}/>}
+      <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)}/>}
@@ -600,8 +686,9 @@ function MainApp({onLogout}){
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV}/>}
+        {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
       </div>
- 
+
       {/* RESET MODAL */}
       {showReset&&(
         <div className="modal-overlay">
@@ -625,15 +712,17 @@ function MainApp({onLogout}){
     </div>
   );
 }
- 
+
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts}){
   const net=mInc-mExp-mSub-mPay;
+  const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const STATS=[
     {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income'},
     {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses'},
     {label:'Net This Month',value:P(net),color:net>=0?'#4f46e5':'#ef4444',bg:'#f5f3ff',icon:'trend-up'},
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar'},
+    {label:'Total Debt',value:P(totalDebt),color:totalDebt>0?'#ef4444':'#10b981',bg:totalDebt>0?'#fff5f5':'#f0fdf4',icon:'warning'},
   ];
   return(
     <div className="col fade" style={{gap:'16px'}}>
@@ -703,7 +792,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
     </div>
   );
 }
- 
+
 /* ════════  ACCOUNTS  ════════ */
 function AccountsTab({accounts,setAccounts,accBal}){
   const[name,setName]=useState('');const[type,setType]=useState('Bank');const[bank,setBank]=useState('BDO');const[opening,setOpening]=useState('');
@@ -711,7 +800,7 @@ function AccountsTab({accounts,setAccounts,accBal}){
   const EW=['GCash','Maya','ShopeePay','GrabPay'];
   const add=()=>{if(!name.trim())return;setAccounts([...accounts,{id:uid(),name:name.trim(),type,subtype:type!=='Cash on Hand'?bank:'',openingBalance:parseFloat(opening)||0}]);setName('');setOpening('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Add Account</p>
         <div className="col">
@@ -747,13 +836,13 @@ function AccountsTab({accounts,setAccounts,accBal}){
     </div>
   );
 }
- 
+
 /* ════════  CARDS  ════════ */
 function CardsTab({cards,setCards,expenses}){
   const[name,setName]=useState('');const[limit,setLimit]=useState('');const[billingDay,setBillingDay]=useState('');const[dueDay,setDueDay]=useState('');
   const add=()=>{if(!name.trim())return;setCards([...cards,{id:uid(),name:name.trim(),limit:parseFloat(limit)||0,billingDay:parseInt(billingDay)||1,dueDay:parseInt(dueDay)||20}]);setName('');setLimit('');setBillingDay('');setDueDay('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Add Credit Card</p>
         <div className="col">
@@ -801,13 +890,13 @@ function CardsTab({cards,setCards,expenses}){
     </div>
   );
 }
- 
+
 /* ════════  CLIENTS  ════════ */
 function ClientsTab({clients,setClients,income}){
   const[name,setName]=useState('');const[rate,setRate]=useState('');const[currency,setCurrency]=useState('USD');
   const add=()=>{if(!name.trim())return;setClients([...clients,{id:uid(),name:name.trim(),rate:parseFloat(rate)||0,currency}]);setName('');setRate('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Add Client</p>
         <div className="col">
@@ -843,13 +932,13 @@ function ClientsTab({clients,setClients,income}){
     </div>
   );
 }
- 
+
 /* ════════  INCOME  ════════ */
 function IncomeTab({income,allIncome,setIncome,clients,accounts}){
   const[date,setDate]=useState(TODAY);const[amount,setAmount]=useState('');const[type,setType]=useState('VA Salary');const[clientId,setClientId]=useState('');const[accountId,setAccountId]=useState('');const[status,setStatus]=useState('Paid');
   const add=()=>{if(!amount)return;setIncome([...allIncome,{id:uid(),date,amount:parseFloat(amount),type,clientId,accountId,status}]);setAmount('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Log Income</p>
         <div className="col">
@@ -889,14 +978,14 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
     </div>
   );
 }
- 
+
 /* ════════  EXPENSES  ════════ */
 function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
   const[date,setDate]=useState(TODAY);const[amount,setAmount]=useState('');const[category,setCategory]=useState('Food');const[accountId,setAccountId]=useState('');const[cardId,setCardId]=useState('');
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
   const add=()=>{if(!amount)return;setExpenses([...allExpenses,{id:uid(),date,amount:parseFloat(amount),category,accountId,cardId}]);setAmount('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Log Expense</p>
         <div className="col">
@@ -932,13 +1021,13 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
     </div>
   );
 }
- 
+
 /* ════════  SUBS  ════════ */
 function SubsTab({subs,allSubs,setSubs,accounts,cards}){
   const[name,setName]=useState('');const[amount,setAmount]=useState('');const[date,setDate]=useState(TODAY);const[freq,setFreq]=useState('monthly');const[accountId,setAccountId]=useState('');const[cardId,setCardId]=useState('');
   const add=()=>{if(!name.trim()||!amount)return;setSubs([...allSubs,{id:uid(),name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}]);setName('');setAmount('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Add Subscription</p>
         <div className="col">
@@ -979,14 +1068,14 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
     </div>
   );
 }
- 
+
 /* ════════  PAYROLL  ════════ */
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');
   const addEmp=()=>{if(!empName.trim())return;setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim()}]);setEmpName('');setEmpRole('');};
   const addPay=()=>{if(!amount)return;setPayroll([...allPayroll,{id:uid(),date,employeeId,amount:parseFloat(amount),accountId}]);setAmount('');};
   return(
-    <div style={{display:'grid',gridTemplateColumns:'360px 1fr',gap:'16px',alignItems:'start'}} className="fade">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
       <div className="col" style={{gap:'16px'}}>
         <div className="card" style={{padding:'22px'}}>
           <p className="sect">Add Employee</p>
@@ -1042,7 +1131,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     </div>
   );
 }
- 
+
 /* ════════  BUDGET  ════════ */
 function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV}){
   const upd=(k,v)=>setSettings(s=>({...s,[k]:v}));
@@ -1069,7 +1158,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
           <span style={{fontSize:'12px',color:'#94a3b8',marginLeft:'4px'}}>Total fixed: <strong style={{color:totalFixed>100?'#ef4444':'#1e293b'}}>{totalFixed}%</strong></span>
         </div>
       </div>
- 
+
       {/* BUDGET BASELINE */}
       <div className="card" style={{padding:'22px'}}>
         <div className="row">
@@ -1085,7 +1174,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
           </button>
         </div>
       </div>
- 
+
       {/* BASE CARD */}
       <div style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)',borderRadius:'14px',padding:'24px 28px',color:'#fff'}}>
         <p style={{fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.08em',opacity:.7,margin:'0 0 8px'}}>
@@ -1094,7 +1183,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
         <p style={{fontSize:'36px',fontWeight:'900',margin:'0 0 4px',letterSpacing:'-1px'}}>₱{base.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>
         {settings.budgetMode==='avg'&&<p style={{fontSize:'12px',opacity:.7,margin:0}}>This month actual: ₱{mInc.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>}
       </div>
- 
+
       {/* DAILY SPEND CAP */}
       <div className="card" style={{padding:'22px'}}>
         <div className="row">
@@ -1114,7 +1203,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
           </div>
         </div>
       </div>
- 
+
       {/* BREAKDOWN */}
       {base>0?(
         <div className="card" style={{padding:'22px'}}>
@@ -1143,16 +1232,150 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
       ):(
         <div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>Log income to see budget.</div>
       )}
- 
+
       <button className="btn bp" style={{alignSelf:'flex-start'}} onClick={exportCSV}>
         <Ico n="download" s={14} c="#fff"/>Export to CSV
       </button>
     </div>
   );
 }
- 
+
+/* ════════  DEBT  ════════ */
+function DebtTab({debts,setDebts}){
+  const[type,setType]=useState('Credit Card');
+  const[name,setName]=useState('');
+  const[balance,setBalance]=useState('');
+  const[interestRate,setInterestRate]=useState('');
+  const[minPayment,setMinPayment]=useState('');
+  const[dueDate,setDueDate]=useState('');
+  const[lender,setLender]=useState('');
+  const[notes,setNotes]=useState('');
+
+  const add=()=>{
+    if(!name.trim()||!balance)return;
+    setDebts(prev=>[...prev,{id:uid(),type,name:name.trim(),balance:parseFloat(balance)||0,interestRate:parseFloat(interestRate)||0,minPayment:parseFloat(minPayment)||0,dueDate,lender:lender.trim(),notes:notes.trim(),dateAdded:TODAY}]);
+    setName('');setBalance('');setInterestRate('');setMinPayment('');setDueDate('');setLender('');setNotes('');
+  };
+
+  const del=(id)=>setDebts(prev=>prev.filter(d=>d.id!==id));
+  const updateBalance=(id,val)=>setDebts(prev=>prev.map(d=>d.id===id?{...d,balance:parseFloat(val)||0}:d));
+
+  const totalDebt=debts.reduce((s,d)=>s+(d.balance||0),0);
+  const totalMin=debts.reduce((s,d)=>s+(d.minPayment||0),0);
+  const ccDebts=debts.filter(d=>d.type==='Credit Card');
+  const personalDebts=debts.filter(d=>d.type==='Personal');
+  const loanDebts=debts.filter(d=>d.type==='Loan');
+
+  const DTYPE_COLOR={
+    'Credit Card':'#ef4444','Personal':'#f59e0b','Loan':'#4f46e5'
+  };
+  const DTYPE_BG={
+    'Credit Card':'#fff5f5','Personal':'#fffbeb','Loan':'#f5f3ff'
+  };
+
+  const DebtCard=({d})=>(
+    <div className="card" style={{padding:'16px 18px'}}>
+      <div className="row" style={{marginBottom:'10px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          <div style={{padding:'6px 10px',background:DTYPE_BG[d.type]||'#f8fafc',borderRadius:'8px',fontSize:'11px',fontWeight:'700',color:DTYPE_COLOR[d.type]||'#64748b'}}>{d.type}</div>
+          <div>
+            <p style={{fontWeight:'800',color:'#1e293b',margin:0,fontSize:'14px'}}>{d.name}</p>
+            {d.lender&&<p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{d.lender}</p>}
+          </div>
+        </div>
+        <button className="ib" onClick={()=>del(d.id)}><Ico n="trash" s={14}/></button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:'8px',marginBottom:'10px'}}>
+        <div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
+          <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Balance</p>
+          <p style={{fontSize:'16px',fontWeight:'800',color:'#ef4444',margin:0}}>{P(d.balance)}</p>
+        </div>
+        {d.interestRate>0&&<div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
+          <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Interest</p>
+          <p style={{fontSize:'16px',fontWeight:'800',color:'#f59e0b',margin:0}}>{d.interestRate}%/yr</p>
+        </div>}
+        {d.minPayment>0&&<div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
+          <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Min. Payment</p>
+          <p style={{fontSize:'16px',fontWeight:'800',color:'#4f46e5',margin:0}}>{P(d.minPayment)}</p>
+        </div>}
+        {d.dueDate&&<div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
+          <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Due Date</p>
+          <p style={{fontSize:'13px',fontWeight:'700',color:'#1e293b',margin:0}}>{d.dueDate}</p>
+        </div>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+        <span style={{fontSize:'12px',color:'#64748b',fontWeight:'600',whiteSpace:'nowrap'}}>Update balance:</span>
+        <input className="fi" type="number" defaultValue={d.balance} onBlur={e=>updateBalance(d.id,e.target.value)} style={{maxWidth:'140px',padding:'6px 10px',fontSize:'13px'}} placeholder="New balance"/>
+      </div>
+      {d.notes&&<p style={{fontSize:'12px',color:'#94a3b8',margin:'8px 0 0',fontStyle:'italic'}}>{d.notes}</p>}
+    </div>
+  );
+
+  const Section=({title,items,color})=>items.length===0?null:(
+    <div>
+      <p style={{fontSize:'11px',fontWeight:'700',color,textTransform:'uppercase',letterSpacing:'.06em',margin:'0 0 8px'}}>{title} ({items.length})</p>
+      <div className="col" style={{gap:'10px'}}>{items.map(d=><DebtCard key={d.id} d={d}/>)}</div>
+    </div>
+  );
+
+  return(
+    <div className="col fade" style={{gap:'16px'}}>
+      {/* SUMMARY */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px'}}>
+        <div className="card" style={{padding:'18px 20px',background:'#fff5f5'}}>
+          <p style={{fontSize:'11px',color:'#64748b',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>Total Debt</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#ef4444',margin:0}}>{P(totalDebt)}</p>
+        </div>
+        <div className="card" style={{padding:'18px 20px',background:'#fef3c7'}}>
+          <p style={{fontSize:'11px',color:'#64748b',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>Min. Monthly Payments</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#d97706',margin:0}}>{P(totalMin)}</p>
+        </div>
+        <div className="card" style={{padding:'18px 20px',background:'#f5f3ff'}}>
+          <p style={{fontSize:'11px',color:'#64748b',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>Number of Debts</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#4f46e5',margin:0}}>{debts.length}</p>
+        </div>
+      </div>
+
+      {/* ADD FORM */}
+      <div className="card" style={{padding:'22px'}}>
+        <p className="sect">Add Debt</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'10px'}}>
+          <div>
+            <span className="fl">Type</span>
+            <select className="fi" value={type} onChange={e=>setType(e.target.value)}>
+              <option>Credit Card</option>
+              <option>Personal</option>
+              <option>Loan</option>
+            </select>
+          </div>
+          <div><span className="fl">Name / Label</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder={type==='Credit Card'?'e.g. BDO Visa':type==='Personal'?'e.g. Loan from John':'e.g. Car Loan'}/></div>
+          <div><span className="fl">Current Balance (₱)</span><input className="fi" type="number" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="0.00"/></div>
+          <div><span className="fl">Interest Rate (% / yr)</span><input className="fi" type="number" value={interestRate} onChange={e=>setInterestRate(e.target.value)} placeholder="e.g. 24"/></div>
+          <div><span className="fl">Min. Monthly Payment (₱)</span><input className="fi" type="number" value={minPayment} onChange={e=>setMinPayment(e.target.value)} placeholder="0.00"/></div>
+          <div><span className="fl">Due Date</span><input className="fi" type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
+          <div><span className="fl">Lender / Bank</span><input className="fi" value={lender} onChange={e=>setLender(e.target.value)} placeholder="e.g. BDO, GCash, Friend"/></div>
+          <div><span className="fl">Notes</span><input className="fi" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional"/></div>
+        </div>
+        <button className="btn bp" style={{marginTop:'14px'}} onClick={add} disabled={!name.trim()||!balance}>
+          <Ico n="warning" s={14} c="#fff"/>Add Debt
+        </button>
+      </div>
+
+      {/* DEBT LISTS */}
+      {debts.length===0?(
+        <div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No debts tracked yet. Great!</div>
+      ):(
+        <div className="col" style={{gap:'20px'}}>
+          <Section title="Credit Card Debt" items={ccDebts} color="#ef4444"/>
+          <Section title="Personal Debt" items={personalDebts} color="#f59e0b"/>
+          <Section title="Loans" items={loanDebts} color="#4f46e5"/>
+        </div>
+      )}
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
- 
