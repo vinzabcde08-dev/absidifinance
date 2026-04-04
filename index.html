@@ -204,15 +204,33 @@ function LoginScreen({onLogin}){
   const[showReset,setShowReset]=useState(false);
 
   const signInWithGoogle=async()=>{
-    if(!auth){setErr('Firebase required for Google sign-in.');return;}
+    if(!auth){setErr('Firebase not ready. Check your config.');return;}
+    if(window.location.protocol==='file:'){
+      setErr('Google sign-in requires a hosted URL. Open via localhost or your deployed link, not a local file.');
+      return;
+    }
     setBusy(true);setErr('');
     try{
       const provider=new firebase.auth.GoogleAuthProvider();
-      const cred=await auth.signInWithPopup(provider);
-      saveLocalUser(cred.user.displayName||cred.user.email,cred.user.uid);
+      /* Try popup first; if blocked fall back to redirect */
+      try{
+        await auth.signInWithPopup(provider);
+      }catch(popupErr){
+        if(popupErr.code==='auth/popup-blocked'||popupErr.code==='auth/popup-cancelled'||popupErr.code==='auth/cancelled-popup-request'){
+          /* Redirect flow — page will reload and App will pick up the result */
+          await auth.signInWithRedirect(provider);
+          return;
+        }
+        throw popupErr;
+      }
     }catch(e){
       setBusy(false);
-      if(e.code!=='auth/popup-closed-by-user')setErr('Google sign-in failed. Try again.');
+      if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request')return;
+      if(e.code==='auth/unauthorized-domain'){
+        setErr('This domain is not authorised in Firebase. Add it under Authentication → Settings → Authorised domains in your Firebase Console.');
+      }else{
+        setErr(`Sign-in failed: ${e.message||e.code||'unknown error'}`);
+      }
     }
   };
 
@@ -475,6 +493,8 @@ function App(){
       setLoading(false);
       return;
     }
+    /* Handle redirect result first (for mobile Google sign-in) */
+    auth.getRedirectResult().catch(()=>{});
     const unsub=auth.onAuthStateChanged(async user=>{
       if(user){
         ls.set('af_current_id',user.uid);
