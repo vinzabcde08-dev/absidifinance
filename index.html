@@ -74,6 +74,48 @@
       .__form-grid{grid-template-columns:1fr!important}
     }
   </style>
+  <!-- PWA / Home-screen icon -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="AbsidiFinance"/>
+  <meta name="theme-color" content="#4f46e5"/>
+  <script>
+  (function(){
+    var sz=180,c=document.createElement('canvas');
+    c.width=c.height=sz;
+    var ctx=c.getContext('2d');
+    /* Purple gradient rounded-rect background */
+    var g=ctx.createLinearGradient(0,0,sz,sz);
+    g.addColorStop(0,'#4f46e5');g.addColorStop(1,'#7c3aed');
+    ctx.fillStyle=g;
+    var r=sz*0.22;
+    ctx.beginPath();
+    ctx.moveTo(r,0);ctx.lineTo(sz-r,0);ctx.quadraticCurveTo(sz,0,sz,r);
+    ctx.lineTo(sz,sz-r);ctx.quadraticCurveTo(sz,sz,sz-r,sz);
+    ctx.lineTo(r,sz);ctx.quadraticCurveTo(0,sz,0,sz-r);
+    ctx.lineTo(0,r);ctx.quadraticCurveTo(0,0,r,0);
+    ctx.closePath();ctx.fill();
+    /* Gem icon — same paths as the SVG in the header, scaled from 24×24 to sz */
+    var sc=sz/24;
+    ctx.strokeStyle='rgba(255,255,255,0.95)';
+    ctx.lineWidth=1.75*sc;ctx.lineCap='round';ctx.lineJoin='round';
+    /* Outer gem: M6 3h12l4 6-10 13L2 9z */
+    ctx.beginPath();
+    ctx.moveTo(6*sc,3*sc);ctx.lineTo(18*sc,3*sc);ctx.lineTo(22*sc,9*sc);
+    ctx.lineTo(12*sc,22*sc);ctx.lineTo(2*sc,9*sc);ctx.closePath();ctx.stroke();
+    /* Horizontal belt line */
+    ctx.beginPath();ctx.moveTo(2*sc,9*sc);ctx.lineTo(22*sc,9*sc);ctx.stroke();
+    /* Left facet */
+    ctx.beginPath();ctx.moveTo(6*sc,3*sc);ctx.lineTo(12*sc,16*sc);ctx.stroke();
+    /* Right facet */
+    ctx.beginPath();ctx.moveTo(18*sc,3*sc);ctx.lineTo(12*sc,16*sc);ctx.stroke();
+    var url=c.toDataURL('image/png');
+    /* Apple touch icon */
+    var atl=document.createElement('link');atl.rel='apple-touch-icon';atl.sizes='180x180';atl.href=url;document.head.appendChild(atl);
+    /* Browser favicon */
+    var fav=document.createElement('link');fav.rel='icon';fav.type='image/png';fav.sizes='32x32';fav.href=url;document.head.appendChild(fav);
+  })();
+  </script>
 </head>
 <body>
 <div id="root"></div>
@@ -656,8 +698,8 @@ function MainApp({onLogout}){
     {id:'accounts',icon:'bank',label:'Accounts'},
     {id:'cards',icon:'card',label:'Cards'},
     {id:'clients',icon:'user',label:'Clients'},
-    {id:'income',icon:'income',label:'Income'},
-    {id:'expenses',icon:'expenses',label:'Expenses'},
+    {id:'income',icon:'expenses',label:'Income'},
+    {id:'expenses',icon:'income',label:'Expenses'},
     {id:'subs',icon:'calendar',label:'Subs'},
     {id:'payroll',icon:'users',label:'Payroll'},
     {id:'budget',icon:'chart',label:'Budget'},
