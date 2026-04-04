@@ -570,6 +570,34 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_settings'),settings);},[settings]);
   useEffect(()=>{ls.set(uk('ph_debts'),debts);},[debts]);
 
+  /* ── Real-time cross-device sync via Firestore onSnapshot ── */
+  useEffect(()=>{
+    if(!db)return;
+    const userId=getUid();
+    if(!userId)return;
+    const watches=[
+      {k:'ph_subs',set:setSubs,def:[]},
+      {k:'ph_income',set:setIncome,def:[]},
+      {k:'ph_exp',set:setExpenses,def:[]},
+      {k:'ph_clients',set:setClients,def:[]},
+      {k:'ph_accts',set:setAccounts,def:[]},
+      {k:'ph_cards',set:setCards,def:[]},
+      {k:'ph_emps',set:setEmployees,def:[]},
+      {k:'ph_payroll',set:setPayroll,def:[]},
+      {k:'ph_settings',set:setSettings,def:DEFAULT_SETTINGS},
+      {k:'ph_debts',set:setDebts,def:[]},
+    ];
+    const unsubs=watches.map(({k,set})=>{
+      const docKey=k+'_'+userId;
+      return db.collection('absidifinance').doc(docKey).onSnapshot(doc=>{
+        /* skip writes that originated from THIS device to avoid loops */
+        if(doc.metadata.hasPendingWrites)return;
+        if(doc.exists){const d=doc.data();if(d&&d.v!==undefined){try{const v=JSON.parse(d.v);localStorage.setItem(docKey,d.v);set(v);}catch(e){}}}
+      });
+    });
+    return()=>unsubs.forEach(u=>u());
+  },[]);
+
   const yr=parseInt(year)||CUR_YEAR;
   const selMonth=parseInt(month);
   const daysInMonth=new Date(yr,selMonth+1,0).getDate();
@@ -718,7 +746,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]}/>}
@@ -755,13 +783,13 @@ function MainApp({onLogout}){
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
   /* graph */
   const inc=income||[];
-  const gPaid=inc.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.amount||0),0);
+  const gPaid=inc.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+(i.amount||0),0);
   const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
   const gExpected=gPaid+gPending;
   const gExp=mExp+mSub+mPay;
@@ -769,14 +797,30 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
   const gNet=gPaid-gExp;
   const STATS=[
-    {label:'Total On Hand',value:P(totalOnHand),color:'#10b981',bg:'#f0fdf4',icon:'bank'},
+    {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income'},
+    {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank'},
     {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses'},
     {label:'Net This Month',value:P(net),color:net>=0?'#4f46e5':'#ef4444',bg:'#f5f3ff',icon:'trend-up'},
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar'},
     {label:'Total Debt',value:P(totalDebt),color:totalDebt>0?'#ef4444':'#10b981',bg:totalDebt>0?'#fff5f5':'#f0fdf4',icon:'warning'},
   ];
+  const totalUnlinked=(unlinkedIncome||0)+(unlinkedExpenses||0);
   return(
     <div className="col fade" style={{gap:'16px'}}>
+      {totalUnlinked>0&&(
+        <div style={{background:'#fffbeb',border:'1.5px solid #f59e0b',borderRadius:'12px',padding:'14px 18px',display:'flex',alignItems:'center',gap:'12px'}}>
+          <Ico n="warning" s={20} c="#f59e0b" sw={2}/>
+          <div style={{flex:1}}>
+            <p style={{fontWeight:'700',color:'#92400e',fontSize:'13px',margin:'0 0 2px'}}>Some entries are not linked to an account</p>
+            <p style={{fontSize:'12px',color:'#b45309',margin:0}}>
+              {unlinkedIncome>0&&`${unlinkedIncome} income entr${unlinkedIncome===1?'y':'ies'}`}
+              {unlinkedIncome>0&&unlinkedExpenses>0&&' and '}
+              {unlinkedExpenses>0&&`${unlinkedExpenses} expense entr${unlinkedExpenses===1?'y':'ies'}`}
+              {' '}not linked — go to the Income or Expenses tab and update them so your account balances are accurate.
+            </p>
+          </div>
+        </div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'12px'}}>
         {STATS.map(s=>(
           <div key={s.label} className="card" style={{padding:'18px 20px',background:s.bg}}>
@@ -1010,7 +1054,7 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName}){
   const add=()=>{if(!name.trim())return;setClients([...clients,{id:uid(),name:name.trim(),rate:parseFloat(rate)||0,currency}]);setName('');setRate('');};
 
   /* graph data */
-  const totalPaid=income.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.amount,0);
+  const totalPaid=income.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+i.amount,0);
   const totalPending=income.filter(i=>i.status==='Pending').reduce((s,i)=>s+i.amount,0);
   const totalExpected=totalPaid+totalPending;
   const totalExpenses=mExp||0;
@@ -1150,14 +1194,16 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
         {income.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No income recorded this month.</div>}
         {[...income].reverse().map(i=>{
           const cl=clients.find(c=>c.id===i.clientId);const ac=accounts.find(a=>a.id===i.accountId);
+          const noAcct=!i.accountId;
           return(
-            <div key={i.id} className="card row" style={{padding:'14px 18px'}}>
+            <div key={i.id} className="card row" style={{padding:'14px 18px',borderLeft:noAcct?'3px solid #f59e0b':'3px solid transparent',background:noAcct?'#fffdf5':'#fff'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                 <div style={{width:'34px',height:'34px',background:'#f0fdf4',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="income" s={15} c="#10b981" sw={2}/></div>
                 <div>
-                  <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'3px'}}>
+                  <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',marginBottom:'3px'}}>
                     <span style={{fontWeight:'700',color:'#1e293b',fontSize:'13px'}}>{i.type}</span>
-                    <span className="badge" style={{background:i.status==='Paid'?'#f0fdf4':'#fff7ed',color:i.status==='Paid'?'#10b981':'#f59e0b'}}>{i.status}</span>
+                    <span className="badge" style={{background:i.status==='Paid'?'#f0fdf4':'#fff7ed',color:i.status==='Paid'?'#10b981':'#f59e0b'}}>{i.status||'Paid'}</span>
+                    {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{i.date}{cl?` · ${cl.name}`:''}{ac?` → ${ac.name}`:''}</p>
                 </div>
@@ -1196,12 +1242,16 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards}){
         {expenses.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No expenses recorded this month.</div>}
         {[...expenses].reverse().map(e=>{
           const ac=accounts.find(a=>a.id===e.accountId);const cd=cards.find(c=>c.id===e.cardId);
+          const noAcct=!e.accountId&&!e.cardId;
           return(
-            <div key={e.id} className="card row" style={{padding:'14px 18px'}}>
+            <div key={e.id} className="card row" style={{padding:'14px 18px',borderLeft:noAcct?'3px solid #f59e0b':'3px solid transparent',background:noAcct?'#fffdf5':'#fff'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                 <div style={{width:'34px',height:'34px',background:'#fff5f5',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="expenses" s={15} c="#ef4444" sw={2}/></div>
                 <div>
-                  <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:'0 0 3px'}}>{e.category}</p>
+                  <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',marginBottom:'3px'}}>
+                    <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p>
+                    {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
+                  </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}</p>
                 </div>
               </div>
