@@ -202,6 +202,36 @@ const CUR_DAY=new Date().getDate();
 const P=(n)=>'₱'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
 const acctLabel=a=>a?`${a.name}${a.subtype?` · ${a.subtype}`:a.type==='Cash on Hand'?' · Cash':''}`:'';
+
+/* ── Info Icon with popup tooltip ── */
+function InfoIcon({text,title}){
+  const[open,setOpen]=React.useState(false);
+  const ref=React.useRef(null);
+  React.useEffect(()=>{
+    if(!open)return;
+    const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener('mousedown',h);
+    document.addEventListener('touchstart',h);
+    return()=>{document.removeEventListener('mousedown',h);document.removeEventListener('touchstart',h);};
+  },[open]);
+  return(
+    <span ref={ref} style={{position:'relative',display:'inline-flex',alignItems:'center',verticalAlign:'middle',marginLeft:'4px'}}>
+      <button
+        onClick={e=>{e.stopPropagation();setOpen(v=>!v);}}
+        style={{background:'none',border:'none',cursor:'pointer',padding:'1px 4px',borderRadius:'50%',color:'#94a3b8',fontSize:'12px',lineHeight:1,display:'inline-flex',alignItems:'center',justifyContent:'center',width:'18px',height:'18px',flexShrink:0}}
+        title="How is this calculated?"
+      >ⓘ</button>
+      {open&&(
+        <div style={{position:'absolute',zIndex:9999,bottom:'calc(100% + 6px)',left:'50%',transform:'translateX(-50%)',minWidth:'220px',maxWidth:'300px',background:'#1e293b',color:'#f1f5f9',borderRadius:'10px',padding:'12px 14px',boxShadow:'0 8px 30px rgba(0,0,0,.25)',fontSize:'12px',lineHeight:'1.5',fontWeight:'400'}}>
+          {title&&<p style={{fontWeight:'700',margin:'0 0 5px',fontSize:'13px',color:'#e2e8f0'}}>{title}</p>}
+          <p style={{margin:0}}>{text}</p>
+          <div style={{position:'absolute',bottom:'-5px',left:'50%',transform:'translateX(-50%)',width:'10px',height:'10px',background:'#1e293b',clipPath:'polygon(0 0, 100% 0, 50% 100%)'}}/>
+        </div>
+      )}
+    </span>
+  );
+}
+
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
 const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
@@ -653,7 +683,11 @@ function MainApp({onLogout}){
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[titheLog,setTitheLog]=useState(()=>ls.get(uk('ph_tithe_log'),[]));
   const[savingsLog,setSavingsLog]=useState(()=>ls.get(uk('ph_savings_log'),[]));
+  const[investLog,setInvestLog]=useState(()=>ls.get(uk('ph_invest_log'),[]));
+  const[transfers,setTransfers]=useState(()=>ls.get(uk('ph_transfers'),[]));
   const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
+  const[emergencyAcctId,setEmergencyAcctId]=useState(()=>ls.get(uk('ph_emerg_acct'),''));
+  const[emergencyMonths,setEmergencyMonths]=useState(()=>ls.get(uk('ph_emerg_months'),3));
   const[year,setYear]=useState(String(CUR_YEAR));
   const[month,setMonth]=useState(CUR_MONTH);
   const[fxRates,setFxRates]=useState({USD:57,AUD:37,GBP:72,EUR:62,CAD:42,SGD:43,PHP:1});
@@ -695,7 +729,11 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_debts'),debts);},[debts]);
   useEffect(()=>{ls.set(uk('ph_tithe_log'),titheLog);},[titheLog]);
   useEffect(()=>{ls.set(uk('ph_savings_log'),savingsLog);},[savingsLog]);
+  useEffect(()=>{ls.set(uk('ph_invest_log'),investLog);},[investLog]);
+  useEffect(()=>{ls.set(uk('ph_transfers'),transfers);},[transfers]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
+  useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
+  useEffect(()=>{ls.set(uk('ph_emerg_months'),emergencyMonths);},[emergencyMonths]);
 
   /* ── Real-time cross-device sync via Firestore onSnapshot ── */
   useEffect(()=>{
@@ -715,6 +753,8 @@ function MainApp({onLogout}){
       {k:'ph_debts',set:setDebts,def:[]},
       {k:'ph_tithe_log',set:setTitheLog,def:[]},
       {k:'ph_savings_log',set:setSavingsLog,def:[]},
+      {k:'ph_invest_log',set:setInvestLog,def:[]},
+      {k:'ph_transfers',set:setTransfers,def:[]},
     ];
     const unsubs=watches.map(({k,set})=>{
       const docKey=k+'_'+userId;
@@ -763,6 +803,13 @@ function MainApp({onLogout}){
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
 
+  /* Computed allocation values (used before tithe recalc logic) */
+  const mExpReg=byMonth(expenses).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
+  const mTitheActual=byMonth(expenses).filter(x=>x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
+  const mInvestActual=byMonth(expenses).filter(x=>x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
+  const mSavingsActual=byMonth(expenses).filter(x=>x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
+  const mDesiresActual=byMonth(expenses).filter(x=>!x.alloc&&x.category==='Desires').reduce((s,x)=>s+(x.amount||0),0);
+
   const last3=[0,1,2].map(i=>{
     const d=new Date(yr,selMonth-i,1);
     return income.filter(x=>{const xd=new Date(x.date);return xd.getFullYear()===d.getFullYear()&&xd.getMonth()===d.getMonth();}).reduce((s,x)=>s+(x.amount||0),0);
@@ -770,7 +817,10 @@ function MainApp({onLogout}){
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
   const base=settings.budgetMode==='avg'?avg3:mInc;
   const invest=(base*settings.investPct)/100;
-  const tithe=((base-invest)*settings.tithePct)/100; /* tithe on income minus investment */
+  /* Tithe base: exclude investment ONLY if investment was actually moved this month */
+  const investMovedThisMonth=mInvestActual>=(invest*0.9);
+  const titheBase=investMovedThisMonth?(base-invest):base;
+  const tithe=(titheBase*settings.tithePct)/100;
   const desires=(base*settings.desiresPct)/100;
   const savings=(base*settings.savingsPct)/100;
   const spendBudget=base-tithe-invest-desires-savings-mSub-mPay;
@@ -924,15 +974,15 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey}/>}
-        {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth}/>}
+        {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
-        {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards}/>}
+        {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
       </div>
@@ -961,8 +1011,43 @@ function MainApp({onLogout}){
   );
 }
 
+function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expenses,setExpenses,income,setIncome,investLog,setInvestLog}){
+  const[dest,setDest]=useState('external');
+  const[destAcct,setDestAcct]=useState('');
+  const markDone=(destLabel)=>{
+    const note=`Invest ${curMonthKey}`;
+    const srcEntries=byAcctTithe.length>0
+      ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
+      :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
+    setExpenses(prev=>[...(prev||[]),...srcEntries]);
+    if(dest==='account'&&destAcct){
+      setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:invest,type:'Investment Transfer',accountId:destAcct,alloc:'investment_in',note}]);
+    }
+    setInvestLog(prev=>[...prev.filter(l=>l.month!==curMonthKey),{month:curMonthKey,done:true,amount:invest,destination:destLabel,date:TODAY}]);
+  };
+  return(
+    <div style={{background:'rgba(99,102,241,.07)',borderRadius:'10px',padding:'14px',marginBottom:'4px'}}>
+      <p style={{fontSize:'12px',fontWeight:'700',color:'#4f46e5',margin:'0 0 10px',textTransform:'uppercase',letterSpacing:'.04em'}}>Where are you sending it?</p>
+      <div style={{display:'flex',gap:'8px',marginBottom:'10px',flexWrap:'wrap'}}>
+        {[{v:'external',l:'External Broker'},{v:'account',l:'Bank Account'}].map(o=>(
+          <button key={o.v} onClick={()=>setDest(o.v)} style={{padding:'6px 14px',borderRadius:'7px',border:`2px solid ${dest===o.v?'#6366f1':'#e2e8f0'}`,background:dest===o.v?'#6366f1':'transparent',color:dest===o.v?'#fff':'#64748b',fontWeight:'700',fontSize:'13px',cursor:'pointer'}}>{o.l}</button>
+        ))}
+      </div>
+      {dest==='account'&&(
+        <select className="fi" style={{marginBottom:'10px'}} value={destAcct} onChange={e=>setDestAcct(e.target.value)}>
+          <option value="">— Pick destination account —</option>
+          {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+        </select>
+      )}
+      <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':'External Broker')}>
+        ✓ Done — Investment Moved
+      </button>
+    </div>
+  );
+}
+
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,transfers,setTransfers,investMovedThisMonth}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -1020,12 +1105,18 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
 
   const STATS=[
-    {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income'},
-    {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank'},
-    {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses'},
-    {label:'Net This Month',value:P(net),color:net>=0?'#4f46e5':'#ef4444',bg:'#f5f3ff',icon:'trend-up'},
-    {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar'},
-    {label:'Total Debt',value:P(totalDebt),color:totalDebt>0?'#ef4444':'#10b981',bg:totalDebt>0?'#fff5f5':'#f0fdf4',icon:'warning'},
+    {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income',
+     info:'Sum of all income entries logged this month, regardless of account. Includes paid and pending.',title:'Monthly Income'},
+    {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
+     info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
+    {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
+     info:'Sum of all expense entries this month including subscriptions and payroll. Does not include tithe/savings/investment auto-transfers (those are tracked separately).',title:'Monthly Expenses'},
+    {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
+     info:'Monthly Income minus all expenses (expenses + subscriptions + payroll). Positive = surplus, Negative = you spent more than you earned.',title:'Net This Month'},
+    {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
+     info:`Remaining spendable budget ÷ days left in month. Spendable = Income − Tithes − Investment − Savings − Desires − Subscriptions − Payroll. Days left: ${daysLeft}.`,title:'Daily Spend Cap'},
+    {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
+     info:'Sum of all current balances in the Debt tab (credit cards, personal loans, and loans combined).',title:'Total Debt'},
   ];
   return(
     <div className="col fade" style={{gap:'16px'}}>
@@ -1035,14 +1126,22 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
         const entry=titheLog.find(t=>t.week===wk);
         const isDone=entry&&entry.done;
         const isSkipped=entry&&entry.skipped;
-        if(isSkipped)return null;
+        if(isSkipped)return(
+          <div className="card" style={{padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderLeft:'3px solid #e2e8f0'}}>
+            <span style={{fontSize:'13px',color:'#94a3b8',fontWeight:'600'}}>🙏 Tithes skipped this week</span>
+            <button onClick={()=>setTitheLog(prev=>prev.filter(t=>t.week!==wk))} style={{fontSize:'11px',color:'#f59e0b',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Reset</button>
+          </div>
+        );
         if(isDone)return(
           <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #10b981',background:'#f0fdf4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div>
               <p style={{fontWeight:'800',color:'#16a34a',margin:'0 0 2px',fontSize:'14px'}}>✓ Tithes prepared for this week</p>
-              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Week {wk} · {P(tithe)} · Great job!</p>
+              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Week {wk} · {P(titheAmt||tithe)} withdrawn from accounts · Balance updated ✓</p>
             </div>
-            <button onClick={()=>setTitheLog(prev=>prev.filter(t=>t.week!==wk))} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+            <button onClick={()=>{
+              setExpenses(prev=>(prev||[]).filter(x=>x.note!==`Tithe wk ${wk}`||x.alloc!=='tithe'));
+              setTitheLog(prev=>prev.filter(t=>t.week!==wk));
+            }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
           </div>
         );
         return(
@@ -1055,7 +1154,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
               </div>
               {/* Total amount badge */}
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(tithe)}</p>
+                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(tithe)}<InfoIcon text={`${settings.tithePct}% of your income${investMovedThisMonth?' minus investment (already moved)':' (investment not yet moved, so full income is used)'}. Formula: (Income${investMovedThisMonth?' − Investment':''}) × ${settings.tithePct}% = ${P(tithe)}`} title="Tithe Calculation"/></p>
                 <p style={{fontSize:'10px',color:'#d97706',margin:'2px 0 0',fontWeight:'700',textTransform:'uppercase'}}>to withdraw</p>
               </div>
             </div>
@@ -1097,7 +1196,14 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
 
             {/* Action buttons */}
             <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn" style={{background:'#d97706',color:'#fff',flex:1,justifyContent:'center'}} onClick={()=>setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}])}>
+              <button className="btn" style={{background:'#d97706',color:'#fff',flex:1,justifyContent:'center'}} onClick={()=>{
+                /* auto-log tithe expenses per account */
+                if(byAcctTithe.length>0){
+                  const newExps=byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe wk ${wk}`}));
+                  setExpenses(prev=>[...(prev||[]),...newExps]);
+                }
+                setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}]);
+              }}>
                 ✓ Done — Tithes Prepared
               </button>
               <button className="btn bs" onClick={()=>setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,skipped:true,date:TODAY}])}>
@@ -1114,14 +1220,24 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
         const isDone=entry&&entry.done;
         const isSkipped=entry&&entry.skipped;
         const savAcct=accounts.find(a=>a.id===savingsAcctId);
-        if(isSkipped)return null;
+        if(isSkipped)return(
+          <div className="card" style={{padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderLeft:'3px solid #e2e8f0'}}>
+            <span style={{fontSize:'13px',color:'#94a3b8',fontWeight:'600'}}>💰 Savings transfer skipped this month</span>
+            <button onClick={()=>setSavingsLog(prev=>prev.filter(s=>s.month!==curMonthKey))} style={{fontSize:'11px',color:'#6366f1',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Reset</button>
+          </div>
+        );
         if(isDone)return(
           <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #6366f1',background:'#f5f3ff',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div>
               <p style={{fontWeight:'800',color:'#4f46e5',margin:'0 0 2px',fontSize:'14px'}}>✓ Savings transferred this month</p>
               <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>{MONTH_NAMES[parseInt(curMonthKey.split('-')[1])-1]} · {P(savings)}{savAcct?` → ${acctLabel(savAcct)}`:''}</p>
             </div>
-            <button onClick={()=>setSavingsLog(prev=>prev.filter(s=>s.month!==curMonthKey))} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+            <button onClick={()=>{
+              const note=`Savings ${curMonthKey}`;
+              setExpenses(prev=>(prev||[]).filter(x=>!(x.alloc==='savings_out'&&x.note===note)));
+              setIncome(prev=>(prev||[]).filter(x=>!(x.alloc==='savings_in'&&x.note===note)));
+              setSavingsLog(prev=>prev.filter(s=>s.month!==curMonthKey));
+            }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
           </div>
         );
         if(savings<=0)return null;
@@ -1129,7 +1245,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           <div className="card" style={{padding:'18px 20px',border:'2px solid #6366f1',background:'#f5f3ff'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
               <div>
-                <p style={{fontWeight:'900',color:'#3730a3',margin:'0 0 2px',fontSize:'15px'}}>💰 Monthly Savings — Transfer {P(savings)}</p>
+                <p style={{fontWeight:'900',color:'#3730a3',margin:'0 0 2px',fontSize:'15px'}}>💰 Monthly Savings — Transfer {P(savings)}<InfoIcon text={`${settings.savingsPct}% of your monthly income base (${settings.budgetMode==='avg'?'3-month average':'current month'}). Formula: ${P(base)} × ${settings.savingsPct}% = ${P(savings)}`} title="Monthly Savings"/></p>
                 <p style={{fontSize:'12px',color:'#6366f1',margin:0}}>{settings.savingsPct}% of this month's income{savAcct?` → ${acctLabel(savAcct)}`:' (no savings account set)'}</p>
               </div>
             </div>
@@ -1137,13 +1253,65 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
               <p style={{fontSize:'12px',color:'#6366f1',margin:'0 0 12px',fontStyle:'italic'}}>💡 Go to the Savings tab to set your dedicated savings account.</p>
             )}
             <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={()=>setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}])}>
+              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={()=>{
+                const note=`Savings ${curMonthKey}`;
+                const srcEntries=byAcctTithe.length>0
+                  ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2)),category:'Savings Transfer',accountId:acct.id,alloc:'savings_out',note}))
+                  :[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:'',alloc:'savings_out',note}];
+                setExpenses(prev=>[...(prev||[]),...srcEntries]);
+                if(savingsAcctId){
+                  setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:savings,type:'Savings Transfer',accountId:savingsAcctId,alloc:'savings_in',note}]);
+                }
+                setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}]);
+              }}>
                 ✓ Done — Transferred
               </button>
               <button className="btn bs" onClick={()=>setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,skipped:true,date:TODAY}])}>
                 Skip this month
               </button>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* INVESTMENT ACTION CARD */}
+      {(()=>{
+        const entry=investLog.find(l=>l.month===curMonthKey);
+        const isDone=entry&&entry.done;
+        const isSkipped=entry&&entry.skipped;
+        if(isSkipped)return(
+          <div className="card" style={{padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',borderLeft:'3px solid #e2e8f0'}}>
+            <span style={{fontSize:'13px',color:'#94a3b8',fontWeight:'600'}}>📈 Investment skipped this month</span>
+            <button onClick={()=>setInvestLog(prev=>prev.filter(l=>l.month!==curMonthKey))} style={{fontSize:'11px',color:'#6366f1',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Reset</button>
+          </div>
+        );
+        if(isDone)return(
+          <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #6366f1',background:'#f5f3ff',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <p style={{fontWeight:'800',color:'#4f46e5',margin:'0 0 2px',fontSize:'14px'}}>✓ Investment transferred this month</p>
+              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>{P(invest)} · {entry.destination||'External broker'} · Tithe recalculated ✓</p>
+            </div>
+            <button onClick={()=>{
+              setExpenses(prev=>(prev||[]).filter(x=>!(x.alloc==='investment_out'&&x.note===`Invest ${curMonthKey}`)));
+              setIncome(prev=>(prev||[]).filter(x=>!(x.alloc==='investment_in'&&x.note===`Invest ${curMonthKey}`)));
+              setInvestLog(prev=>prev.filter(l=>l.month!==curMonthKey));
+            }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+          </div>
+        );
+        if(invest<=0)return null;
+        return(
+          <div className="card" style={{padding:'18px 20px',border:'2px solid #6366f1',background:'#f5f3ff'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'14px'}}>
+              <div>
+                <p style={{fontWeight:'900',color:'#3730a3',margin:'0 0 2px',fontSize:'15px'}}>📈 Monthly Investment — {P(invest)}<InfoIcon text={`${settings.investPct}% of your monthly income base. Formula: ${P(base)} × ${settings.investPct}% = ${P(invest)}. ${investMovedThisMonth?'✓ Already moved — tithe recalculated.':'⚠ Not yet moved — tithe is on full income until this is done.'}`} title="Monthly Investment"/></p>
+                <p style={{fontSize:'12px',color:'#6366f1',margin:0}}>{settings.investPct}% of income · {investMovedThisMonth?'✓ Tithe already adjusted':'⚠ Tithe computed on full income until this is done'}</p>
+              </div>
+              <span style={{fontSize:'22px',fontWeight:'900',color:'#4f46e5',lineHeight:1}}>{P(invest)}</span>
+            </div>
+            <InvestDonePanel invest={invest} accounts={accounts} curMonthKey={curMonthKey} byAcctTithe={byAcctTithe} totalMInc={totalMInc} expenses={allExpenses} setExpenses={setExpenses} income={allIncome} setIncome={setIncome} investLog={investLog} setInvestLog={setInvestLog}/>
+            <button className="btn bs" style={{marginTop:'10px',width:'100%',justifyContent:'center'}} onClick={()=>setInvestLog(prev=>[...prev.filter(l=>l.month!==curMonthKey),{month:curMonthKey,skipped:true,date:TODAY}])}>
+              Skip this month
+            </button>
           </div>
         );
       })()}
@@ -1179,7 +1347,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
             <div style={{width:'34px',height:'34px',background:'rgba(255,255,255,.7)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'10px'}}>
               <Ico n={s.icon} s={16} c={s.color} sw={2}/>
             </div>
-            <p style={{fontSize:'11px',color:'#64748b',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>{s.label}</p>
+            <p style={{fontSize:'11px',color:'#64748b',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.04em',margin:'0 0 4px'}}>{s.label}{s.info&&<InfoIcon text={s.info} title={s.title}/>}</p>
             <p style={{fontSize:'22px',fontWeight:'800',color:s.color,margin:0}}>{s.value}</p>
           </div>
         ))}
@@ -1443,8 +1611,88 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   );
 }
 
+function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,expenses,setExpenses}){
+  const[fromId,setFromId]=useState('');
+  const[toId,setToId]=useState('');
+  const[amount,setAmount]=useState('');
+  const[fee,setFee]=useState('');
+  const[date,setDate]=useState(TODAY);
+  const[note,setNote]=useState('');
+  const[showHistory,setShowHistory]=useState(false);
+
+  const doTransfer=()=>{
+    if(!fromId||!amount)return;
+    const amt=parseFloat(amount)||0;
+    const feeAmt=parseFloat(fee)||0;
+    const tid=uid();
+    const noteStr=note.trim()||`Transfer ${date}`;
+    setExpenses(prev=>[...(prev||[]),
+      {id:uid(),date,amount:amt,category:'Account Transfer',accountId:fromId,alloc:'transfer_out',note:noteStr,transferId:tid},
+      ...(feeAmt>0?[{id:uid(),date,amount:feeAmt,category:'Transfer Fee',accountId:fromId,alloc:'transfer_fee',note:noteStr,transferId:tid}]:[])
+    ]);
+    if(toId){
+      setIncome(prev=>[...(prev||[]),{id:uid(),date,amount:amt,type:'Account Transfer',accountId:toId,alloc:'transfer_in',note:noteStr,transferId:tid}]);
+    }
+    setTransfers(prev=>[...(prev||[]),{id:tid,date,fromId,toId:toId||'external',amount:amt,fee:feeAmt,note:noteStr}]);
+    setFromId('');setToId('');setAmount('');setFee('');setNote('');setDate(TODAY);
+  };
+
+  const recent=(transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const acctName=id=>{const a=accounts.find(x=>x.id===id);return a?acctLabel(a):'External';};
+
+  return(
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'10px',marginBottom:'12px'}}>
+        <div>
+          <span className="fl">From Account</span>
+          <select className="fi" value={fromId} onChange={e=>setFromId(e.target.value)}>
+            <option value="">— Select source —</option>
+            {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+          </select>
+        </div>
+        <div>
+          <span className="fl">To Account (leave blank if external)</span>
+          <select className="fi" value={toId} onChange={e=>setToId(e.target.value)}>
+            <option value="">— External / Broker —</option>
+            {accounts.filter(a=>a.id!==fromId).map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+          </select>
+        </div>
+        <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
+        <div><span className="fl">Transfer Fee (₱)</span><input className="fi" type="number" value={fee} onChange={e=>setFee(e.target.value)} placeholder="0.00 (optional)"/></div>
+        <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div><span className="fl">Note (optional)</span><input className="fi" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. GInvest top-up"/></div>
+      </div>
+      {fromId&&amount&&(
+        <div style={{padding:'10px 14px',borderRadius:'8px',background:'#f5f3ff',marginBottom:'12px',fontSize:'13px',color:'#4f46e5',fontWeight:'600'}}>
+          {acctName(fromId)} → {toId?acctName(toId):'External'} · {P(parseFloat(amount)||0)}{parseFloat(fee)>0?` + ${P(parseFloat(fee))} fee`:''}
+        </div>
+      )}
+      <button className="btn bp" onClick={doTransfer} disabled={!fromId||!amount}>
+        <Ico n="bank" s={14} c="#fff"/>Transfer Funds
+      </button>
+      {recent.length>0&&(
+        <div style={{marginTop:'16px'}}>
+          <button onClick={()=>setShowHistory(v=>!v)} style={{background:'none',border:'none',cursor:'pointer',fontSize:'12px',color:'#64748b',fontWeight:'700',padding:0}}>
+            {showHistory?'▾':'▸'} Recent transfers ({recent.length})
+          </button>
+          {showHistory&&(
+            <div className="col" style={{gap:'8px',marginTop:'8px'}}>
+              {recent.map(t=>(
+                <div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',borderRadius:'8px',background:'var(--card2)',fontSize:'13px'}}>
+                  <span style={{color:'var(--text3)'}}>{t.date} · {acctName(t.fromId)} → {acctName(t.toId)}</span>
+                  <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(t.amount)}{t.fee>0?` + ${P(t.fee)} fee`:''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════  ACCOUNTS  ════════ */
-function AccountsTab({accounts,setAccounts,accBal}){
+function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,setIncome,expenses,setExpenses,curMonthKey}){
   const[name,setName]=useState('');const[type,setType]=useState('Bank');const[bank,setBank]=useState('BDO');const[opening,setOpening]=useState('');
   const[editId,setEditId]=useState(null);
   const BANKS=['BDO','BPI','Metrobank','UnionBank','Landbank','PNB','RCBC','Security Bank','Eastwest','Other'];
@@ -1475,6 +1723,11 @@ function AccountsTab({accounts,setAccounts,accBal}){
           </div>
         </div>
       </div>
+      {/* TRANSFER FUNDS */}
+      <div className="card" style={{padding:'22px'}}>
+        <p className="sect">Transfer Between Accounts</p>
+        <TransferFundsPanel accounts={accounts} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses}/>
+      </div>
       <div className="col" style={{gap:'10px'}}>
         {accounts.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No accounts yet.</div>}
         {accounts.map(a=>{const bal=accBal(a.id);const isEditing=editId===a.id;return(
@@ -1489,7 +1742,7 @@ function AccountsTab({accounts,setAccounts,accBal}){
             </div>
             <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 2px'}}>Balance</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 2px'}}>Balance<InfoIcon text="Opening Balance + all income entries linked to this account − all expense entries − payroll − transfers out + transfers in. Year-to-date for the selected year." title={`${a.name} Balance`}/></p>
                 <p style={{fontSize:'18px',fontWeight:'800',color:bal>=0?'#4f46e5':'#ef4444',margin:0}}>{P(bal)}</p>
               </div>
               <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(a)}><Ico n="edit" s={15}/></button>
@@ -1879,17 +2132,17 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
 }
 
 /* ════════  SUBS  ════════ */
-function SubsTab({subs,allSubs,setSubs,accounts,cards}){
-  const[name,setName]=useState('');const[amount,setAmount]=useState('');const[date,setDate]=useState(TODAY);const[freq,setFreq]=useState('monthly');const[accountId,setAccountId]=useState('');const[cardId,setCardId]=useState('');
+function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpenses,setExpenses}){
+  const[name,setName]=useState('');const[amount,setAmount]=useState('');const[date,setDate]=useState(TODAY);const[freq,setFreq]=useState('monthly');const[accountId,setAccountId]=useState('');const[cardId,setCardId]=useState('');const[currency,setCurrency]=useState('PHP');
   const[editId,setEditId]=useState(null);
-  const reset=()=>{setEditId(null);setName('');setAmount('');setDate(TODAY);setFreq('monthly');setAccountId('');setCardId('');};
-  const startEdit=(s)=>{setEditId(s.id);setName(s.name);setAmount(String(s.amount||''));setDate(s.date);setFreq(s.freq||'monthly');setAccountId(s.accountId||'');setCardId(s.cardId||'');};
+  const reset=()=>{setEditId(null);setName('');setAmount('');setDate(TODAY);setFreq('monthly');setAccountId('');setCardId('');setCurrency('PHP');};
+  const startEdit=(s)=>{setEditId(s.id);setName(s.name);setAmount(String(s.amount||''));setDate(s.date);setFreq(s.freq||'monthly');setAccountId(s.accountId||'');setCardId(s.cardId||'');setCurrency(s.currency||'PHP');};
   const save=()=>{
     if(!name.trim()||!amount)return;
     if(editId){
-      setSubs(allSubs.map(x=>x.id===editId?{...x,name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}:x));
+      setSubs(allSubs.map(x=>x.id===editId?{...x,name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId,currency}:x));
     }else{
-      setSubs([...allSubs,{id:uid(),name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId}]);
+      setSubs([...allSubs,{id:uid(),name:name.trim(),amount:parseFloat(amount),date,freq,accountId,cardId,currency}]);
     }
     reset();
   };
@@ -1899,7 +2152,8 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
         <p className="sect">{editId?'Edit Subscription':'Add Subscription'}</p>
         <div className="col">
           <div><span className="fl">Service Name</span><input className="fi" value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Netflix, Spotify"/></div>
-          <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
+          <div><span className="fl">Amount</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
+          <div><span className="fl">Currency</span><select className="fi" value={currency||'PHP'} onChange={e=>setCurrency(e.target.value)}><option>PHP</option><option>USD</option><option>AUD</option><option>GBP</option><option>EUR</option><option>CAD</option><option>SGD</option></select></div>
           <div><span className="fl">Next Billing Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
           <div><span className="fl">Frequency</span><select className="fi" value={freq} onChange={e=>setFreq(e.target.value)}><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="quarterly">Quarterly</option></select></div>
           <div><span className="fl">Charged to Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
@@ -1926,10 +2180,18 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards}){
                     {dl>=0&&dl<=5&&<span className="badge" style={{background:'#fef2f2',color:'#ef4444'}}><Ico n="warning" s={10} c="#ef4444"/>Due in {dl}d</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{s.freq} · {s.date}{ac?` · ${acctLabel(ac)}`:''}{cd?` · ${cd.name}`:''}</p>
+                  {s.currency&&s.currency!=='PHP'&&(
+                    <span style={{fontSize:'11px',color:'#94a3b8',display:'block'}}>≈ {P((s.amount||0)*(fxRates?.[s.currency]||57))} at {fxLoaded?'live':'est.'} rate</span>
+                  )}
                 </div>
               </div>
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-                <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(s.amount)}</span>
+                <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(s.amount)} {s.currency||'PHP'}</span>
+                <button className="ib" style={{color:'#10b981'}} title="Log as expense" onClick={()=>{
+                  const phpAmount=s.currency&&s.currency!=='PHP'?parseFloat(((s.amount||0)*(fxRates?.[s.currency]||57)).toFixed(2)):(s.amount||0);
+                  setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:phpAmount,category:'Subscriptions',accountId:'',note:`${s.name} subscription`}]);
+                  alert(`Logged ₱${phpAmount.toLocaleString()} expense for ${s.name}. Go to Expenses tab to link it to an account.`);
+                }}><Ico n="income" s={14} c="#10b981"/></button>
                 <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(s)}><Ico n="edit" s={15}/></button>
                 <button className="ib" onClick={()=>{if(isEditing)reset();setSubs(allSubs.filter(x=>x.id!==s.id));}}><Ico n="trash" s={15}/></button>
               </div>
@@ -2034,109 +2296,235 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV}){
-  const upd=(k,v)=>setSettings(s=>({...s,[k]:v}));
-  const ALLOC=[
-    {label:'Tithes',key:'tithePct',color:'#f59e0b',icon:'cross'},
-    {label:'Investments',key:'investPct',color:'#4f46e5',icon:'trend-up'},
-    {label:'Desires',key:'desiresPct',color:'#ec4899',icon:'star'},
-    {label:'Savings',key:'savingsPct',color:'#10b981',icon:'piggy'},
-  ];
-  return(
-    <div className="col fade" style={{gap:'16px'}}>
-      {/* ALLOCATION RULES */}
-      <div className="card" style={{padding:'22px'}}>
-        <p className="sect">Allocation Rules (Editable)</p>
-        <div style={{display:'flex',flexWrap:'wrap',gap:'20px',alignItems:'center'}}>
-          {ALLOC.map(r=>(
-            <div key={r.key} style={{display:'flex',alignItems:'center',gap:'8px'}}>
-              <Ico n={r.icon} s={15} c={r.color} sw={2}/>
-              <span style={{fontSize:'13px',fontWeight:'700',color:'#1e293b'}}>{r.label}</span>
-              <input type="number" className="pct-input" value={settings[r.key]} onChange={e=>upd(r.key,Math.max(0,parseInt(e.target.value)||0))} style={{borderColor:r.color,color:r.color}}/>
-              <span style={{fontSize:'13px',color:'#64748b',fontWeight:'600'}}>%</span>
-            </div>
-          ))}
-          <span style={{fontSize:'12px',color:'#94a3b8',marginLeft:'4px'}}>Total fixed: <strong style={{color:totalFixed>100?'#ef4444':'#1e293b'}}>{totalFixed}%</strong></span>
-        </div>
-      </div>
+function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths}){
 
-      {/* BUDGET BASELINE */}
-      <div className="card" style={{padding:'22px'}}>
-        <div className="row">
-          <p className="sect" style={{margin:0}}>Budget Baseline</p>
-          <span style={{fontSize:'12px',color:'#94a3b8'}}>Stable for irregular income</span>
-        </div>
-        <div style={{display:'flex',gap:'8px',marginTop:'12px'}}>
-          <button className={`btn${settings.budgetMode==='avg'?' bp':' bs'}`} onClick={()=>upd('budgetMode','avg')} style={{display:'flex',alignItems:'center',gap:'7px'}}>
-            <Ico n="chart" s={14} c={settings.budgetMode==='avg'?'#fff':'#475569'}/>3-Month Avg
-          </button>
-          <button className={`btn${settings.budgetMode==='actual'?' bp':' bs'}`} onClick={()=>upd('budgetMode','actual')} style={{display:'flex',alignItems:'center',gap:'7px'}}>
-            <Ico n="calendar" s={14} c={settings.budgetMode==='actual'?'#fff':'#475569'}/>This Month
-          </button>
-        </div>
-      </div>
+  /* Emergency fund calc */
+  const emergAcct=accounts.find(a=>a.id===emergencyAcctId);
+  const emergBalance=emergAcct?accBal(emergencyAcctId):0;
+  const avgMonthlyExp=avg3; /* avg3 is already the 3-month income avg used as base — reuse mExp context */
+  const emergTarget=base*emergencyMonths; /* target = base income × months as proxy */
+  const emergPct=emergTarget>0?Math.min(100,Math.round((emergBalance/emergTarget)*100)):0;
 
-      {/* BASE CARD */}
-      <div style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)',borderRadius:'14px',padding:'24px 28px',color:'#fff'}}>
-        <p style={{fontSize:'10px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.08em',opacity:.7,margin:'0 0 8px'}}>
-          {settings.budgetMode==='avg'?'3-Month Rolling Avg':'This Month Actual'}
-        </p>
-        <p style={{fontSize:'36px',fontWeight:'900',margin:'0 0 4px',letterSpacing:'-1px'}}>₱{base.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>
-        {settings.budgetMode==='avg'&&<p style={{fontSize:'12px',opacity:.7,margin:0}}>This month actual: ₱{mInc.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>}
-      </div>
+  /* Savings+Investment combined */
+  const savInvAlloc=savings+invest;
+  const savInvActual=mSavingsActual+mInvestActual;
 
-      {/* DAILY SPEND CAP */}
-      <div className="card" style={{padding:'22px'}}>
-        <div className="row">
-          <div style={{display:'flex',gap:'14px',alignItems:'center'}}>
-            <div style={{background:'#f5f3ff',borderRadius:'10px',padding:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <Ico n="calendar" s={20} c="#7c3aed" sw={1.75}/>
-            </div>
-            <div>
-              <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 3px'}}>Daily Spend Cap</p>
-              <p style={{fontSize:'12px',color:'#94a3b8',margin:'0 0 2px'}}>{daysLeft} days left · Budget for essentials: {P(spendBudget)}</p>
-              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Already spent: {P(mExp)} · Remaining: {P(Math.max(0,spendBudget-mExp))}</p>
-            </div>
+  /* Essentials = spendBudget (what remains after all allocations) */
+  const essentialsAllowed=spendBudget;
+  const essentialsSpent=mExp; /* regular expenses */
+  const essentialsPct=essentialsAllowed>0?Math.min(100,Math.round((essentialsSpent/essentialsAllowed)*100)):0;
+
+  const BAR=({pct,color,bg})=>(
+    <div style={{height:'8px',borderRadius:'99px',background:'var(--pbar-bg)',overflow:'hidden',marginTop:'8px'}}>
+      <div style={{height:'100%',width:`${pct}%`,background:color,borderRadius:'99px',transition:'width .5s'}}/>
+    </div>
+  );
+
+  const AllocationRow=({label,allocated,actual,goal,color,bg,infoText,infoTitle,extra})=>{
+    const remaining=allocated-actual;
+    const pct=allocated>0?Math.min(100,Math.round((actual/allocated)*100)):0;
+    const done=remaining<=0;
+    return(
+      <div style={{background:bg||'var(--card2)',borderRadius:'12px',padding:'16px 18px',border:`1px solid ${done?color:'var(--border)'}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>{label}</span>
+            {infoText&&<InfoIcon text={infoText} title={infoTitle||label}/>}
+            {done&&<span style={{fontSize:'11px',fontWeight:'700',color:color,background:`${color}22`,padding:'2px 8px',borderRadius:'99px'}}>✓ Done</span>}
           </div>
           <div style={{textAlign:'right'}}>
-            <p style={{fontSize:'32px',fontWeight:'900',color:'#ef4444',margin:0}}>₱{dailyCap.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</p>
-            <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>per day</p>
+            <span style={{fontSize:'18px',fontWeight:'900',color:done?color:'var(--text)'}}>{P(allocated)}</span>
           </div>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'var(--text3)',marginBottom:'2px'}}>
+          <span>Actioned: <b style={{color}}>{P(actual)}</b></span>
+          <span>Remaining: <b style={{color:done?color:'#f59e0b'}}>{P(Math.max(0,remaining))}</b></span>
+        </div>
+        <BAR pct={pct} color={color} bg={bg}/>
+        {goal&&<p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0',fontStyle:'italic'}}>{goal}</p>}
+        {extra}
+      </div>
+    );
+  };
+
+  return(
+    <div className="col fade" style={{gap:'20px'}}>
+
+      {/* ALLOCATION % SETTINGS */}
+      <div className="card" style={{padding:'22px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
+          <p className="sect" style={{margin:0}}>Allocation Settings</p>
+          <select className="fi" style={{width:'auto',fontSize:'13px',padding:'5px 10px'}} value={settings.budgetMode} onChange={e=>setSettings(s=>({...s,budgetMode:e.target.value}))}>
+            <option value="avg">Base: 3-month avg income</option>
+            <option value="current">Base: This month's income</option>
+          </select>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'12px',marginBottom:'14px'}}>
+          {[
+            {label:'Tithes %',key:'tithePct',color:'#f59e0b'},
+            {label:'Investment %',key:'investPct',color:'#6366f1'},
+            {label:'Savings %',key:'savingsPct',color:'#10b981'},
+            {label:'Desires %',key:'desiresPct',color:'#ec4899'},
+          ].map(({label,key,color})=>(
+            <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:`1px solid var(--border)`}}>
+              <span className="fl" style={{color}}>{label}</span>
+              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                <input type="number" className="pct-input" style={{borderColor:color,color}} value={settings[key]||0} min="0" max="100"
+                  onChange={e=>setSettings(s=>({...s,[key]:Math.min(100,Math.max(0,parseInt(e.target.value)||0))}))}/>
+                <span style={{fontSize:'13px',color:'var(--text3)'}}>= {P((base*(settings[key]||0))/100)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:totalFixed>100?'#fff5f5':'#f0fdf4',border:`1px solid ${totalFixed>100?'#fca5a5':'#86efac'}`}}>
+          <span style={{fontSize:'13px',fontWeight:'700',color:totalFixed>100?'#ef4444':'#16a34a'}}>Total allocated: {totalFixed}%</span>
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials get: {Math.max(0,100-totalFixed)}% = {P(Math.max(0,spendBudget))}</span>
         </div>
       </div>
 
-      {/* BREAKDOWN */}
-      {base>0?(
-        <div className="card" style={{padding:'22px'}}>
-          <p className="sect">Full Breakdown</p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'12px'}}>
-            {[
-              {label:'Tithes',val:tithe,pct:settings.tithePct,color:'#f59e0b',icon:'cross'},
-              {label:'Investments',val:invest,pct:settings.investPct,color:'#4f46e5',icon:'trend-up'},
-              {label:'Desires',val:desires,pct:settings.desiresPct,color:'#ec4899',icon:'star'},
-              {label:'Savings',val:savings,pct:settings.savingsPct,color:'#10b981',icon:'piggy'},
-              {label:'Subscriptions',val:mSub,pct:base?mSub/base*100:0,color:'#64748b',icon:'calendar'},
-              {label:'Payroll',val:mPay,pct:base?mPay/base*100:0,color:'#64748b',icon:'users'},
-              {label:'Spendable',val:spendBudget,pct:base?spendBudget/base*100:0,color:'#06b6d4',icon:'dollar'},
-            ].map(r=>(
-              <div key={r.label} style={{background:'#f8fafc',borderRadius:'10px',padding:'14px'}}>
-                <div className="row" style={{marginBottom:'6px'}}>
-                  <span style={{fontSize:'12px',color:'#64748b',fontWeight:'700',display:'flex',alignItems:'center',gap:'5px'}}><Ico n={r.icon} s={12} c={r.color} sw={2}/>{r.label}</span>
-                  <span style={{fontSize:'12px',color:'#94a3b8'}}>{r.pct.toFixed(0)}%</span>
-                </div>
-                <p style={{fontSize:'18px',fontWeight:'800',color:r.color,margin:'0 0 6px'}}>{P(r.val)}</p>
-                <div className="pbar"><div className="pfill" style={{width:`${Math.min(100,Math.max(0,r.pct))}%`,background:r.color}}/></div>
-              </div>
-            ))}
+      {/* BASE INCOME INFO */}
+      <div style={{padding:'12px 16px',borderRadius:'10px',background:'var(--card2)',border:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <p style={{fontSize:'12px',color:'var(--text3)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Income Base <InfoIcon text={`${settings.budgetMode==='avg'?'3-month average income':'This month income'}. All allocation percentages are computed from this number.`} title="Income Base"/></p>
+          <p style={{fontSize:'22px',fontWeight:'900',color:'var(--text)',margin:0}}>{P(base)}</p>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <p style={{fontSize:'11px',color:'var(--text4)',margin:'0 0 2px'}}>This month actual</p>
+          <p style={{fontSize:'16px',fontWeight:'700',color:'#10b981',margin:0}}>{P(mInc)}</p>
+        </div>
+      </div>
+
+      {/* ── 1. TITHES ── */}
+      <AllocationRow
+        label="🙏 Tithes"
+        allocated={tithe}
+        actual={mTitheActual}
+        color="#f59e0b"
+        bg="#fffbeb"
+        infoText={`${settings.tithePct}% of income${investMovedThisMonth?' minus investment (already moved)':' (investment not moved yet, so full income base is used)'}. Non-negotiable. Goal: withdraw all ₱${tithe.toLocaleString('en-PH',{minimumFractionDigits:2})} before Sunday service.`}
+        infoTitle="Tithes"
+        goal="Goal: ₱0 remaining — all withdrawn for Sunday service"
+      />
+
+      {/* ── 2. SAVINGS + INVESTMENTS ── */}
+      <div style={{background:'#f5f3ff',borderRadius:'12px',padding:'16px 18px',border:`1px solid ${savInvActual>=savInvAlloc*0.9?'#6366f1':'var(--border)'}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>📈 Savings + Investments</span>
+            <InfoIcon text={`Savings: ${settings.savingsPct}% = ${P(savings)}. Investment: ${settings.investPct}% = ${P(invest)}. Combined target: ${P(savInvAlloc)}. Stock market investments count as savings — they all grow your future wealth.`} title="Savings + Investments"/>
+            {savInvActual>=savInvAlloc*0.9&&<span style={{fontSize:'11px',fontWeight:'700',color:'#6366f1',background:'#ede9fe',padding:'2px 8px',borderRadius:'99px'}}>✓ Done</span>}
+          </div>
+          <span style={{fontSize:'18px',fontWeight:'900',color:'#4f46e5'}}>{P(savInvAlloc)}</span>
+        </div>
+        <div style={{display:'flex',gap:'12px',marginBottom:'6px',flexWrap:'wrap'}}>
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>Savings: <b style={{color:'#10b981'}}>{P(mSavingsActual)}</b> / {P(savings)}</span>
+          <span style={{fontSize:'12px',color:'var(--text3)'}}>Investment: <b style={{color:'#6366f1'}}>{P(mInvestActual)}</b> / {P(invest)}</span>
+        </div>
+        <div style={{display:'flex',gap:'4px',height:'8px',borderRadius:'99px',overflow:'hidden',background:'var(--pbar-bg)'}}>
+          <div style={{height:'100%',width:`${savings>0?Math.min(100,Math.round((mSavingsActual/Math.max(savInvAlloc,1))*100)):0}%`,background:'#10b981',transition:'width .5s'}}/>
+          <div style={{height:'100%',width:`${invest>0?Math.min(100,Math.round((mInvestActual/Math.max(savInvAlloc,1))*100)):0}%`,background:'#6366f1',transition:'width .5s'}}/>
+        </div>
+        <p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0',fontStyle:'italic'}}>Goal: ₱0 remaining — all transferred to savings account + investment</p>
+      </div>
+
+      {/* ── 3. DESIRES ── */}
+      <AllocationRow
+        label="✨ Desires"
+        allocated={desires}
+        actual={mDesiresActual}
+        color="#ec4899"
+        bg="#fdf2f8"
+        infoText={`${settings.desiresPct}% of income = ${P(desires)}. This is your lifestyle/wants budget. Log expenses as category "Desires" and they deduct here. Unspent desires can be redirected to savings at month end.`}
+        infoTitle="Desires Budget"
+        goal="Goal: spend as little as possible — less spent = more you can move to savings"
+        extra={mDesiresActual<desires*0.5&&desires>0?(
+          <div style={{marginTop:'8px',padding:'8px 12px',borderRadius:'8px',background:'rgba(236,72,153,.08)',fontSize:'12px',color:'#be185d',fontWeight:'600'}}>
+            💡 You have {P(desires-mDesiresActual)} unspent desires budget — consider moving it to savings at month end!
+          </div>
+        ):null}
+      />
+
+      {/* ── 4. ESSENTIALS ── */}
+      <div style={{background:'var(--card2)',borderRadius:'12px',padding:'16px 18px',border:'1px solid var(--border)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🏠 Essentials</span>
+            <InfoIcon text={`What's left after all allocations: Income (${P(base)}) − Tithes (${P(tithe)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll (${P(mPay)}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc.`} title="Essentials Budget"/>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <span style={{fontSize:'18px',fontWeight:'900',color:essentialsSpent>essentialsAllowed?'#ef4444':'var(--text)'}}>{P(essentialsAllowed)}</span>
           </div>
         </div>
-      ):(
-        <div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>Log income to see budget.</div>
-      )}
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'var(--text3)',marginBottom:'2px'}}>
+          <span>Spent: <b style={{color:essentialsSpent>essentialsAllowed?'#ef4444':'var(--text)'}}>{P(essentialsSpent)}</b></span>
+          <span>Remaining: <b style={{color:essentialsSpent>essentialsAllowed?'#ef4444':'#10b981'}}>{P(Math.max(0,essentialsAllowed-essentialsSpent))}</b></span>
+        </div>
+        <BAR pct={essentialsPct} color={essentialsPct>100?'#ef4444':'#64748b'}/>
+        {essentialsSpent>essentialsAllowed&&(
+          <p style={{fontSize:'12px',color:'#ef4444',margin:'6px 0 0',fontWeight:'600'}}>⚠ Over budget by {P(essentialsSpent-essentialsAllowed)}</p>
+        )}
+        <p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0',fontStyle:'italic'}}>Computed from actual logged expenses. Updates as you confirm allocations.</p>
+      </div>
 
-      <button className="btn bp" style={{alignSelf:'flex-start'}} onClick={exportCSV}>
-        <Ico n="download" s={14} c="#fff"/>Export to CSV
+      {/* ── 5. EMERGENCY FUND ── */}
+      <div style={{background:'#fff7ed',borderRadius:'12px',padding:'16px 18px',border:`1px solid ${emergPct>=100?'#f97316':'var(--border)'}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🛡 Emergency Fund</span>
+            <InfoIcon text={`Target: ${emergencyMonths} months × ${P(base)} income base = ${P(emergTarget)}. Current balance of your linked emergency account: ${P(emergBalance)}. Goal: ${emergencyMonths===3?'3 months (minimum safe)':emergencyMonths===6?'6 months (recommended)':'custom'} of monthly expenses covered.`} title="Emergency Fund"/>
+            {emergPct>=100&&<span style={{fontSize:'11px',fontWeight:'700',color:'#f97316',background:'#ffedd5',padding:'2px 8px',borderRadius:'99px'}}>✓ Goal Reached!</span>}
+          </div>
+          <span style={{fontSize:'18px',fontWeight:'900',color:'#ea580c'}}>{emergPct}%</span>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'var(--text3)',marginBottom:'6px'}}>
+          <span>Current: <b style={{color:'#ea580c'}}>{P(emergBalance)}</b></span>
+          <span>Target: <b>{P(emergTarget)}</b></span>
+        </div>
+        <BAR pct={emergPct} color="#f97316"/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginTop:'12px'}}>
+          <div>
+            <span className="fl">Linked Account</span>
+            <select className="fi" value={emergencyAcctId} onChange={e=>setEmergencyAcctId(e.target.value)}>
+              <option value="">— Pick emergency account —</option>
+              {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+            </select>
+          </div>
+          <div>
+            <span className="fl">Target (months of income)</span>
+            <select className="fi" value={emergencyMonths} onChange={e=>setEmergencyMonths(parseInt(e.target.value))}>
+              <option value={3}>3 months (minimum)</option>
+              <option value={4}>4 months</option>
+              <option value={5}>5 months</option>
+              <option value={6}>6 months (recommended)</option>
+            </select>
+          </div>
+        </div>
+        {!emergencyAcctId&&<p style={{fontSize:'12px',color:'#f59e0b',margin:'8px 0 0',fontWeight:'600'}}>⚠ Pick a dedicated emergency fund account to track your balance here.</p>}
+      </div>
+
+      {/* DAILY CAP */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+        <div className="card" style={{padding:'16px 18px',background:'#fffbeb'}}>
+          <p style={{fontSize:'11px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>
+            Daily Spend Cap <InfoIcon text={`Remaining essentials budget ÷ ${daysLeft} days left this month. = ${P(essentialsAllowed-essentialsSpent)} ÷ ${daysLeft} = ${P(dailyCap)}`} title="Daily Spend Cap"/>
+          </p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#d97706',margin:0}}>{P(dailyCap)}</p>
+          <p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>{daysLeft} days left</p>
+        </div>
+        <div className="card" style={{padding:'16px 18px',background:'#f0fdf4'}}>
+          <p style={{fontSize:'11px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>
+            Spendable Budget <InfoIcon text={`Income Base − all allocations (tithes, investment, savings, desires) − fixed costs (subscriptions, payroll). This is your essentials budget.`} title="Spendable Budget"/>
+          </p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#16a34a',margin:0}}>{P(Math.max(0,spendBudget))}</p>
+          <p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>for essentials</p>
+        </div>
+      </div>
+
+      {/* EXPORT */}
+      <button className="btn bp" onClick={exportCSV} style={{justifyContent:'center'}}>
+        <Ico n="download" s={14} c="#fff"/>Export CSV
       </button>
+
     </div>
   );
 }
