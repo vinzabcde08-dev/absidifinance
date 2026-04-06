@@ -974,7 +974,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1047,7 +1047,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,transfers,setTransfers,investMovedThisMonth}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -1356,29 +1356,42 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
       {/* BUDGET + ACCOUNTS GRID */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px'}}>
         <div className="card" style={{padding:'20px'}}>
-          <p className="sect">Budget Snapshot — {monthName||new Date().toLocaleString('en-US',{month:'long'})}</p>
+          <div className="row" style={{marginBottom:'14px'}}>
+            <p className="sect" style={{margin:0}}>Monthly Allocations — {monthName||new Date().toLocaleString('en-US',{month:'long'})}</p>
+            <button onClick={()=>setTab('budget')} style={{fontSize:'11px',color:'#4f46e5',fontWeight:'700',background:'none',border:'none',cursor:'pointer',padding:'2px 6px',borderRadius:'6px',textDecoration:'underline'}}>Full view →</button>
+          </div>
           {[
-            {label:`Tithes (${settings.tithePct}%)`,val:tithe,color:'#f59e0b',icon:'cross'},
-            {label:`Investments (${settings.investPct}%)`,val:invest,color:'#4f46e5',icon:'trend-up'},
-            {label:`Desires (${settings.desiresPct}%)`,val:desires,color:'#ec4899',icon:'star'},
-            {label:`Savings (${settings.savingsPct}%)`,val:savings,color:'#10b981',icon:'piggy'},
-          ].map(r=>(
-            <div key={r.label} style={{marginBottom:'12px'}}>
-              <div className="row" style={{marginBottom:'4px'}}>
-                <span style={{fontSize:'12px',color:'#64748b',fontWeight:'600',display:'flex',alignItems:'center',gap:'5px'}}><Ico n={r.icon} s={13} c={r.color} sw={2}/>{r.label}</span>
-                <span style={{fontSize:'13px',fontWeight:'700',color:'#1e293b'}}>{P(r.val)}</span>
+            {label:`Tithes (${settings.tithePct}%)`,target:tithe,actual:mTitheActual,color:'#f59e0b',icon:'cross',info:'10% of your income (excluding investment if already moved this month). Actual = tithe expenses logged this month.'},
+            {label:`Investments (${settings.investPct}%)`,target:invest,actual:mInvestActual,color:'#4f46e5',icon:'trend-up',info:`${settings.investPct}% of gross income. Actual = investment transfers logged this month.`},
+            {label:`Savings (${settings.savingsPct}%)`,target:savings,actual:mSavingsActual,color:'#10b981',icon:'piggy',info:`${settings.savingsPct}% of gross income. Actual = savings transfers logged this month.`},
+            {label:`Desires (${settings.desiresPct}%)`,target:desires,actual:mDesiresActual,color:'#ec4899',icon:'star',info:`${settings.desiresPct}% of gross income for discretionary spending. Actual = Desires-category expenses this month.`},
+          ].map(r=>{
+            const pct=r.target>0?Math.min(100,(r.actual/r.target)*100):0;
+            const over=r.actual>r.target;
+            return(
+              <div key={r.label} style={{marginBottom:'12px'}}>
+                <div className="row" style={{marginBottom:'4px'}}>
+                  <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:'600',display:'flex',alignItems:'center',gap:'5px'}}>
+                    <Ico n={r.icon} s={13} c={r.color} sw={2}/>{r.label}<InfoIcon text={r.info}/>
+                  </span>
+                  <span style={{fontSize:'12px',fontWeight:'700',color:over?'#ef4444':r.color}}>
+                    {P(r.actual)}<span style={{color:'var(--text4)',fontWeight:'500'}}> / {P(r.target)}</span>
+                  </span>
+                </div>
+                <div className="pbar">
+                  <div className="pfill" style={{width:`${pct}%`,background:over?'#ef4444':r.color,transition:'width .3s'}}/>
+                </div>
               </div>
-              <div className="pbar"><div className="pfill" style={{width:`${Math.min(100,r.val/Math.max(base,1)*100)}%`,background:r.color}}/></div>
-            </div>
-          ))}
-          <div style={{borderTop:'1px solid #f1f5f9',marginTop:'8px',paddingTop:'10px'}}>
+            );
+          })}
+          <div style={{borderTop:'1px solid var(--border)',marginTop:'8px',paddingTop:'10px'}}>
             {[
-              {label:'Spendable Budget',val:spendBudget,color:'#4f46e5'},
-              {label:'Already Spent',val:mExp,color:'#ef4444'},
-              {label:`Remaining (${daysLeft}d left)`,val:Math.max(0,spendBudget-mExp),color:'#10b981'},
+              {label:'Essentials Budget',val:spendBudget,color:'#4f46e5',info:'Total income minus tithes, investments, savings, and desires allocations. What remains for essential spending.'},
+              {label:'Essentials Spent',val:mExpReg,color:mExpReg>spendBudget?'#ef4444':'#64748b',info:'Regular expenses this month — does NOT include tithe, investment, savings, or transfer allocations. Only day-to-day spending.'},
+              {label:`Remaining (${daysLeft}d left)`,val:Math.max(0,spendBudget-mExpReg),color:mExpReg>spendBudget?'#ef4444':'#10b981',info:`Essentials budget minus essentials spent. ${daysLeft} days left in the month.`},
             ].map(r=>(
               <div key={r.label} className="row" style={{marginTop:'6px'}}>
-                <span style={{fontSize:'12px',color:'#64748b',fontWeight:'600'}}>{r.label}</span>
+                <span style={{fontSize:'12px',color:'var(--text3)',fontWeight:'600'}}>{r.label}<InfoIcon text={r.info}/></span>
                 <span style={{fontSize:'14px',fontWeight:'800',color:r.color}}>{P(r.val)}</span>
               </div>
             ))}
