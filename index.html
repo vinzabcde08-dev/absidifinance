@@ -807,10 +807,10 @@ function MainApp({onLogout}){
 
   const mInc=byMonth(income).reduce((s,x)=>s+(x.amount||0),0);
   const expectedFromClients=clients.reduce((s,c)=>s+(c.rate||0)*(fxRates[c.currency]||57),0);
-  const netClientExpected=expectedFromClients-mPay;
   const mExp=byMonth(expenses).reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
+  const netClientExpected=expectedFromClients-mPay;
 
   /* Computed allocation values (used before tithe recalc logic) */
   const mExpReg=byMonth(expenses).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
@@ -983,7 +983,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1056,7 +1056,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -1477,6 +1477,29 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
                   <div style={{display:'flex',gap:'12px',marginTop:'4px'}}>
                     <span style={{fontSize:'11px',color:'#6366f1',fontWeight:'600'}}>● Paid: {P(b.paid)}</span>
                     <span style={{fontSize:'11px',color:'#a5b4fc',fontWeight:'600'}}>● Pending: {P(b.pending)}</span>
+                  </div>
+                )}
+                {b.label==='Client Expected Income'&&(employees||[]).length>0&&(
+                  <div style={{marginTop:'8px',padding:'10px 12px',background:'var(--bg)',borderRadius:'8px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                    <p style={{fontSize:'11px',fontWeight:'700',color:'#94a3b8',margin:'0 0 4px',textTransform:'uppercase',letterSpacing:'0.05em'}}>Payroll Breakdown</p>
+                    {(employees||[]).map(em=>(
+                      <div key={em.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                          <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#a78bfa',flexShrink:0}}/>
+                          <span style={{fontSize:'12px',color:'var(--text)',fontWeight:'600'}}>{em.name}</span>
+                          {em.role&&<span style={{fontSize:'11px',color:'#94a3b8'}}>· {em.role}</span>}
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
+                          {em.salary&&<span style={{fontSize:'12px',fontWeight:'700',color:'#ef4444'}}>{P(em.salary)}</span>}
+                          {em.frequency&&<span style={{fontSize:'11px',color:'#94a3b8',background:'#f1f5f9',padding:'2px 6px',borderRadius:'4px'}}>{em.frequency}</span>}
+                          {!em.salary&&<span style={{fontSize:'11px',color:'#cbd5e1',fontStyle:'italic'}}>no salary set</span>}
+                        </div>
+                      </div>
+                    ))}
+                    {mPay>0&&<div style={{borderTop:'1px solid #e2e8f0',paddingTop:'5px',marginTop:'3px',display:'flex',justifyContent:'space-between'}}>
+                      <span style={{fontSize:'11px',color:'#94a3b8',fontWeight:'600'}}>This month paid out</span>
+                      <span style={{fontSize:'12px',fontWeight:'800',color:'#ef4444'}}>{P(mPay)}</span>
+                    </div>}
                   </div>
                 )}
               </div>
@@ -2234,15 +2257,17 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 
 /* ════════  PAYROLL  ════════ */
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
-  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[editEmpId,setEditEmpId]=useState(null);
+  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[editEmpId,setEditEmpId]=useState(null);
   const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');const[editPayId,setEditPayId]=useState(null);
 
-  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');};
-  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');};
+  const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks)','Monthly':'Monthly'};
+  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');};
+  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');};
   const saveEmp=()=>{
     if(!empName.trim())return;
-    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim()}:x));}
-    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim()}]);}
+    const sal=empSalary?parseFloat(empSalary):undefined;
+    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq}:x));}
+    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq}]);}
     resetEmp();
   };
 
@@ -2263,6 +2288,12 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
           <div className="col">
             <div><span className="fl">Name</span><input className="fi" value={empName} onChange={e=>setEmpName(e.target.value)} placeholder="Employee name"/></div>
             <div><span className="fl">Role</span><input className="fi" value={empRole} onChange={e=>setEmpRole(e.target.value)} placeholder="e.g. Virtual Assistant"/></div>
+            <div><span className="fl">Salary (₱)</span><input className="fi" type="number" value={empSalary} onChange={e=>setEmpSalary(e.target.value)} placeholder="e.g. 16000"/></div>
+            <div><span className="fl">Pay Frequency</span>
+              <select className="fi" value={empFreq} onChange={e=>setEmpFreq(e.target.value)}>
+                {Object.entries(FREQ_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
             <div style={{display:'flex',gap:'8px'}}>
               <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={saveEmp}><Ico n={editEmpId?'check':'users'} s={14} c="#fff"/>{editEmpId?'Save Employee':'Add Employee'}</button>
               {editEmpId&&<button className="btn bs" onClick={resetEmp}>Cancel</button>}
@@ -2273,7 +2304,10 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
               <div key={e.id} className="row" style={{padding:'7px 0'}}>
                 <div style={{display:'flex',alignItems:'center',gap:'9px'}}>
                   <div style={{width:'30px',height:'30px',background:'#f5f3ff',borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={14} c="#7c3aed" sw={1.75}/></div>
-                  <div><p style={{fontWeight:'700',fontSize:'13px',margin:0}}>{e.name}</p><p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.role}</p></div>
+                  <div>
+                    <p style={{fontWeight:'700',fontSize:'13px',margin:0}}>{e.name}</p>
+                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.role||''}{e.salary?` · ${P(e.salary)}`:''}{e.frequency?` · ${e.frequency}`:''}</p>
+                  </div>
                 </div>
                 <div style={{display:'flex',gap:'4px'}}>
                   <button className="ib" style={{color:editEmpId===e.id?'#6366f1':'#94a3b8'}} onClick={()=>editEmpId===e.id?resetEmp():startEditEmp(e)}><Ico n="edit" s={14}/></button>
