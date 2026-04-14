@@ -703,6 +703,7 @@ function MainApp({onLogout}){
   const[fxLoaded,setFxLoaded]=useState(false);
   const[fxUpdatedAt,setFxUpdatedAt]=useState(null);
   const[tab,setTab]=useState('home');
+  const[subReminder,setSubReminder]=useState(null); /* {queue:[{sub,phpAmount},...], current:0} */
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
   const[showSettings,setShowSettings]=useState(false);
@@ -794,6 +795,54 @@ function MainApp({onLogout}){
     const timer=setInterval(fetchFx,30*60*1000); /* refresh every 30 min */
     return()=>clearInterval(timer);
   },[]);
+
+  /* ── Subscription payment reminder on app load ── */
+  useEffect(()=>{
+    if(!subs||subs.length===0)return;
+    const uid_=getUid()||'local';
+    const reminderKey=`absidi_sub_reminded_${uid_}`;
+    const handled=JSON.parse(localStorage.getItem(reminderKey)||'{}'); /* {monthKey:[subId,...]} */
+    const thisMonth=`${CUR_YEAR}-${String(CUR_MONTH+1).padStart(2,'0')}`;
+    const handledThisMonth=handled[thisMonth]||[];
+    /* Find subs due this month or overdue (billing date <= today) that haven't been handled yet */
+    const queue=subs
+      .filter(s=>{
+        if(handledThisMonth.includes(s.id))return false;
+        if(!s.date)return false;
+        const d=new Date(s.date);
+        const due=d<=new Date(TODAY)||(d.getFullYear()===CUR_YEAR&&d.getMonth()===CUR_MONTH);
+        return due;
+      })
+      .map(s=>({
+        sub:s,
+        phpAmount:s.currency&&s.currency!=='PHP'
+          ?parseFloat(((s.amount||0)*(fxRates?.[s.currency]||57)).toFixed(2))
+          :(s.amount||0)
+      }));
+    if(queue.length>0){
+      setSubReminder({queue,current:0,handled:handled,thisMonth,reminderKey});
+    }
+  },[]);/* run once on mount */
+
+  const subReminderAnswer=(yes)=>{
+    if(!subReminder)return;
+    const {queue,current,handled,thisMonth,reminderKey}=subReminder;
+    const item=queue[current];
+    /* Mark as handled */
+    const newHandled={...handled,[thisMonth]:[...(handled[thisMonth]||[]),item.sub.id]};
+    localStorage.setItem(reminderKey,JSON.stringify(newHandled));
+    /* Log expense if paid */
+    if(yes){
+      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:item.phpAmount,category:'Subscriptions',accountId:'',note:`${item.sub.name} subscription`}]);
+    }
+    /* Advance to next or close */
+    const next=current+1;
+    if(next<queue.length){
+      setSubReminder({...subReminder,current:next,handled:newHandled});
+    }else{
+      setSubReminder(null);
+    }
+  };
 
   const yr=parseInt(year)||CUR_YEAR;
   const selMonth=parseInt(month);
@@ -995,6 +1044,44 @@ function MainApp({onLogout}){
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
       </div>
+
+      {/* SUBSCRIPTION REMINDER MODAL */}
+      {subReminder&&(()=>{
+        const item=subReminder.queue[subReminder.current];
+        const total=subReminder.queue.length;
+        const cur=subReminder.current+1;
+        const s=item.sub;
+        return(
+          <div className="modal-overlay">
+            <div className="card fade" style={{width:'100%',maxWidth:'400px',padding:'28px',textAlign:'center'}}>
+              <div style={{marginBottom:'16px'}}>
+                <div style={{width:'56px',height:'56px',background:'#f5f3ff',borderRadius:'14px',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}><Ico n="calendar" s={26} c="#7c3aed" sw={1.75}/></div>
+                {total>1&&<p style={{fontSize:'12px',color:'#94a3b8',margin:'0 0 6px',fontWeight:'600'}}>{cur} of {total} subscriptions</p>}
+                <h2 style={{fontWeight:'900',fontSize:'20px',margin:'0 0 6px',color:'var(--text)'}}>Did you pay this?</h2>
+                <p style={{fontSize:'22px',fontWeight:'800',color:'#4f46e5',margin:'0 0 4px'}}>{s.name}</p>
+                <p style={{fontSize:'15px',fontWeight:'700',color:'#ef4444',margin:'0 0 4px'}}>{P(item.phpAmount)}{s.currency&&s.currency!=='PHP'?` (${s.amount} ${s.currency})`:''}</p>
+                <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Due: {s.date} · {s.freq}</p>
+              </div>
+              {total>1&&(
+                <div style={{display:'flex',gap:'4px',justifyContent:'center',marginBottom:'18px'}}>
+                  {subReminder.queue.map((_,i)=>(
+                    <div key={i} style={{width:'8px',height:'8px',borderRadius:'50%',background:i<subReminder.current?'#10b981':i===subReminder.current?'#6366f1':'#e2e8f0'}}/>
+                  ))}
+                </div>
+              )}
+              <div style={{display:'flex',gap:'10px'}}>
+                <button className="btn" style={{flex:1,justifyContent:'center',background:'#f1f5f9',color:'#64748b',fontWeight:'700',padding:'14px'}} onClick={()=>subReminderAnswer(false)}>
+                  <Ico n="close" s={16} c="#64748b"/> No, skip
+                </button>
+                <button className="btn bp" style={{flex:1,justifyContent:'center',padding:'14px'}} onClick={()=>subReminderAnswer(true)}>
+                  <Ico n="check" s={16} c="#fff"/> Yes, log it!
+                </button>
+              </div>
+              <p style={{fontSize:'11px',color:'#cbd5e1',marginTop:'12px',marginBottom:0}}>Won't ask again this month</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* RESET MODAL */}
       {showReset&&(
