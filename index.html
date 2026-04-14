@@ -1650,8 +1650,13 @@ function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,ex
     setFromId('');setToId('');setAmount('');setFee('');setNote('');setDate(TODAY);
   };
 
-  const recent=(transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const recent=(transfers||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   const acctName=id=>{const a=accounts.find(x=>x.id===id);return a?acctLabel(a):'External';};
+  const deleteTransfer=(tid)=>{
+    setTransfers(prev=>(prev||[]).filter(t=>t.id!==tid));
+    setExpenses(prev=>(prev||[]).filter(e=>e.transferId!==tid));
+    setIncome(prev=>(prev||[]).filter(i=>i.transferId!==tid));
+  };
 
   return(
     <div>
@@ -1691,9 +1696,13 @@ function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,ex
           {showHistory&&(
             <div className="col" style={{gap:'8px',marginTop:'8px'}}>
               {recent.map(t=>(
-                <div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',borderRadius:'8px',background:'var(--card2)',fontSize:'13px'}}>
-                  <span style={{color:'var(--text3)'}}>{t.date} · {acctName(t.fromId)} → {acctName(t.toId)}</span>
-                  <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(t.amount)}{t.fee>0?` + ${P(t.fee)} fee`:''}</span>
+                <div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',borderRadius:'8px',background:'var(--card2)',fontSize:'13px',gap:'8px'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{color:'var(--text3)'}}>{t.date} · {acctName(t.fromId)} → {acctName(t.toId)}</span>
+                    {t.note&&<span style={{color:'var(--text4)',marginLeft:'6px'}}>({t.note})</span>}
+                  </div>
+                  <span style={{fontWeight:'800',color:'#4f46e5',whiteSpace:'nowrap'}}>{P(t.amount)}{t.fee>0?` + ${P(t.fee)} fee`:''}</span>
+                  <button onClick={()=>{if(window.confirm(`Delete this transfer? This will also remove the linked expense and income entries.`))deleteTransfer(t.id);}} style={{background:'none',border:'1px solid #fca5a5',borderRadius:'6px',cursor:'pointer',padding:'2px 8px',fontSize:'11px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap'}}>✕ Delete</button>
                 </div>
               ))}
             </div>
