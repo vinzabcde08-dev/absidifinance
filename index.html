@@ -91,7 +91,16 @@
       .__subtitle{padding:6px 12px;font-size:11px}
       .__grid2{grid-template-columns:1fr!important}
       .__form-grid{grid-template-columns:1fr!important}
+      /* prevent number/label overflow in card rows */
+      .row{flex-wrap:wrap;gap:6px}
+      /* money values never break mid-number */
+      .no-wrap{white-space:nowrap!important}
     }
+    /* universal text overflow guard */
+    .ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+    /* card item row: left grows, right shrinks to buttons */
+    .card-row-left{flex:1;min-width:0;overflow:hidden}
+    .card-row-right{flex-shrink:0;display:flex;align-items:center;gap:6px}
   </style>
   <!-- PWA / Home-screen icon -->
   <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -1403,17 +1412,15 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           {accounts.map(a=>{
             const bal=accBal(a.id);
             return(
-              <div key={a.id} className="row hr" style={{padding:'10px 6px',borderBottom:'1px solid #f8fafc',borderRadius:'6px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                  <div style={{width:'32px',height:'32px',background:'#f5f3ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <Ico n={a.type==='Bank'?'bank':'dollar'} s={14} c="#4f46e5" sw={2}/>
-                  </div>
-                  <div>
-                    <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{a.name}</p>
-                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{a.subtype||a.type}</p>
-                  </div>
+              <div key={a.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 6px',borderBottom:'1px solid var(--border)',borderRadius:'6px'}}>
+                <div style={{width:'32px',height:'32px',flexShrink:0,background:'#f5f3ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Ico n={a.type==='Bank'?'bank':'dollar'} s={14} c="#4f46e5" sw={2}/>
                 </div>
-                <span style={{fontWeight:'800',fontSize:'14px',color:bal>=0?'#1e293b':'#ef4444'}}>{P(bal)}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontWeight:'700',color:'var(--text)',fontSize:'13px',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</p>
+                  <p style={{fontSize:'11px',color:'var(--text4)',margin:0}}>{a.subtype||a.type}</p>
+                </div>
+                <span style={{fontWeight:'800',fontSize:'14px',color:bal>=0?'var(--text)':'#ef4444',whiteSpace:'nowrap',flexShrink:0}}>{P(bal)}</span>
               </div>
             );
           })}
@@ -1753,19 +1760,19 @@ function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,
       <div className="col" style={{gap:'10px'}}>
         {accounts.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No accounts yet.</div>}
         {accounts.map(a=>{const bal=accBal(a.id);const isEditing=editId===a.id;return(
-          <div key={a.id} className="card row" style={{padding:'16px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-              <div style={{width:'40px',height:'40px',background:'#f5f3ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="bank" s={18} c="#4f46e5" sw={1.75}/></div>
-              <div>
-                <p style={{fontWeight:'700',color:'#1e293b',margin:'0 0 3px'}}>{a.name}</p>
-                <span className="badge" style={{background:'#f1f5f9',color:'#64748b'}}>{a.type}{a.subtype?` · ${a.subtype}`:''}</span>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:'4px 0 0'}}>Opening: {P(a.openingBalance)}</p>
+          <div key={a.id} className="card" style={{padding:'16px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'var(--card2)':'var(--card)',transition:'all .15s',display:'flex',flexWrap:'wrap',gap:'12px',alignItems:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px',flex:'1',minWidth:'160px'}}>
+              <div style={{width:'40px',height:'40px',flexShrink:0,background:'#f5f3ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="bank" s={18} c="#4f46e5" sw={1.75}/></div>
+              <div style={{minWidth:0}}>
+                <p style={{fontWeight:'700',color:'var(--text)',margin:'0 0 3px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</p>
+                <span className="badge" style={{background:'var(--card2)',color:'var(--text3)'}}>{a.type}{a.subtype?` · ${a.subtype}`:''}</span>
+                <p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>Opening: {P(a.openingBalance)}</p>
               </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'8px',marginLeft:'auto'}}>
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 2px'}}>Balance<InfoIcon text="Opening Balance + all income entries linked to this account − all expense entries − payroll − transfers out + transfers in. Year-to-date for the selected year." title={`${a.name} Balance`}/></p>
-                <p style={{fontSize:'18px',fontWeight:'800',color:bal>=0?'#4f46e5':'#ef4444',margin:0}}>{P(bal)}</p>
+                <p style={{fontSize:'11px',color:'var(--text4)',margin:'0 0 2px',whiteSpace:'nowrap'}}>Balance<InfoIcon text="Opening Balance + all income entries linked to this account − all expense entries − payroll − transfers out + transfers in. Year-to-date for the selected year." title={`${a.name} Balance`}/></p>
+                <p style={{fontSize:'18px',fontWeight:'800',color:bal>=0?'#4f46e5':'#ef4444',margin:0,whiteSpace:'nowrap'}}>{P(bal)}</p>
               </div>
               <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(a)}><Ico n="edit" s={15}/></button>
               <button className="ib" onClick={()=>{if(isEditing)reset();setAccounts(accounts.filter(x=>x.id!==a.id));}}><Ico n="trash" s={15}/></button>
@@ -1817,18 +1824,18 @@ function CardsTab({cards,setCards,expenses}){
           const isEditing=editId===c.id;
           return(
             <div key={c.id} className="card" style={{padding:'18px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
-              <div className="row" style={{marginBottom:'12px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                  <div style={{width:'40px',height:'40px',background:'#faf5ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="card" s={18} c="#7c3aed" sw={1.75}/></div>
-                  <div>
-                    <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
+              <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px',flexWrap:'wrap'}}>
+                <div className="card-row-left" style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                  <div style={{width:'40px',height:'40px',flexShrink:0,background:'#faf5ff',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="card" s={18} c="#7c3aed" sw={1.75}/></div>
+                  <div style={{minWidth:0}}>
+                    <p className="ellipsis" style={{fontWeight:'800',color:'var(--text)',margin:'0 0 4px'}}>{c.name}</p>
                     <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-                      <span className="badge" style={{background:'#f1f5f9',color:'#64748b'}}>Limit: {P(c.limit)}</span>
+                      <span className="badge" style={{background:'var(--card2)',color:'var(--text3)'}}>Limit: {P(c.limit)}</span>
                       {dtd<=5&&<span className="badge" style={{background:'#fef2f2',color:'#ef4444'}}><Ico n="warning" s={10} c="#ef4444"/>Due in {dtd}d</span>}
                     </div>
                   </div>
                 </div>
-                <div style={{display:'flex',gap:'6px'}}>
+                <div className="card-row-right">
                   <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(c)}><Ico n="edit" s={15}/></button>
                   <button className="ib" onClick={()=>{if(isEditing)reset();setCards(cards.filter(x=>x.id!==c.id));}}><Ico n="trash" s={15}/></button>
                 </div>
@@ -1967,15 +1974,15 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedF
             const isEditing=editId===c.id;
             return(
               <div key={c.id} className="card" style={{padding:'16px 20px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
-                <div className="row" style={{marginBottom:'8px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-                    <div style={{width:'40px',height:'40px',background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
-                    <div>
-                      <p style={{fontWeight:'800',color:'#1e293b',margin:'0 0 4px'}}>{c.name}</p>
+                <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px',flexWrap:'wrap'}}>
+                  <div className="card-row-left" style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                    <div style={{width:'40px',height:'40px',flexShrink:0,background:'#f0fdf4',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={18} c="#10b981" sw={1.75}/></div>
+                    <div style={{minWidth:0}}>
+                      <p className="ellipsis" style={{fontWeight:'800',color:'var(--text)',margin:'0 0 4px'}}>{c.name}</p>
                       <span className="badge" style={{background:'#f5f3ff',color:'#7c3aed'}}>{c.currency} {c.rate}/mo ≈ {P(expectedPhp)}</span>
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:'6px'}}>
+                  <div className="card-row-right">
                     <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(c)}><Ico n="edit" s={15}/></button>
                     <button className="ib" onClick={()=>{if(isEditing)reset();setClients(clients.filter(x=>x.id!==c.id));}}><Ico n="trash" s={15}/></button>
                   </div>
@@ -2593,22 +2600,22 @@ function DebtTab({debts,setDebts}){
 
   const DebtCard=({d})=>{const isEditing=editId===d.id;return(
     <div className="card" style={{padding:'16px 18px',border:isEditing?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
-      <div className="row" style={{marginBottom:'10px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-          <div style={{padding:'6px 10px',background:DTYPE_BG[d.type]||'#f8fafc',borderRadius:'8px',fontSize:'11px',fontWeight:'700',color:DTYPE_COLOR[d.type]||'#64748b'}}>{d.type}</div>
-          <div>
-            <p style={{fontWeight:'800',color:'#1e293b',margin:0,fontSize:'14px'}}>{d.name}</p>
-            {d.lender&&<p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{d.lender}</p>}
+      <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px',flexWrap:'wrap'}}>
+        <div className="card-row-left" style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          <div style={{flexShrink:0,padding:'6px 10px',background:DTYPE_BG[d.type]||'#f8fafc',borderRadius:'8px',fontSize:'11px',fontWeight:'700',color:DTYPE_COLOR[d.type]||'#64748b'}}>{d.type}</div>
+          <div style={{minWidth:0}}>
+            <p className="ellipsis" style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'14px'}}>{d.name}</p>
+            {d.lender&&<p style={{fontSize:'11px',color:'var(--text4)',margin:0}}>{d.lender}</p>}
           </div>
         </div>
-        <div style={{display:'flex',gap:'6px'}}>
+        <div className="card-row-right">
           <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(d)}><Ico n="edit" s={14}/></button>
           <button className="ib" onClick={()=>del(d.id)}><Ico n="trash" s={14}/></button>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:'8px',marginBottom:'10px'}}>
-        <div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
-          <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Balance</p>
+        <div style={{background:'var(--card2)',borderRadius:'8px',padding:'10px'}}>
+          <p style={{fontSize:'10px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Balance</p>
           <p style={{fontSize:'16px',fontWeight:'800',color:'#ef4444',margin:0}}>{P(d.balance)}</p>
         </div>
         {d.interestRate>0&&<div style={{background:'#f8fafc',borderRadius:'8px',padding:'10px'}}>
