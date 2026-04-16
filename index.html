@@ -833,7 +833,7 @@ function MainApp({onLogout}){
     localStorage.setItem(reminderKey,JSON.stringify(newHandled));
     /* Log expense if paid */
     if(yes){
-      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:item.phpAmount,category:'Subscriptions',accountId:'',note:`${item.sub.name} subscription`}]);
+      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:item.phpAmount,category:'Subscriptions',accountId:item.sub.accountId||'',cardId:item.sub.cardId||'',note:`${item.sub.name} subscription`}]);
     }
     /* Advance to next or close */
     const next=current+1;
@@ -1077,7 +1077,7 @@ function MainApp({onLogout}){
                   <Ico n="check" s={16} c="#fff"/> Yes, log it!
                 </button>
               </div>
-              <p style={{fontSize:'11px',color:'#cbd5e1',marginTop:'12px',marginBottom:0}}>Won't ask again this month</p>
+              <p style={{fontSize:'11px',color:'#cbd5e1',marginTop:'12px',marginBottom:0}}>If paid, expense is auto-linked to your account · Won't ask again this month</p>
             </div>
           </div>
         );
@@ -1180,6 +1180,63 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
 
   /* quick-add modal */
   const[showTitheBreakdown,setShowTitheBreakdown]=useState(false);
+
+  /* ── Consolidate & Withdraw modal ── */
+  const[showConsolidate,setShowConsolidate]=useState(false);
+  const[consoDest,setConsoDest]=useState('');
+  const[consoFee,setConsoFee]=useState('');
+  const[consoTithe,setConsoTithe]=useState(true);
+  const[consoSavings,setConsoSavings]=useState(true);
+  const[consoInvest,setConsoInvest]=useState(true);
+  const titheDone=!!(titheLog.find(t=>t.week===getWeekKey())?.done);
+  const savingsDone=!!(savingsLog.find(s=>s.month===curMonthKey)?.done);
+  const investDone=!!(investLog.find(l=>l.month===curMonthKey)?.done);
+  const consoTotal=(consoTithe&&!titheDone?tithe:0)+(consoSavings&&!savingsDone?savings:0)+(consoInvest&&!investDone?invest:0);
+  const anyPending=!titheDone||!savingsDone||!investDone;
+  const doConsolidate=()=>{
+    if(!consoDest||consoTotal<=0)return;
+    const wk=getWeekKey();
+    const destAcct=accounts.find(a=>a.id===consoDest);
+    /* — Tithe — */
+    if(consoTithe&&!titheDone){
+      if(byAcctTithe.length>0){
+        setExpenses(prev=>[...(prev||[]),...byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe wk ${wk}`}))]);
+      }
+      setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}]);
+    }
+    /* — Savings — */
+    if(consoSavings&&!savingsDone&&savings>0){
+      const note=`Savings ${curMonthKey}`;
+      const srcEntries=byAcctTithe.length>0
+        ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2)),category:'Savings Transfer',accountId:acct.id,alloc:'savings_out',note}))
+        :[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:'',alloc:'savings_out',note}];
+      setExpenses(prev=>[...(prev||[]),...srcEntries]);
+      setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}]);
+    }
+    /* — Invest — */
+    if(consoInvest&&!investDone&&invest>0){
+      const note=`Invest ${curMonthKey}`;
+      const srcEntries=byAcctTithe.length>0
+        ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
+        :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
+      setExpenses(prev=>[...(prev||[]),...srcEntries]);
+      setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:invest,type:'Investment Transfer',accountId:consoDest,alloc:'investment_in',note:`Invest ${curMonthKey}`}]);
+      setInvestLog(prev=>[...prev.filter(l=>l.month!==curMonthKey),{month:curMonthKey,done:true,amount:invest,destination:destAcct?acctLabel(destAcct):'Consolidated',date:TODAY}]);
+    }
+    /* — Consolidated credit to destination — */
+    const incTotal=(consoTithe&&!titheDone?tithe:0)+(consoSavings&&!savingsDone?savings:0)+(consoInvest&&!investDone&&!invest?0:0);
+    /* add non-investment amounts to dest */
+    const nonInvestTotal=(consoTithe&&!titheDone?tithe:0)+(consoSavings&&!savingsDone?savings:0);
+    if(nonInvestTotal>0){
+      setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:nonInvestTotal,type:'Allocation Transfer In',accountId:consoDest,alloc:'allocation_in',note:`Consolidated to ${destAcct?acctLabel(destAcct):'account'}`}]);
+    }
+    /* — ATM fee — */
+    if(consoFee&&parseFloat(consoFee)>0){
+      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(consoFee),category:'Bank Fees',accountId:consoDest,note:'ATM withdrawal fee'}]);
+    }
+    setShowConsolidate(false);setConsoDest('');setConsoFee('');setConsoTithe(true);setConsoSavings(true);setConsoInvest(true);
+  };
+
   const[qaMode,setQaMode]=useState(null); /* null | 'income' | 'expense' */
   const[qaDate,setQaDate]=useState(TODAY);
   const[qaAmount,setQaAmount]=useState('');
@@ -1411,6 +1468,92 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
           </div>
         );
       })()}
+
+      {/* CONSOLIDATE & WITHDRAW BUTTON */}
+      {anyPending&&(tithe>0||savings>0||invest>0)&&(
+        <button onClick={()=>setShowConsolidate(true)} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:'12px',color:'#fff',fontWeight:'800',fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',boxShadow:'0 4px 12px rgba(99,102,241,.3)'}}>
+          <span style={{fontSize:'18px'}}>⚡</span> Move All to One Account
+          <span style={{fontSize:'12px',fontWeight:'600',opacity:0.85,marginLeft:'4px'}}>({[!titheDone&&tithe>0&&'Tithe',!savingsDone&&savings>0&&'Savings',!investDone&&invest>0&&'Invest'].filter(Boolean).join(' + ')})</span>
+        </button>
+      )}
+
+      {/* CONSOLIDATE MODAL */}
+      {showConsolidate&&(
+        <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)setShowConsolidate(false);}}>
+          <div className="card fade" style={{width:'100%',maxWidth:'420px',padding:'28px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'20px'}}>
+              <div style={{background:'#f5f3ff',borderRadius:'10px',padding:'8px',display:'flex'}}><span style={{fontSize:'20px'}}>⚡</span></div>
+              <div>
+                <h2 style={{fontWeight:'900',margin:0,fontSize:'18px',color:'var(--text)'}}>Move All to One Account</h2>
+                <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Consolidate allocations for easy ATM withdrawal</p>
+              </div>
+            </div>
+
+            {/* Allocation checkboxes */}
+            <p style={{fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',margin:'0 0 10px'}}>Select allocations to consolidate</p>
+            <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'18px'}}>
+              {tithe>0&&(
+                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoTithe&&!titheDone?'#fffbeb':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoTithe&&!titheDone?'#f59e0b':'#e2e8f0'}`,cursor:titheDone?'not-allowed':'pointer',opacity:titheDone?0.5:1}}>
+                  <input type="checkbox" checked={consoTithe&&!titheDone} disabled={titheDone} onChange={e=>setConsoTithe(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#f59e0b'}}/>
+                  <div style={{flex:1}}>
+                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>🙏 Tithes</span>
+                    {titheDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                  </div>
+                  <span style={{fontWeight:'800',color:'#b45309'}}>{P(tithe)}</span>
+                </label>
+              )}
+              {savings>0&&(
+                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoSavings&&!savingsDone?'#f0fdf4':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoSavings&&!savingsDone?'#10b981':'#e2e8f0'}`,cursor:savingsDone?'not-allowed':'pointer',opacity:savingsDone?0.5:1}}>
+                  <input type="checkbox" checked={consoSavings&&!savingsDone} disabled={savingsDone} onChange={e=>setConsoSavings(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#10b981'}}/>
+                  <div style={{flex:1}}>
+                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>💰 Savings</span>
+                    {savingsDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                  </div>
+                  <span style={{fontWeight:'800',color:'#059669'}}>{P(savings)}</span>
+                </label>
+              )}
+              {invest>0&&(
+                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoInvest&&!investDone?'#f5f3ff':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoInvest&&!investDone?'#6366f1':'#e2e8f0'}`,cursor:investDone?'not-allowed':'pointer',opacity:investDone?0.5:1}}>
+                  <input type="checkbox" checked={consoInvest&&!investDone} disabled={investDone} onChange={e=>setConsoInvest(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#6366f1'}}/>
+                  <div style={{flex:1}}>
+                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>📈 Investment</span>
+                    {investDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                  </div>
+                  <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(invest)}</span>
+                </label>
+              )}
+            </div>
+
+            {/* Total */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',background:'var(--bg)',borderRadius:'10px',marginBottom:'18px'}}>
+              <span style={{fontWeight:'700',fontSize:'13px',color:'#64748b'}}>Total to consolidate</span>
+              <span style={{fontWeight:'900',fontSize:'20px',color:'#6366f1'}}>{P(consoTotal)}</span>
+            </div>
+
+            {/* Destination account */}
+            <div style={{marginBottom:'14px'}}>
+              <span className="fl">Destination Account (where to receive the money)</span>
+              <select className="fi" value={consoDest} onChange={e=>setConsoDest(e.target.value)}>
+                <option value="">— Pick account to withdraw from —</option>
+                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+              </select>
+            </div>
+
+            {/* ATM fee */}
+            <div style={{marginBottom:'22px'}}>
+              <span className="fl">ATM Withdrawal Fee (optional)</span>
+              <input className="fi" type="number" value={consoFee} onChange={e=>setConsoFee(e.target.value)} placeholder="e.g. 15 — auto-logged as Bank Fees expense"/>
+            </div>
+
+            <div style={{display:'flex',gap:'10px'}}>
+              <button className="btn bs" style={{flex:1,justifyContent:'center'}} onClick={()=>setShowConsolidate(false)}>Cancel</button>
+              <button className="btn bp" style={{flex:2,justifyContent:'center',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',fontSize:'14px'}} onClick={doConsolidate} disabled={!consoDest||consoTotal<=0}>
+                <span>⚡</span> Consolidate {P(consoTotal)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QUICK ADD BUTTONS */}
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
@@ -2329,8 +2472,8 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
                 <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(s.amount)} {s.currency||'PHP'}</span>
                 <button className="ib" style={{color:'#10b981'}} title="Log as expense" onClick={()=>{
                   const phpAmount=s.currency&&s.currency!=='PHP'?parseFloat(((s.amount||0)*(fxRates?.[s.currency]||57)).toFixed(2)):(s.amount||0);
-                  setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:phpAmount,category:'Subscriptions',accountId:'',note:`${s.name} subscription`}]);
-                  alert(`Logged ₱${phpAmount.toLocaleString()} expense for ${s.name}. Go to Expenses tab to link it to an account.`);
+                  setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:phpAmount,category:'Subscriptions',accountId:s.accountId||'',cardId:s.cardId||'',note:`${s.name} subscription`}]);
+                  alert(`Logged ₱${phpAmount.toLocaleString()} expense for ${s.name}.`);
                 }}><Ico n="income" s={14} c="#10b981"/></button>
                 <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(s)}><Ico n="edit" s={15}/></button>
                 <button className="ib" onClick={()=>{if(isEditing)reset();setSubs(allSubs.filter(x=>x.id!==s.id));}}><Ico n="trash" s={15}/></button>
