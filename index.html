@@ -859,7 +859,11 @@ function MainApp({onLogout}){
   const mExp=byMonth(expenses).reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
-  const netClientExpected=expectedFromClients-mPay;
+  /* Expected payroll based on employee salary × frequency — used as budget floor */
+  const FREQ_MULT={'Weekly':4,'Biweekly':2,'Monthly':1};
+  const expectedPayroll=employees.reduce((s,e)=>s+(e.salary&&e.frequency?((e.salary||0)*(FREQ_MULT[e.frequency]||1)):0),0);
+  const mPayBudget=Math.max(mPay,expectedPayroll); /* whichever is higher protects the budget */
+  const netClientExpected=expectedFromClients-mPayBudget;
 
   /* Computed allocation values (used before tithe recalc logic) */
   const mExpReg=byMonth(expenses).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
@@ -875,13 +879,15 @@ function MainApp({onLogout}){
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
   const base=settings.budgetMode==='avg'?avg3:mInc;
   const invest=(base*settings.investPct)/100;
-  /* Tithe base: exclude investment ONLY if investment was actually moved this month */
+  /* Tithe ALWAYS uses actual income (mInc), never the 3-month average.
+     Tithe = what you actually received × tithe% — not a planning number. */
+  const investActualAmt=(mInc*settings.investPct)/100; /* invest based on actual income for tithe calc */
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
-  const titheBase=investMovedThisMonth?(base-invest):base;
+  const titheBase=investMovedThisMonth?(mInc-investActualAmt):mInc;
   const tithe=(titheBase*settings.tithePct)/100;
   const desires=(base*settings.desiresPct)/100;
   const savings=(base*settings.savingsPct)/100;
-  const spendBudget=base-tithe-invest-desires-savings-mSub-mPay;
+  const spendBudget=base-tithe-invest-desires-savings-mSub-mPayBudget;
   const dailyCap=daysLeft>0?Math.max(0,(spendBudget-mExp)/daysLeft):0;
   const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct;
 
@@ -1032,7 +1038,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPay} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1040,7 +1046,7 @@ function MainApp({onLogout}){
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPay} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
       </div>
@@ -1143,7 +1149,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees}){
+function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual}){
   const net=mInc-mExp-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -1267,7 +1273,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
      info:'Monthly Income minus all expenses (expenses + subscriptions + payroll). Positive = surplus, Negative = you spent more than you earned.',title:'Net This Month'},
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
-     info:`Remaining spendable budget ÷ days left in month. Spendable = Income − Tithes − Investment − Savings − Desires − Subscriptions − Payroll. Days left: ${daysLeft}.`,title:'Daily Spend Cap'},
+     info:`Remaining spendable budget ÷ days left in month. Spendable = Income − Tithes − Investment − Savings − Desires − Subscriptions − Payroll (${P(mPay)}${expectedPayroll>0&&(mPayActual||0)<expectedPayroll?`, expected from employee salaries`:''}). Days left: ${daysLeft}.`,title:'Daily Spend Cap'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
      info:'Sum of all current balances in the Debt tab (credit cards, personal loans, and loans combined).',title:'Total Debt'},
   ];
@@ -1285,18 +1291,35 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
             <button onClick={()=>setTitheLog(prev=>prev.filter(t=>t.week!==wk))} style={{fontSize:'11px',color:'#f59e0b',background:'none',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Reset</button>
           </div>
         );
-        if(isDone)return(
-          <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #10b981',background:'#f0fdf4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <p style={{fontWeight:'800',color:'#16a34a',margin:'0 0 2px',fontSize:'14px'}}>✓ Tithes prepared for this week</p>
-              <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Week {wk} · {P(titheAmt||tithe)} withdrawn from accounts · Balance updated ✓</p>
+        if(isDone){
+          const paidTithe=entry.amount||0;
+          const incAtTime=entry.incomeAtTime||paidTithe/((settings.tithePct||10)/100);
+          const newIncomeSince=mInc-incAtTime;
+          const topUp=newIncomeSince>50?parseFloat((newIncomeSince*(settings.tithePct||10)/100).toFixed(2)):0;
+          return(
+            <div className="card" style={{borderLeft:'4px solid #10b981',background:'#f0fdf4',overflow:'hidden'}}>
+              <div style={{padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <p style={{fontWeight:'800',color:'#16a34a',margin:'0 0 2px',fontSize:'14px'}}>✓ Tithes prepared for this week</p>
+                  <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>Week {wk} · {P(paidTithe)} paid · Balance updated ✓</p>
+                </div>
+                <button onClick={()=>{
+                  setExpenses(prev=>(prev||[]).filter(x=>x.note!==`Tithe wk ${wk}`||x.alloc!=='tithe'));
+                  setTitheLog(prev=>prev.filter(t=>t.week!==wk));
+                }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+              </div>
+              {topUp>0&&(
+                <div style={{background:'#fffbeb',borderTop:'1px solid #fde68a',padding:'12px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px'}}>
+                  <div>
+                    <p style={{fontWeight:'800',color:'#92400e',margin:'0 0 2px',fontSize:'13px'}}>⚠ New income received since last tithe</p>
+                    <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{P(newIncomeSince)} came in after Week {wk} — top up {P(topUp)} next Sunday</p>
+                  </div>
+                  <span style={{fontWeight:'900',color:'#b45309',fontSize:'16px',flexShrink:0}}>{P(topUp)}</span>
+                </div>
+              )}
             </div>
-            <button onClick={()=>{
-              setExpenses(prev=>(prev||[]).filter(x=>x.note!==`Tithe wk ${wk}`||x.alloc!=='tithe'));
-              setTitheLog(prev=>prev.filter(t=>t.week!==wk));
-            }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
-          </div>
-        );
+          );
+        }
         return(
           <div className="card" style={{padding:'18px 20px',border:'2px solid #f59e0b',background:'#fffbeb'}}>
             {/* Header row */}
@@ -1355,7 +1378,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
                   const newExps=byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe wk ${wk}`}));
                   setExpenses(prev=>[...(prev||[]),...newExps]);
                 }
-                setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}]);
+                setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:mInc}]);
               }}>
                 ✓ Done — Tithes Prepared
               </button>
@@ -2590,7 +2613,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths}){
+function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths}){
 
   /* Emergency fund calc */
   const emergAcct=accounts.find(a=>a.id===emergencyAcctId);
@@ -2743,7 +2766,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,spendBudg
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
             <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🏠 Essentials</span>
-            <InfoIcon text={`What's left after all allocations: Income (${P(base)}) − Tithes (${P(tithe)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll (${P(mPay)}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc.`} title="Essentials Budget"/>
+            <InfoIcon text={`What's left after all allocations: Income (${P(base)}) − Tithes (${P(tithe)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll (${P(mPay)}${expectedPayroll>0&&mPay===expectedPayroll&&(mPayActual||0)<expectedPayroll?` — expected from ${expectedPayroll>0?'employee salaries':'recorded entries'}, actual paid: ${P(mPayActual||0)}`:''}${expectedPayroll>0&&(mPayActual||0)>expectedPayroll?` — actual paid`:''}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc.`} title="Essentials Budget"/>
           </div>
           <div style={{textAlign:'right'}}>
             <span style={{fontSize:'18px',fontWeight:'900',color:essentialsSpent>essentialsAllowed?'#ef4444':'var(--text)'}}>{P(essentialsAllowed)}</span>
