@@ -1216,7 +1216,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1327,7 +1327,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt}){
   const net=mInc-mExpAll-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -1504,11 +1504,11 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
               <div>
                 <p style={{fontWeight:'900',color:'#92400e',margin:'0 0 2px',fontSize:'15px'}}>🙏 Weekly Tithes</p>
-                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of income (excl. investment) · Non-negotiable</p>
+                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of net income (after payroll{investMovedThisMonth?' + investment':''}) · Non-negotiable</p>
               </div>
               {/* Total amount badge */}
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(tithe)}<InfoIcon text={`${settings.tithePct}% of your income${investMovedThisMonth?' minus investment (already moved)':' (investment not yet moved, so full income is used)'}. Formula: (Income${investMovedThisMonth?' − Investment':''}) × ${settings.tithePct}% = ${P(tithe)}`} title="Tithe Calculation"/></p>
+                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(tithe)}<InfoIcon text={`Tithe on NET income — payroll is yours to give, not yours to keep.\n\nFormula: (Income − Payroll${investMovedThisMonth?' − Investment':''}) × ${settings.tithePct}%\n= (${P(mInc)} − ${P(mPayActual)}${investMovedThisMonth?` − ${P(investActualAmt)}`:''}) × ${settings.tithePct}%\n= ${P(titheBase)} × ${settings.tithePct}%\n= ${P(tithe)}${!investMovedThisMonth?'\n\n⚠ Investment not moved yet — once moved, it will also be deducted from tithe base':''}`} title="Tithe Calculation"/></p>
                 <p style={{fontSize:'10px',color:'#d97706',margin:'2px 0 0',fontWeight:'700',textTransform:'uppercase'}}>to withdraw</p>
               </div>
             </div>
@@ -1927,10 +1927,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                         </div>
                       </div>
                     ))}
-                    {mPay>0&&<div style={{borderTop:'1px solid #e2e8f0',paddingTop:'5px',marginTop:'3px',display:'flex',justifyContent:'space-between'}}>
+                    <div style={{borderTop:'1px solid #e2e8f0',paddingTop:'5px',marginTop:'3px',display:'flex',justifyContent:'space-between'}}>
                       <span style={{fontSize:'11px',color:'#94a3b8',fontWeight:'600'}}>This month paid out</span>
-                      <span style={{fontSize:'12px',fontWeight:'800',color:'#ef4444'}}>{P(mPay)}</span>
-                    </div>}
+                      <span style={{fontSize:'12px',fontWeight:'800',color:mPayActual>0?'#ef4444':'#94a3b8'}}>{mPayActual>0?P(mPayActual):'₱0.00 — not yet paid'}</span>
+                    </div>
                   </div>
                 )}
               </div>
