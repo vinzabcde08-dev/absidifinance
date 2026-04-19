@@ -212,6 +212,118 @@ const P=(n)=>'₱'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
 const acctLabel=a=>a?`${a.name}${a.subtype?` · ${a.subtype}`:a.type==='Cash on Hand'?' · Cash':''}`:'';
 
+/* ── Category metadata: bucket + color ── */
+const CATEGORY_META={
+  'Food':              {bucket:'Essentials', color:'#10b981'},
+  'Groceries':         {bucket:'Essentials', color:'#10b981'},
+  'Fuel':              {bucket:'Essentials', color:'#10b981'},
+  'Transportation':    {bucket:'Essentials', color:'#10b981'},
+  'Baby Supplies':     {bucket:'Essentials', color:'#10b981'},
+  'Healthcare':        {bucket:'Essentials', color:'#10b981'},
+  'Utilities':         {bucket:'Essentials', color:'#10b981'},
+  'Subscriptions':     {bucket:'Subscriptions', color:'#6366f1'},
+  'Credit Card Payment':{bucket:'Debt', color:'#f59e0b'},
+  'Payroll':           {bucket:'Payroll', color:'#8b5cf6'},
+  'Shopping':          {bucket:'Desires', color:'#ec4899'},
+  'Entertainment':     {bucket:'Desires', color:'#ec4899'},
+  'Desires':           {bucket:'Desires', color:'#ec4899'},
+  'Tithes':            {bucket:'Tithes', color:'#d97706'},
+  'Investment':        {bucket:'Investment', color:'#3b82f6'},
+  'Savings Transfer':  {bucket:'Savings', color:'#0891b2'},
+  'Bank Fees':         {bucket:'Fees', color:'#94a3b8'},
+  'Other':             {bucket:'Other', color:'#94a3b8'},
+};
+const BUCKET_COLORS={'Essentials':'#10b981','Desires':'#ec4899','Subscriptions':'#6366f1','Payroll':'#8b5cf6','Debt':'#f59e0b','Tithes':'#d97706','Investment':'#3b82f6','Savings':'#0891b2','Fees':'#94a3b8','Other':'#94a3b8'};
+
+/* ── Category Select with colored dot + bucket label + custom categories ── */
+function CategorySelect({value,onChange,extraCats=[],style={}}){
+  const[open,setOpen]=useState(false);
+  const[showCustomForm,setShowCustomForm]=useState(false);
+  const[customName,setCustomName]=useState('');
+  const[customBucket,setCustomBucket]=useState('Essentials');
+  const[customCats,setCustomCats]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_custom_cats')||'[]');}catch{return [];}});
+  const ref=useRef(null);
+  useEffect(()=>{
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setShowCustomForm(false);}};
+    document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);
+  },[]);
+  const allCats=[...(extraCats.length?extraCats:['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other']),...customCats.map(c=>c.name)];
+  const getMeta=(cat)=>{
+    const custom=customCats.find(c=>c.name===cat);
+    if(custom)return{bucket:custom.bucket,color:BUCKET_COLORS[custom.bucket]||'#94a3b8'};
+    return CATEGORY_META[cat]||{bucket:'Other',color:'#94a3b8'};
+  };
+  const meta=getMeta(value);
+  const saveCustom=()=>{
+    if(!customName.trim())return;
+    const newCat={name:customName.trim(),bucket:customBucket};
+    const updated=[...customCats,newCat];
+    setCustomCats(updated);
+    localStorage.setItem('absidi_custom_cats',JSON.stringify(updated));
+    onChange(customName.trim());
+    setCustomName('');setShowCustomForm(false);setOpen(false);
+  };
+  /* Group categories by bucket */
+  const grouped={};
+  allCats.forEach(cat=>{const m=getMeta(cat);const b=m.bucket;if(!grouped[b])grouped[b]=[];grouped[b].push(cat);});
+  return(
+    <div ref={ref} style={{position:'relative',...style}}>
+      <div className="fi" onClick={()=>{setOpen(v=>!v);setShowCustomForm(false);}}
+        style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',userSelect:'none',paddingRight:'10px'}}>
+        <span style={{width:'10px',height:'10px',borderRadius:'50%',background:meta.color,flexShrink:0,display:'inline-block'}}/>
+        <span style={{flex:1,fontSize:'14px'}}>{value||'— Select category —'}</span>
+        <span style={{fontSize:'11px',color:'#94a3b8',background:'var(--bg)',padding:'2px 6px',borderRadius:'4px',flexShrink:0}}>{meta.bucket}</span>
+        <span style={{color:'#94a3b8',fontSize:'12px'}}>▾</span>
+      </div>
+      {open&&(
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:999,maxHeight:'320px',overflowY:'auto'}}>
+          {Object.entries(grouped).map(([bucket,cats])=>(
+            <div key={bucket}>
+              <div style={{padding:'6px 12px 4px',fontSize:'10px',fontWeight:'800',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',borderTop:'1px solid var(--border)',marginTop:'2px'}}
+                   style2={{display:'flex',alignItems:'center',gap:'6px'}}>
+                <span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:BUCKET_COLORS[bucket]||'#94a3b8',marginRight:'5px'}}/>
+                {bucket}
+              </div>
+              {cats.map(cat=>(
+                <div key={cat} onClick={()=>{onChange(cat);setOpen(false);}}
+                  style={{display:'flex',alignItems:'center',gap:'10px',padding:'9px 14px',cursor:'pointer',background:value===cat?'var(--bg)':'transparent',transition:'background .1s'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='var(--bg)'}
+                  onMouseLeave={e=>e.currentTarget.style.background=value===cat?'var(--bg)':'transparent'}>
+                  <span style={{width:'9px',height:'9px',borderRadius:'50%',background:getMeta(cat).color,flexShrink:0}}/>
+                  <span style={{fontSize:'13px',fontWeight:value===cat?'700':'500',color:'var(--text)',flex:1}}>{cat}</span>
+                  {value===cat&&<span style={{fontSize:'11px',color:'#10b981'}}>✓</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+          {/* Custom category */}
+          <div style={{borderTop:'1px solid var(--border)',padding:'8px'}}>
+            {!showCustomForm?(
+              <div onClick={()=>setShowCustomForm(true)}
+                style={{display:'flex',alignItems:'center',gap:'8px',padding:'9px 6px',cursor:'pointer',borderRadius:'8px',color:'#6366f1',fontWeight:'700',fontSize:'13px'}}
+                onMouseEnter={e=>e.currentTarget.style.background='var(--bg)'}
+                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <span style={{fontSize:'16px'}}>✏️</span> Add custom category…
+              </div>
+            ):(
+              <div style={{display:'flex',flexDirection:'column',gap:'6px',padding:'4px 2px'}}>
+                <input className="fi" style={{fontSize:'13px',padding:'7px 10px'}} value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Category name" autoFocus/>
+                <select className="fi" style={{fontSize:'13px',padding:'7px 10px'}} value={customBucket} onChange={e=>setCustomBucket(e.target.value)}>
+                  {Object.keys(BUCKET_COLORS).map(b=><option key={b} value={b}>{b}</option>)}
+                </select>
+                <div style={{display:'flex',gap:'6px'}}>
+                  <button className="btn bp" style={{flex:1,justifyContent:'center',padding:'7px',fontSize:'12px'}} onClick={saveCustom}>Add</button>
+                  <button className="btn bs" style={{padding:'7px 12px',fontSize:'12px'}} onClick={()=>setShowCustomForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Info Icon with popup tooltip ── */
 function InfoIcon({text,title}){
   const[open,setOpen]=React.useState(false);
@@ -854,11 +966,19 @@ function MainApp({onLogout}){
   const byYear=arr=>arr.filter(x=>x.date&&yK(x.date)===yr);
   const byMonth=arr=>arr.filter(x=>x.date&&mK(x.date)===curMonthKey);
 
-  const mInc=byMonth(income).reduce((s,x)=>s+(x.amount||0),0);
+  /* mInc = real income only — excludes transfer_in, allocation_in, savings_in, investment_in
+     (those are internal money movements, not actual earned income) */
+  const mInc=byMonth(income).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
   const expectedFromClients=clients.reduce((s,c)=>s+(c.rate||0)*(fxRates[c.currency]||57),0);
-  const mExp=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
+  /* mPay = actual payroll paid — from Payroll tab entries + any expenses tagged category 'Payroll' */
+  const mPayFromExp=byMonth(expenses).filter(x=>x.category==='Payroll'&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
+  const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0)+mPayFromExp;
+  /* mExp = essentials spending only: excludes tithe/invest/savings/transfer alloc entries
+     AND excludes Payroll category expenses (those are already counted in mPay above) */
+  const mExp=byMonth(expenses).filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
+  /* mExpAll = everything for net/total calculations (excludes pure transfers, includes payroll) */
+  const mExpAll=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='transfer_in'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
-  const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
   /* Expected payroll based on employee salary × frequency — used as budget floor */
   const FREQ_MULT={'Weekly':4,'Biweekly':2,'Monthly':1};
   const expectedPayroll=employees.reduce((s,e)=>s+(e.salary&&e.frequency?((e.salary||0)*(FREQ_MULT[e.frequency]||1)):0),0);
@@ -891,8 +1011,8 @@ function MainApp({onLogout}){
   const dailyCap=daysLeft>0?Math.max(0,(spendBudget-mExp)/daysLeft):0;
   const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct;
 
-  /* Per-account tithe breakdown */
-  const mIncByAcct=byMonth(income).filter(x=>x.accountId);
+  /* Per-account tithe breakdown — real income only, no transfers */
+  const mIncByAcct=byMonth(income).filter(x=>x.accountId&&!x.alloc);
   const totalMInc=mIncByAcct.reduce((s,x)=>s+(x.amount||0),0);
   const byAcctTithe=accounts.map(a=>{
     const aInc=mIncByAcct.filter(x=>x.accountId===a.id).reduce((s,x)=>s+(x.amount||0),0);
@@ -1041,7 +1161,7 @@ function MainApp({onLogout}){
         {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
-        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
+        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
@@ -1150,7 +1270,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 
 /* ════════  HOME  ════════ */
 function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual}){
-  const net=mInc-mExp-mSub-mPay;
+  const net=mInc-mExpAll-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
 
@@ -1178,7 +1298,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
   const gPaid=inc.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+(i.amount||0),0);
   const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
   const gExpected=gPaid+gPending;
-  const gExp=mExp+mSub+mPay;
+  const gExp=mExpAll+mSub+mPay;
   const gMax=Math.max(gExpected,gExp,expectedFromClients||0,1);
   const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
   const gNet=gPaid-gExp;
@@ -1268,7 +1388,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
      info:'Sum of all income entries logged this month, regardless of account. Includes paid and pending.',title:'Monthly Income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
      info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
-    {label:'Monthly Expenses',value:P(mExp),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
+    {label:'Monthly Expenses',value:P(mExpAll),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
      info:'Sum of all expense entries this month including subscriptions and payroll. Does not include tithe/savings/investment auto-transfers (those are tracked separately).',title:'Monthly Expenses'},
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
      info:'Monthly Income minus all expenses (expenses + subscriptions + payroll). Positive = surplus, Negative = you spent more than you earned.',title:'Net This Month'},
@@ -1870,7 +1990,7 @@ function HomeTab({mInc,mExp,mSub,mPay,base,tithe,invest,desires,savings,spendBud
               {qaMode==='income'?(
                 <div><span className="fl">Type</span><select className="fi" value={qaType} onChange={e=>setQaType(e.target.value)}><option>VA Salary</option><option>Commission</option><option>Business Income</option><option>Bonus</option><option>Refund</option><option>Other</option></select></div>
               ):(
-                <div><span className="fl">Category</span><select className="fi" value={qaCategory} onChange={e=>setQaCategory(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select></div>
+                <div><span className="fl">Category</span><CategorySelect value={qaCategory} onChange={setQaCategory}/></div>
               )}
               <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={qaAmount} onChange={e=>setQaAmount(e.target.value)} placeholder="0.00" autoFocus/></div>
               <div>
@@ -2377,7 +2497,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
         <p className="sect">{editId?'Edit Expense Entry':'Log Expense'}</p>
         <div className="col">
           <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
-          <div><span className="fl">Category</span><select className="fi" value={category} onChange={e=>setCategory(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select></div>
+          <div><span className="fl">Category</span><CategorySelect value={category} onChange={setCategory}/></div>
           <div><span className="fl">Pay from Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">or Charge to Card</span><select className="fi" value={cardId} onChange={e=>{setCardId(e.target.value);if(e.target.value)setAccountId('');}}><option value="">— Select card —</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
@@ -2417,7 +2537,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
                 <div style={{width:'34px',height:'34px',background:'#fff5f5',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="expenses" s={15} c="#ef4444" sw={2}/></div>
                 <div>
                   <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',marginBottom:'3px'}}>
-                    <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p>
+                    {(()=>{const m=CATEGORY_META[e.category]||{color:'#94a3b8',bucket:'Other'};return(<><span style={{width:'8px',height:'8px',borderRadius:'50%',background:m.color,flexShrink:0,display:'inline-block'}}/><p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p><span style={{fontSize:'10px',color:m.color,background:m.color+'18',padding:'1px 5px',borderRadius:'4px',fontWeight:'700'}}>{m.bucket}</span></>);})()}
                     {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}</p>
