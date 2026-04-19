@@ -856,7 +856,7 @@ function MainApp({onLogout}){
 
   const mInc=byMonth(income).reduce((s,x)=>s+(x.amount||0),0);
   const expectedFromClients=clients.reduce((s,c)=>s+(c.rate||0)*(fxRates[c.currency]||57),0);
-  const mExp=byMonth(expenses).reduce((s,x)=>s+(x.amount||0),0);
+  const mExp=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0);
   /* Expected payroll based on employee salary × frequency — used as budget floor */
