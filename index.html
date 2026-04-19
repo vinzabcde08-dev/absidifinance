@@ -234,6 +234,15 @@ const CATEGORY_META={
   'Other':             {bucket:'Other', color:'#94a3b8'},
 };
 const BUCKET_COLORS={'Essentials':'#10b981','Desires':'#ec4899','Subscriptions':'#6366f1','Payroll':'#8b5cf6','Debt':'#f59e0b','Tithes':'#d97706','Investment':'#3b82f6','Savings':'#0891b2','Fees':'#94a3b8','Other':'#94a3b8'};
+function getCatMeta(cat){
+  if(CATEGORY_META[cat]) return CATEGORY_META[cat];
+  try{
+    const cc=JSON.parse(localStorage.getItem('absidi_custom_cats')||'[]');
+    const found=cc.find(c=>c.name===cat);
+    if(found) return {bucket:found.bucket,color:BUCKET_COLORS[found.bucket]||'#94a3b8'};
+  }catch(e){}
+  return {color:'#94a3b8',bucket:'Other'};
+}
 
 /* ── Category Select with colored dot + bucket label + custom categories ── */
 function CategorySelect({value,onChange,extraCats=[],style={}}){
@@ -241,34 +250,50 @@ function CategorySelect({value,onChange,extraCats=[],style={}}){
   const[showCustomForm,setShowCustomForm]=useState(false);
   const[customName,setCustomName]=useState('');
   const[customBucket,setCustomBucket]=useState('Essentials');
+  const[editingCat,setEditingCat]=useState(null); /* {index,name,bucket} */
   const[customCats,setCustomCats]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_custom_cats')||'[]');}catch{return [];}});
   const ref=useRef(null);
   useEffect(()=>{
-    const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setShowCustomForm(false);}};
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setShowCustomForm(false);setEditingCat(null);}};
     document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);
   },[]);
+  const saveCustomCats=(updated)=>{setCustomCats(updated);localStorage.setItem('absidi_custom_cats',JSON.stringify(updated));};
   const allCats=[...(extraCats.length?extraCats:['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other']),...customCats.map(c=>c.name)];
   const getMeta=(cat)=>{
     const custom=customCats.find(c=>c.name===cat);
     if(custom)return{bucket:custom.bucket,color:BUCKET_COLORS[custom.bucket]||'#94a3b8'};
     return CATEGORY_META[cat]||{bucket:'Other',color:'#94a3b8'};
   };
+  const isCustom=(cat)=>customCats.some(c=>c.name===cat);
   const meta=getMeta(value);
   const saveCustom=()=>{
     if(!customName.trim())return;
     const newCat={name:customName.trim(),bucket:customBucket};
-    const updated=[...customCats,newCat];
-    setCustomCats(updated);
-    localStorage.setItem('absidi_custom_cats',JSON.stringify(updated));
+    saveCustomCats([...customCats,newCat]);
     onChange(customName.trim());
     setCustomName('');setShowCustomForm(false);setOpen(false);
+  };
+  const saveEdit=()=>{
+    if(!editingCat||!editingCat.name.trim())return;
+    const oldName=customCats[editingCat.index].name;
+    const updated=customCats.map((c,i)=>i===editingCat.index?{name:editingCat.name.trim(),bucket:editingCat.bucket}:c);
+    saveCustomCats(updated);
+    if(value===oldName) onChange(editingCat.name.trim());
+    setEditingCat(null);
+  };
+  const deleteCat=(idx)=>{
+    const name=customCats[idx].name;
+    const updated=customCats.filter((_,i)=>i!==idx);
+    saveCustomCats(updated);
+    if(value===name) onChange('');
+    setEditingCat(null);
   };
   /* Group categories by bucket */
   const grouped={};
   allCats.forEach(cat=>{const m=getMeta(cat);const b=m.bucket;if(!grouped[b])grouped[b]=[];grouped[b].push(cat);});
   return(
     <div ref={ref} style={{position:'relative',...style}}>
-      <div className="fi" onClick={()=>{setOpen(v=>!v);setShowCustomForm(false);}}
+      <div className="fi" onClick={()=>{setOpen(v=>!v);setShowCustomForm(false);setEditingCat(null);}}
         style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',userSelect:'none',paddingRight:'10px'}}>
         <span style={{width:'10px',height:'10px',borderRadius:'50%',background:meta.color,flexShrink:0,display:'inline-block'}}/>
         <span style={{flex:1,fontSize:'14px'}}>{value||'— Select category —'}</span>
@@ -276,35 +301,67 @@ function CategorySelect({value,onChange,extraCats=[],style={}}){
         <span style={{color:'#94a3b8',fontSize:'12px'}}>▾</span>
       </div>
       {open&&(
-        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:999,maxHeight:'320px',overflowY:'auto'}}>
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:999,maxHeight:'340px',overflowY:'auto'}}>
           {Object.entries(grouped).map(([bucket,cats])=>(
             <div key={bucket}>
               <div style={{padding:'6px 12px 4px',fontSize:'10px',fontWeight:'800',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.06em',borderTop:'1px solid var(--border)',marginTop:'2px',display:'flex',alignItems:'center',gap:'6px'}}>
                 <span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:BUCKET_COLORS[bucket]||'#94a3b8',marginRight:'5px'}}/>
                 {bucket}
               </div>
-              {cats.map(cat=>(
-                <div key={cat} onClick={()=>{onChange(cat);setOpen(false);}}
-                  style={{display:'flex',alignItems:'center',gap:'10px',padding:'9px 14px',cursor:'pointer',background:value===cat?'var(--bg)':'transparent',transition:'background .1s'}}
-                  onMouseEnter={e=>e.currentTarget.style.background='var(--bg)'}
-                  onMouseLeave={e=>e.currentTarget.style.background=value===cat?'var(--bg)':'transparent'}>
-                  <span style={{width:'9px',height:'9px',borderRadius:'50%',background:getMeta(cat).color,flexShrink:0}}/>
-                  <span style={{fontSize:'13px',fontWeight:value===cat?'700':'500',color:'var(--text)',flex:1}}>{cat}</span>
-                  {value===cat&&<span style={{fontSize:'11px',color:'#10b981'}}>✓</span>}
-                </div>
-              ))}
+              {cats.map(cat=>{
+                const cidx=customCats.findIndex(c=>c.name===cat);
+                const custom=cidx>=0;
+                const isEditing=editingCat&&editingCat.index===cidx;
+                if(isEditing){
+                  return(
+                    <div key={cat} style={{padding:'6px 10px',background:'var(--bg)'}}>
+                      <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                        <input className="fi" style={{fontSize:'13px',padding:'6px 9px'}} value={editingCat.name}
+                          onChange={e=>setEditingCat(p=>({...p,name:e.target.value}))} autoFocus/>
+                        <select className="fi" style={{fontSize:'13px',padding:'6px 9px'}} value={editingCat.bucket}
+                          onChange={e=>setEditingCat(p=>({...p,bucket:e.target.value}))}>
+                          {Object.keys(BUCKET_COLORS).map(b=><option key={b} value={b}>{b}</option>)}
+                        </select>
+                        <div style={{display:'flex',gap:'5px'}}>
+                          <button className="btn bp" style={{flex:1,justifyContent:'center',padding:'6px',fontSize:'12px'}} onClick={saveEdit}>Save</button>
+                          <button className="btn" style={{padding:'6px 10px',fontSize:'12px',background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:'8px',cursor:'pointer'}} onClick={()=>deleteCat(cidx)}>Delete</button>
+                          <button className="btn bs" style={{padding:'6px 10px',fontSize:'12px'}} onClick={()=>setEditingCat(null)}>✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return(
+                  <div key={cat}
+                    style={{display:'flex',alignItems:'center',gap:'10px',padding:'9px 14px',background:value===cat?'var(--bg)':'transparent',transition:'background .1s'}}
+                    onMouseEnter={e=>e.currentTarget.style.background='var(--bg)'}
+                    onMouseLeave={e=>e.currentTarget.style.background=value===cat?'var(--bg)':'transparent'}>
+                    <span style={{width:'9px',height:'9px',borderRadius:'50%',background:getMeta(cat).color,flexShrink:0}}/>
+                    <span style={{fontSize:'13px',fontWeight:value===cat?'700':'500',color:'var(--text)',flex:1,cursor:'pointer'}}
+                      onClick={()=>{onChange(cat);setOpen(false);}}>{cat}</span>
+                    {value===cat&&<span style={{fontSize:'11px',color:'#10b981'}}>✓</span>}
+                    {custom&&(
+                      <span onClick={e=>{e.stopPropagation();setEditingCat({index:cidx,name:cat,bucket:customCats[cidx].bucket});setShowCustomForm(false);}}
+                        title="Edit / Delete"
+                        style={{fontSize:'12px',cursor:'pointer',color:'#94a3b8',padding:'2px 4px',borderRadius:'4px',lineHeight:1}}
+                        onMouseEnter={e=>e.currentTarget.style.color='#6366f1'}
+                        onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>✏</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
-          {/* Custom category */}
+          {/* Add custom category */}
           <div style={{borderTop:'1px solid var(--border)',padding:'8px'}}>
-            {!showCustomForm?(
+            {!showCustomForm&&!editingCat?(
               <div onClick={()=>setShowCustomForm(true)}
                 style={{display:'flex',alignItems:'center',gap:'8px',padding:'9px 6px',cursor:'pointer',borderRadius:'8px',color:'#6366f1',fontWeight:'700',fontSize:'13px'}}
                 onMouseEnter={e=>e.currentTarget.style.background='var(--bg)'}
                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <span style={{fontSize:'16px'}}>✏️</span> Add custom category…
               </div>
-            ):(
+            ):showCustomForm?(
               <div style={{display:'flex',flexDirection:'column',gap:'6px',padding:'4px 2px'}}>
                 <input className="fi" style={{fontSize:'13px',padding:'7px 10px'}} value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Category name" autoFocus/>
                 <select className="fi" style={{fontSize:'13px',padding:'7px 10px'}} value={customBucket} onChange={e=>setCustomBucket(e.target.value)}>
@@ -315,7 +372,7 @@ function CategorySelect({value,onChange,extraCats=[],style={}}){
                   <button className="btn bs" style={{padding:'7px 12px',fontSize:'12px'}} onClick={()=>setShowCustomForm(false)}>Cancel</button>
                 </div>
               </div>
-            )}
+            ):null}
           </div>
         </div>
       )}
@@ -998,11 +1055,13 @@ function MainApp({onLogout}){
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
   const base=settings.budgetMode==='avg'?avg3:mInc;
   const invest=(base*settings.investPct)/100;
-  /* Tithe ALWAYS uses actual income (mInc), never the 3-month average.
-     Tithe = what you actually received × tithe% — not a planning number. */
-  const investActualAmt=(mInc*settings.investPct)/100; /* invest based on actual income for tithe calc */
+  /* Tithe on NET income:
+     - Always subtract payroll (mPay) — wages paid out are not your income
+     - Subtract investment amount only if already transferred this month
+     - Never uses the 3-month average — always actual income */
+  const investActualAmt=(mInc*settings.investPct)/100;
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
-  const titheBase=investMovedThisMonth?(mInc-investActualAmt):mInc;
+  const titheBase=Math.max(0,(mInc-mPay)-(investMovedThisMonth?investActualAmt:0));
   const tithe=(titheBase*settings.tithePct)/100;
   const desires=(base*settings.desiresPct)/100;
   const savings=(base*settings.savingsPct)/100;
@@ -1412,8 +1471,8 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
         );
         if(isDone){
           const paidTithe=entry.amount||0;
-          const incAtTime=entry.incomeAtTime||paidTithe/((settings.tithePct||10)/100);
-          const newIncomeSince=mInc-incAtTime;
+          const baseAtTime=entry.incomeAtTime||paidTithe/((settings.tithePct||10)/100);
+          const newIncomeSince=titheBase-baseAtTime; /* compare net-of-payroll/invest bases */
           const topUp=newIncomeSince>50?parseFloat((newIncomeSince*(settings.tithePct||10)/100).toFixed(2)):0;
           return(
             <div className="card" style={{borderLeft:'4px solid #10b981',background:'#f0fdf4',overflow:'hidden'}}>
@@ -1497,7 +1556,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                   const newExps=byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe wk ${wk}`}));
                   setExpenses(prev=>[...(prev||[]),...newExps]);
                 }
-                setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:mInc}]);
+                setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase}]);
               }}>
                 ✓ Done — Tithes Prepared
               </button>
@@ -2536,7 +2595,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
                 <div style={{width:'34px',height:'34px',background:'#fff5f5',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="expenses" s={15} c="#ef4444" sw={2}/></div>
                 <div>
                   <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',marginBottom:'3px'}}>
-                    {(()=>{const m=CATEGORY_META[e.category]||{color:'#94a3b8',bucket:'Other'};return(<><span style={{width:'8px',height:'8px',borderRadius:'50%',background:m.color,flexShrink:0,display:'inline-block'}}/><p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p><span style={{fontSize:'10px',color:m.color,background:m.color+'18',padding:'1px 5px',borderRadius:'4px',fontWeight:'700'}}>{m.bucket}</span></>);})()}
+                    {(()=>{const m=getCatMeta(e.category);return(<><span style={{width:'8px',height:'8px',borderRadius:'50%',background:m.color,flexShrink:0,display:'inline-block'}}/><p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p><span style={{fontSize:'10px',color:m.color,background:m.color+'18',padding:'1px 5px',borderRadius:'4px',fontWeight:'700'}}>{m.bucket}</span></>);})()}
                     {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}</p>
