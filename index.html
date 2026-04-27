@@ -1345,6 +1345,8 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
   const dragRef=useRef({});
   const groupsRef=useRef(groups);
   const plansRef=useRef(plans);
+  const[payrollPlanAcctId,setPayrollPlanAcctId]=useState(()=>localStorage.getItem('absidi_payroll_plan_acct')||'');
+  useEffect(()=>{localStorage.setItem('absidi_payroll_plan_acct',payrollPlanAcctId);},[payrollPlanAcctId]);
   const PLAN_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0891b2','#ec4899'];
   const GROUP_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
 
@@ -1789,6 +1791,14 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 
   const groupedPlanIds=new Set(groups.flatMap(g=>g.planIds));
   const ungroupedPlans=plans.filter(p=>!groupedPlanIds.has(p.id));
+  const payrollInGroup=groups.some(g=>g.planIds.includes('__payroll__'));
+  /* Virtual payroll plan — treated like a real plan for grouping & impact */
+  const virtualPayrollPlan={
+    id:'__payroll__',type:'payroll',title:'👷 Payroll',
+    items:planEmpSchedules.filter(s=>!s.alreadyPaid).map(s=>({
+      id:s.emp.id,label:s.emp.name,amount:s.amount,accountId:payrollPlanAcctId||''
+    }))
+  };
 
   /* ── Payroll schedule for Plans tab ── */
   const planFmtD=(d)=>{const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),dy=String(d.getDate()).padStart(2,'0');return`${y}-${mo}-${dy}`;};
@@ -1856,7 +1866,9 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 
       {/* ── GROUPS ── */}
       {groups.map(group=>{
-        const groupPlans=plans.filter(p=>group.planIds.includes(p.id));
+        const realGroupPlans=plans.filter(p=>group.planIds.includes(p.id));
+        const hasPayroll=group.planIds.includes('__payroll__');
+        const groupPlans=[...realGroupPlans,...(hasPayroll?[virtualPayrollPlan]:[])];
         if(groupPlans.length===0) return null;
         const impact=computeImpact(groupPlans);
         const isDropTarget=dropHint?.type==='group'&&dropHint?.id===group.id;
@@ -1905,11 +1917,38 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
             <AccountPreviewWidget impact={impact} label="Combined Account Impact"/>
             {/* Plans in group */}
             <div style={{marginTop:'10px'}}>
-              {groupPlans.map(plan=>(
+              {realGroupPlans.map(plan=>(
                 <div key={plan.id}>
                   {renderPlanCard(plan,true,()=>removeFromGroup(group.id,plan.id))}
                 </div>
               ))}
+              {hasPayroll&&(
+                <div style={{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:'12px',padding:'12px 14px',marginTop:'8px'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                    <span style={{fontWeight:'800',fontSize:'13px',color:'#3730a3'}}>👷 Payroll</span>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontWeight:'900',fontSize:'14px',color:'#4338ca'}}>{P(planTotalUnpaid)}</span>
+                      <button onClick={()=>removeFromGroup(group.id,'__payroll__')}
+                        style={{background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'3px 7px',fontSize:'10px',color:'#64748b',cursor:'pointer',fontWeight:'700'}}
+                        title="Remove from group">↗</button>
+                    </div>
+                  </div>
+                  <div style={{marginBottom:'8px'}}>
+                    <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Deducted from account</span>
+                    <select style={{width:'100%',padding:'6px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'12px',color:'var(--text)',background:'var(--input-bg)',outline:'none'}}
+                      value={payrollPlanAcctId} onChange={e=>setPayrollPlanAcctId(e.target.value)}>
+                      <option value="">— Pick account to see impact —</option>
+                      {accounts.map(a=><option key={a.id} value={a.id}>{a.name} · {P(accBal(a.id))}</option>)}
+                    </select>
+                  </div>
+                  {planEmpSchedules.filter(s=>!s.alreadyPaid).map(s=>(
+                    <div key={s.emp.id} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderTop:'1px solid var(--border)'}}>
+                      <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:'600'}}>{s.emp.name}</span>
+                      <span style={{fontSize:'12px',fontWeight:'700',color:'#4338ca'}}>{P(s.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             {/* Drop hint */}
             {isDropTarget&&(
@@ -1927,22 +1966,40 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
       )}
       {ungroupedPlans.map(plan=>renderPlanCard(plan,false))}
 
-      {/* ── PAYROLL SECTION IN PLANS ── */}
-      {planEmpSchedules.length>0&&(
-        <div style={{marginTop:'24px',borderRadius:'14px',border:'1.5px solid #e0e7ff',background:'linear-gradient(135deg,#f8faff 0%,#faf5ff 100%)',overflow:'hidden'}}>
-          {/* Header */}
-          <div style={{padding:'14px 18px 10px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'8px'}}>
-            <div>
+      {/* ── PAYROLL DRAGGABLE CARD (shown only when not inside a group) ── */}
+      {planEmpSchedules.length>0&&!payrollInGroup&&(
+        <div style={{marginTop:'16px',borderRadius:'14px',border:'1.5px solid #e0e7ff',background:'linear-gradient(135deg,#f8faff 0%,#faf5ff 100%)',overflow:'hidden',opacity:dragPlanId==='__payroll__'?0.4:1,transition:'opacity .2s'}}
+          data-drop-plan="__payroll__"
+          draggable
+          onDragStart={e=>onDragStart(e,'__payroll__')}
+          onDragEnd={onDragEnd}
+          onDragOver={e=>onDragOver(e,'__payroll__','plan')}
+          onDrop={e=>onDropOnPlan(e,'__payroll__')}>
+          {/* Header with drag handle */}
+          <div style={{padding:'12px 14px 10px',display:'flex',alignItems:'center',gap:'10px'}}>
+            <div
+              onTouchStart={e=>startTouchDrag(e,'__payroll__','👷 Payroll')}
+              onTouchEnd={cancelTouchDrag}
+              onTouchCancel={cancelTouchDrag}
+              style={{fontSize:'16px',cursor:'grab',color:'#94a3b8',userSelect:'none',flexShrink:0,padding:'2px 4px'}}
+              title="Hold to drag into a group">⠿</div>
+            <div style={{flex:1}}>
               <p style={{margin:0,fontWeight:'900',fontSize:'14px',color:'#3730a3'}}>👷 Payroll</p>
               <p style={{margin:'2px 0 0',fontSize:'11px',color:'#6366f1'}}>
                 {planOverdueCount>0?`⚠ ${planOverdueCount} overdue · `:''}
-                Total pending: <b>{P(planTotalUnpaid)}</b>
-                {' · '}to pay, go to <b>Payroll tab</b>
+                <b>{P(planTotalUnpaid)}</b> pending · drag ⠿ to group
               </p>
             </div>
-            {planOverdueCount>0&&(
-              <span style={{fontSize:'10px',fontWeight:'800',background:'#ef4444',color:'#fff',padding:'3px 8px',borderRadius:'99px'}}>OVERDUE</span>
-            )}
+            {planOverdueCount>0&&<span style={{fontSize:'10px',fontWeight:'800',background:'#ef4444',color:'#fff',padding:'3px 8px',borderRadius:'99px',flexShrink:0}}>OVERDUE</span>}
+          </div>
+          {/* Account picker for impact calculation */}
+          <div style={{padding:'0 14px 10px'}}>
+            <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Deduct from account (for group impact)</span>
+            <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'12px',color:'var(--text)',background:'var(--input-bg)',outline:'none'}}
+              value={payrollPlanAcctId} onChange={e=>setPayrollPlanAcctId(e.target.value)}>
+              <option value="">— Pick account —</option>
+              {accounts.map(a=><option key={a.id} value={a.id}>{a.name} · {P(accBal(a.id))}</option>)}
+            </select>
           </div>
           {/* Employee rows */}
           {planEmpSchedules.map(({emp,nextDateStr,amount,alreadyPaid,lastEntry,freq})=>{
@@ -1950,32 +2007,26 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
             const diff=nextDateStr?Math.round((new Date(nextDateStr+'T12:00:00')-new Date(TODAY+'T12:00:00'))/(1000*60*60*24)):0;
             const diffLabel=diff<0?`${Math.abs(diff)}d overdue`:diff===0?'Today':diff===1?'Tomorrow':`in ${diff}d`;
             return(
-              <div key={emp.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 18px',borderTop:'1px solid #e0e7ff'}}>
-                <div style={{width:'30px',height:'30px',background:alreadyPaid?'#dcfce7':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <span style={{fontSize:'13px'}}>{alreadyPaid?'✓':'👤'}</span>
+              <div key={emp.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'8px 14px',borderTop:'1px solid #e0e7ff'}}>
+                <div style={{width:'28px',height:'28px',background:alreadyPaid?'#dcfce7':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <span style={{fontSize:'12px'}}>{alreadyPaid?'✓':'👤'}</span>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'#1e293b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</p>
+                  <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</p>
                   <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>{emp.role||freq}</p>
-                  {alreadyPaid&&lastEntry&&(
-                    <p style={{margin:'1px 0 0',fontSize:'10px',color:'#16a34a',fontWeight:'700'}}>✓ Paid {lastEntry.date} · {P(lastEntry.amount)}</p>
-                  )}
-                  {!alreadyPaid&&nextDateStr&&(
-                    <p style={{margin:'1px 0 0',fontSize:'10px',color:overdue?'#ef4444':'#6366f1',fontWeight:'700'}}>{overdue?'⚠':'🗓'} {nextDateStr} ({diffLabel})</p>
-                  )}
+                  {alreadyPaid&&lastEntry&&<p style={{margin:'1px 0 0',fontSize:'10px',color:'#16a34a',fontWeight:'700'}}>✓ Paid {lastEntry.date} · {P(lastEntry.amount)}</p>}
+                  {!alreadyPaid&&nextDateStr&&<p style={{margin:'1px 0 0',fontSize:'10px',color:overdue?'#ef4444':'#6366f1',fontWeight:'700'}}>{overdue?'⚠':'🗓'} {nextDateStr} ({diffLabel})</p>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  {alreadyPaid?(
-                    <span style={{fontSize:'11px',fontWeight:'800',color:'#16a34a',background:'#dcfce7',padding:'3px 8px',borderRadius:'6px'}}>✓ Paid</span>
-                  ):(
-                    <span style={{fontSize:'14px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(amount)}</span>
-                  )}
+                  {alreadyPaid
+                    ?<span style={{fontSize:'11px',fontWeight:'800',color:'#16a34a',background:'#dcfce7',padding:'3px 8px',borderRadius:'6px'}}>✓ Paid</span>
+                    :<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(amount)}</span>}
                 </div>
               </div>
             );
           })}
-          <div style={{padding:'8px 18px',borderTop:'1px solid #e0e7ff',background:'#f1f5fb'}}>
-            <p style={{margin:0,fontSize:'11px',color:'#94a3b8',textAlign:'center'}}>To record payment, go to the <b>Payroll tab</b> and tap <b>+ Pay</b></p>
+          <div style={{padding:'8px 14px',borderTop:'1px solid #e0e7ff',background:'#f1f5fb'}}>
+            <p style={{margin:0,fontSize:'11px',color:'#94a3b8',textAlign:'center'}}>Drag <b>⠿</b> to add to a group · pay in <b>Payroll tab</b></p>
           </div>
         </div>
       )}
