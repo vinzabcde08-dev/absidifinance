@@ -3239,17 +3239,26 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
       const day=today.getDate();
       const m=today.getMonth();
       const y=today.getFullYear();
-      /* Next pay date */
-      let nextDate;
-      if(day<=pd){ nextDate=new Date(y,m,pd); }
-      else { nextDate=new Date(y,m+1,pd); }
-      /* Period start: last occurrence of payDay */
-      let periodStart;
-      if(day<=pd){ const prev=new Date(y,m-1,pd); periodStart=fmtD(prev); }
-      else { periodStart=fmtD(new Date(y,m,pd)); }
+      /* Period start = last occurrence of payDay */
+      let periodStart,nextDate,missedDate=null;
+      if(day<=pd){
+        /* Pay day hasn't come yet this month — period started last month's payDay */
+        const prev=new Date(y,m-1,pd);
+        periodStart=fmtD(prev);
+        nextDate=new Date(y,m,pd);
+      } else {
+        /* Pay day already passed this month — period started on this month's payDay */
+        periodStart=fmtD(new Date(y,m,pd));
+        nextDate=new Date(y,m+1,pd);
+        /* The pay day that passed THIS month IS the missed/due date */
+        missedDate=fmtD(new Date(y,m,pd));
+      }
       const alreadyPaid=empPays.some(p=>p.date>=periodStart&&p.date<=TODAY);
       const lastEntry=alreadyPaid?empPays.find(p=>p.date>=periodStart&&p.date<=TODAY):null;
-      return{nextDate:fmtD(nextDate),daysUntil:Math.round((nextDate-today)/(1000*60*60*24)),alreadyPaid,amount:sal,lastEntry,label:`Monthly · ${pd==='15'||pd===15?'15th':'30th'}`};
+      /* If not paid and pay day already passed, show the overdue date — not the next future one */
+      const displayDate=(!alreadyPaid&&missedDate)?missedDate:fmtD(nextDate);
+      const daysUntil=Math.round((new Date(displayDate+'T12:00:00')-today)/(1000*60*60*24));
+      return{nextDate:displayDate,daysUntil,alreadyPaid,amount:sal,lastEntry,label:`Monthly · ${pd===15||pd==='15'?'15th':'30th'}`,missedDate:!alreadyPaid?missedDate:null};
 
     } else if(freq==='Biweekly'){
       let nextDate;
@@ -3259,21 +3268,23 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
         const lastD=new Date(empPays[0].date+'T12:00:00');
         const daysSince=Math.round((today-lastD)/(1000*60*60*24));
         if(daysSince<14){
+          /* Paid recently — next pay is 14 days from last pay, snapped to Friday */
           alreadyPaid=true;
           lastEntry=empPays[0];
-          /* Next pay = last pay + 14 days, snapped to Friday */
           nextDate=new Date(lastD);
           nextDate.setDate(lastD.getDate()+14);
           const dow=nextDate.getDay();
           if(dow!==5) nextDate.setDate(nextDate.getDate()+((5-dow+7)%7));
         } else {
-          /* Past due — next Friday from today */
-          const dow=today.getDay();
-          const toFri=(5-dow+7)%7;
-          nextDate=new Date(today);
-          nextDate.setDate(today.getDate()+toFri);
+          /* Missed — the due date was lastPay + 14 days (past), NOT the next upcoming Friday */
+          const missedD=new Date(lastD);
+          missedD.setDate(lastD.getDate()+14);
+          const dow=missedD.getDay();
+          if(dow!==5) missedD.setDate(missedD.getDate()+((5-dow+7)%7));
+          nextDate=missedD; /* show the actual overdue date */
         }
       } else {
+        /* No history — show next Friday */
         const dow=today.getDay();
         const toFri=(5-dow+7)%7;
         nextDate=new Date(today);
@@ -3286,11 +3297,22 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     } else { /* Weekly */
       const lastEntry=empPays.length>0?empPays[0]:null;
       const alreadyPaid=lastEntry?Math.round((today-new Date(lastEntry.date+'T12:00:00'))/(1000*60*60*24))<7:false;
-      const dow=today.getDay();
-      const toFri=(5-dow+7)%7;
-      const nextDate=new Date(today);
-      nextDate.setDate(today.getDate()+toFri);
-      return{nextDate:fmtD(nextDate),daysUntil:toFri,alreadyPaid,amount:Math.round(sal/4),lastEntry,label:'Weekly · Fri'};
+      let nextDate;
+      if(lastEntry&&!alreadyPaid){
+        /* Show the actual missed Friday, not just the next one */
+        const lastD=new Date(lastEntry.date+'T12:00:00');
+        nextDate=new Date(lastD);
+        nextDate.setDate(lastD.getDate()+7);
+        const dow=nextDate.getDay();
+        if(dow!==5) nextDate.setDate(nextDate.getDate()+((5-dow+7)%7));
+      } else {
+        const dow=today.getDay();
+        const toFri=(5-dow+7)%7;
+        nextDate=new Date(today);
+        nextDate.setDate(today.getDate()+toFri);
+      }
+      const daysUntil=Math.round((nextDate-today)/(1000*60*60*24));
+      return{nextDate:fmtD(nextDate),daysUntil,alreadyPaid,amount:Math.round(sal/4),lastEntry,label:'Weekly · Fri'};
     }
   };
 
