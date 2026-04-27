@@ -3187,17 +3187,18 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 
 /* ════════  PAYROLL  ════════ */
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
-  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[editEmpId,setEditEmpId]=useState(null);
+  const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
   const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');const[editPayId,setEditPayId]=useState(null);
 
-  const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks)','Monthly':'Monthly'};
-  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');};
-  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');};
+  const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks — Fri)','Monthly':'Monthly (15th or 30th)'};
+  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);};
+  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');setEmpPayDay(e.payDay||30);};
   const saveEmp=()=>{
     if(!empName.trim())return;
     const sal=empSalary?parseFloat(empSalary):undefined;
-    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq}:x));}
-    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq}]);}
+    const pd=empFreq==='Monthly'?empPayDay:undefined;
+    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd}:x));}
+    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd}]);}
     resetEmp();
   };
 
@@ -3210,79 +3211,296 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     resetPay();
   };
 
+  /* ── Pay Schedule Logic ── */
+  const fmtD=(d)=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return`${y}-${m}-${day}`;};
+  const labelDate=(str)=>{
+    if(!str) return '';
+    const d=new Date(str+'T12:00:00');
+    const today=new Date(TODAY+'T12:00:00');
+    const diff=Math.round((d-today)/(1000*60*60*24));
+    if(diff<0) return`${Math.abs(diff)}d overdue`;
+    if(diff===0) return'Today!';
+    if(diff===1) return'Tomorrow';
+    const wd=d.toLocaleDateString('en-PH',{weekday:'short'});
+    const md=d.toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+    if(diff<=10) return`${md} (${wd}) — in ${diff}d`;
+    return`${md} (${wd})`;
+  };
+  const isOverdue=(str)=>{if(!str)return false;return new Date(str+'T12:00:00')<new Date(TODAY+'T12:00:00');};
+
+  const getSchedule=(emp)=>{
+    const today=new Date(TODAY+'T12:00:00');
+    const freq=emp.frequency||'Monthly';
+    const sal=emp.salary||0;
+    const empPays=[...allPayroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>b.date.localeCompare(a.date));
+
+    if(freq==='Monthly'){
+      const pd=emp.payDay||30;
+      const day=today.getDate();
+      const m=today.getMonth();
+      const y=today.getFullYear();
+      /* Next pay date */
+      let nextDate;
+      if(day<=pd){ nextDate=new Date(y,m,pd); }
+      else { nextDate=new Date(y,m+1,pd); }
+      /* Period start: last occurrence of payDay */
+      let periodStart;
+      if(day<=pd){ const prev=new Date(y,m-1,pd); periodStart=fmtD(prev); }
+      else { periodStart=fmtD(new Date(y,m,pd)); }
+      const alreadyPaid=empPays.some(p=>p.date>=periodStart&&p.date<=TODAY);
+      const lastEntry=alreadyPaid?empPays.find(p=>p.date>=periodStart&&p.date<=TODAY):null;
+      return{nextDate:fmtD(nextDate),daysUntil:Math.round((nextDate-today)/(1000*60*60*24)),alreadyPaid,amount:sal,lastEntry,label:`Monthly · ${pd==='15'||pd===15?'15th':'30th'}`};
+
+    } else if(freq==='Biweekly'){
+      let nextDate;
+      let alreadyPaid=false;
+      let lastEntry=null;
+      if(empPays.length>0){
+        const lastD=new Date(empPays[0].date+'T12:00:00');
+        const daysSince=Math.round((today-lastD)/(1000*60*60*24));
+        if(daysSince<14){
+          alreadyPaid=true;
+          lastEntry=empPays[0];
+          /* Next pay = last pay + 14 days, snapped to Friday */
+          nextDate=new Date(lastD);
+          nextDate.setDate(lastD.getDate()+14);
+          const dow=nextDate.getDay();
+          if(dow!==5) nextDate.setDate(nextDate.getDate()+((5-dow+7)%7));
+        } else {
+          /* Past due — next Friday from today */
+          const dow=today.getDay();
+          const toFri=(5-dow+7)%7;
+          nextDate=new Date(today);
+          nextDate.setDate(today.getDate()+toFri);
+        }
+      } else {
+        const dow=today.getDay();
+        const toFri=(5-dow+7)%7;
+        nextDate=new Date(today);
+        nextDate.setDate(today.getDate()+toFri);
+      }
+      const daysUntil=Math.round((nextDate-today)/(1000*60*60*24));
+      const perCheck=Math.round(sal/2);
+      return{nextDate:fmtD(nextDate),daysUntil,alreadyPaid,amount:perCheck,lastEntry,label:'Biweekly · Fri'};
+
+    } else { /* Weekly */
+      const lastEntry=empPays.length>0?empPays[0]:null;
+      const alreadyPaid=lastEntry?Math.round((today-new Date(lastEntry.date+'T12:00:00'))/(1000*60*60*24))<7:false;
+      const dow=today.getDay();
+      const toFri=(5-dow+7)%7;
+      const nextDate=new Date(today);
+      nextDate.setDate(today.getDate()+toFri);
+      return{nextDate:fmtD(nextDate),daysUntil:toFri,alreadyPaid,amount:Math.round(sal/4),lastEntry,label:'Weekly · Fri'};
+    }
+  };
+
+  const schedules=employees.map(emp=>({emp,sched:getSchedule(emp)}));
+  /* Group by next pay date */
+  const dateGroups={};
+  schedules.forEach(({emp,sched})=>{
+    const k=sched.nextDate;
+    if(!dateGroups[k]) dateGroups[k]=[];
+    dateGroups[k].push({emp,sched});
+  });
+  const sortedDates=Object.keys(dateGroups).sort();
+  const totalUnpaid=schedules.filter(s=>!s.sched.alreadyPaid).reduce((sum,s)=>sum+s.sched.amount,0);
+  const overdueCount=schedules.filter(s=>!s.sched.alreadyPaid&&isOverdue(s.sched.nextDate)).length;
+
+  /* Quick-record payment for an employee */
+  const quickPay=(emp,sched)=>{
+    setEmployeeId(emp.id);
+    setAmount(String(sched.amount));
+    setDate(sched.nextDate<=TODAY?TODAY:sched.nextDate);
+    setAccountId('');
+    setEditPayId(null);
+  };
+
   return(
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
-      <div className="col" style={{gap:'16px'}}>
-        <div className="card" style={{padding:'22px',border:editEmpId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
-          <p className="sect">{editEmpId?'Edit Employee':'Add Employee'}</p>
-          <div className="col">
-            <div><span className="fl">Name</span><input className="fi" value={empName} onChange={e=>setEmpName(e.target.value)} placeholder="Employee name"/></div>
-            <div><span className="fl">Role</span><input className="fi" value={empRole} onChange={e=>setEmpRole(e.target.value)} placeholder="e.g. Virtual Assistant"/></div>
-            <div><span className="fl">Salary (₱)</span><input className="fi" type="number" value={empSalary} onChange={e=>setEmpSalary(e.target.value)} placeholder="e.g. 16000"/></div>
-            <div><span className="fl">Pay Frequency</span>
-              <select className="fi" value={empFreq} onChange={e=>setEmpFreq(e.target.value)}>
-                {Object.entries(FREQ_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-              </select>
+    <div className="fade col" style={{gap:'16px'}}>
+
+      {/* ── PAY SCHEDULE BANNER ── */}
+      {employees.length>0&&(
+        <div style={{borderRadius:'16px',overflow:'hidden',border:'1px solid #e0e7ff',background:'linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%)'}}>
+          {/* Header */}
+          <div style={{padding:'16px 20px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px'}}>
+            <div>
+              <p style={{margin:0,fontWeight:'900',fontSize:'16px',color:'#3730a3'}}>📅 Pay Schedule</p>
+              <p style={{margin:'2px 0 0',fontSize:'12px',color:'#6366f1'}}>
+                {overdueCount>0?`⚠ ${overdueCount} payment${overdueCount>1?'s':''} overdue · `:''}
+                Total pending: <b>{P(totalUnpaid)}</b>
+              </p>
             </div>
-            <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={saveEmp}><Ico n={editEmpId?'check':'users'} s={14} c="#fff"/>{editEmpId?'Save Employee':'Add Employee'}</button>
-              {editEmpId&&<button className="btn bs" onClick={resetEmp}>Cancel</button>}
+            {overdueCount>0&&(
+              <span style={{fontSize:'11px',fontWeight:'800',background:'#ef4444',color:'#fff',padding:'4px 10px',borderRadius:'99px'}}>
+                ACTION NEEDED
+              </span>
+            )}
+          </div>
+
+          {/* Per-date groups */}
+          {sortedDates.map((dateKey,di)=>{
+            const group=dateGroups[dateKey];
+            const groupTotal=group.filter(g=>!g.sched.alreadyPaid).reduce((s,g)=>s+g.sched.amount,0);
+            const allPaid=group.every(g=>g.sched.alreadyPaid);
+            const overdue=!allPaid&&isOverdue(dateKey);
+            const borderColor=overdue?'#fca5a5':allPaid?'#86efac':'#c7d2fe';
+            const bgColor=overdue?'#fff5f5':allPaid?'#f0fdf4':'#fff';
+            return(
+              <div key={dateKey} style={{margin:'0 16px 12px',borderRadius:'12px',border:`1.5px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
+                {/* Date header */}
+                <div style={{padding:'10px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${borderColor}`}}>
+                  <div>
+                    <span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':allPaid?'#16a34a':'#4338ca'}}>
+                      {overdue?'⚠ ':allPaid?'✓ ':di===0?'🔜 ':''}{labelDate(dateKey)}
+                    </span>
+                  </div>
+                  {!allPaid&&<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(groupTotal)}</span>}
+                  {allPaid&&<span style={{fontSize:'11px',fontWeight:'700',color:'#16a34a',background:'#dcfce7',padding:'2px 8px',borderRadius:'99px'}}>All Paid ✓</span>}
+                </div>
+                {/* Employees in this group */}
+                {group.map(({emp,sched})=>(
+                  <div key={emp.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderBottom:'1px solid #f1f5f9'}}>
+                    <div style={{width:'32px',height:'32px',background:sched.alreadyPaid?'#dcfce7':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Ico n="user" s={14} c={sched.alreadyPaid?'#16a34a':'#6366f1'} sw={1.75}/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'#1e293b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</p>
+                      <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>{emp.role||''}{emp.role?' · ':''}{sched.label}</p>
+                      {sched.alreadyPaid&&sched.lastEntry&&(
+                        <p style={{margin:'1px 0 0',fontSize:'10px',color:'#16a34a',fontWeight:'700'}}>✓ Paid {sched.lastEntry.date} · {P(sched.lastEntry.amount)}</p>
+                      )}
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      {sched.alreadyPaid?(
+                        <span style={{fontSize:'11px',fontWeight:'800',color:'#16a34a',background:'#dcfce7',padding:'3px 8px',borderRadius:'6px'}}>✓ Paid</span>
+                      ):(
+                        <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                          <span style={{fontSize:'14px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(sched.amount)}</span>
+                          <button onClick={()=>quickPay(emp,sched)}
+                            style={{fontSize:'11px',fontWeight:'700',background:'#6366f1',color:'#fff',border:'none',borderRadius:'6px',padding:'4px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                            + Pay
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+          <div style={{height:'4px'}}/>
+        </div>
+      )}
+
+      {/* ── MAIN GRID ── */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}}>
+        <div className="col" style={{gap:'16px'}}>
+          {/* Employee form */}
+          <div className="card" style={{padding:'22px',border:editEmpId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+            <p className="sect">{editEmpId?'Edit Employee':'Add Employee'}</p>
+            <div className="col">
+              <div><span className="fl">Name</span><input className="fi" value={empName} onChange={e=>setEmpName(e.target.value)} placeholder="Employee name"/></div>
+              <div><span className="fl">Role</span><input className="fi" value={empRole} onChange={e=>setEmpRole(e.target.value)} placeholder="e.g. Virtual Assistant"/></div>
+              <div><span className="fl">Salary / mo (₱)</span><input className="fi" type="number" value={empSalary} onChange={e=>setEmpSalary(e.target.value)} placeholder="e.g. 16000"/></div>
+              <div><span className="fl">Pay Frequency</span>
+                <select className="fi" value={empFreq} onChange={e=>setEmpFreq(e.target.value)}>
+                  {Object.entries(FREQ_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              {empFreq==='Monthly'&&(
+                <div><span className="fl">Pay Day</span>
+                  <select className="fi" value={empPayDay} onChange={e=>setEmpPayDay(parseInt(e.target.value))}>
+                    <option value={15}>15th of month</option>
+                    <option value={30}>30th of month</option>
+                  </select>
+                </div>
+              )}
+              <div style={{display:'flex',gap:'8px'}}>
+                <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={saveEmp}><Ico n={editEmpId?'check':'users'} s={14} c="#fff"/>{editEmpId?'Save Employee':'Add Employee'}</button>
+                {editEmpId&&<button className="btn bs" onClick={resetEmp}>Cancel</button>}
+              </div>
+            </div>
+            {employees.length>0&&<div style={{marginTop:'16px',borderTop:'1px solid #f1f5f9',paddingTop:'14px'}}>
+              {employees.map(e=>{
+                const sc=getSchedule(e);
+                return(
+                  <div key={e.id} className="row" style={{padding:'7px 0'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'9px'}}>
+                      <div style={{width:'30px',height:'30px',background:'#f5f3ff',borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={14} c="#7c3aed" sw={1.75}/></div>
+                      <div>
+                        <p style={{fontWeight:'700',fontSize:'13px',margin:0}}>{e.name}</p>
+                        <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>
+                          {e.role||''}
+                          {e.salary?` · ${P(e.salary)}/mo`:''}
+                          {e.frequency?` · ${e.frequency}`:''}
+                          {e.frequency==='Monthly'&&e.payDay?` (${e.payDay}th)`:''}
+                        </p>
+                        <p style={{fontSize:'10px',color:sc.alreadyPaid?'#16a34a':isOverdue(sc.nextDate)?'#ef4444':'#6366f1',margin:'1px 0 0',fontWeight:'700'}}>
+                          {sc.alreadyPaid?`✓ Paid · Next: ${sc.nextDate}`:`${isOverdue(sc.nextDate)?'⚠ Due':'Next:'} ${sc.nextDate} · ${P(sc.amount)}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:'4px'}}>
+                      <button className="ib" style={{color:editEmpId===e.id?'#6366f1':'#94a3b8'}} onClick={()=>editEmpId===e.id?resetEmp():startEditEmp(e)}><Ico n="edit" s={14}/></button>
+                      <button className="ib" onClick={()=>{if(editEmpId===e.id)resetEmp();setEmployees(employees.filter(x=>x.id!==e.id));}}><Ico n="trash" s={14}/></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>}
+          </div>
+
+          {/* Record payment form */}
+          <div className="card" style={{padding:'22px',border:editPayId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
+            <p className="sect">{editPayId?'Edit Payment':'Record Payment'}</p>
+            <div className="col">
+              <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
+              <div><span className="fl">Employee</span>
+                <select className="fi" value={employeeId} onChange={e=>{
+                  setEmployeeId(e.target.value);
+                  if(e.target.value&&!amount){
+                    const emp=employees.find(x=>x.id===e.target.value);
+                    if(emp){const sc=getSchedule(emp);setAmount(String(sc.amount));}
+                  }
+                }}>
+                  <option value="">— Select employee —</option>
+                  {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </div>
+              <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
+              <div><span className="fl">Paid from Account</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
+              <div style={{display:'flex',gap:'8px'}}>
+                <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={savePay}><Ico n={editPayId?'check':'dollar'} s={14} c="#fff"/>{editPayId?'Save Payment':'Record Payment'}</button>
+                {editPayId&&<button className="btn bs" onClick={resetPay}>Cancel</button>}
+              </div>
             </div>
           </div>
-          {employees.length>0&&<div style={{marginTop:'16px',borderTop:'1px solid #f1f5f9',paddingTop:'14px'}}>
-            {employees.map(e=>(
-              <div key={e.id} className="row" style={{padding:'7px 0'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'9px'}}>
-                  <div style={{width:'30px',height:'30px',background:'#f5f3ff',borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="user" s={14} c="#7c3aed" sw={1.75}/></div>
+        </div>
+
+        {/* Payment history */}
+        <div className="col" style={{gap:'8px',maxHeight:'75vh',overflowY:'auto'}}>
+          {payroll.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No payroll records this month.</div>}
+          {[...payroll].reverse().map(p=>{
+            const em=employees.find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);
+            const isEditing=editPayId===p.id;
+            return(
+              <div key={p.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                  <div style={{width:'34px',height:'34px',background:'#faf5ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="users" s={15} c="#7c3aed" sw={1.75}/></div>
                   <div>
-                    <p style={{fontWeight:'700',fontSize:'13px',margin:0}}>{e.name}</p>
-                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.role||''}{e.salary?` · ${P(e.salary)}`:''}{e.frequency?` · ${e.frequency}`:''}</p>
+                    <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:'0 0 3px'}}>{em?.name||'Unknown'}</p>
+                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{p.date}{ac?` · ${acctLabel(ac)}`:''}</p>
                   </div>
                 </div>
-                <div style={{display:'flex',gap:'4px'}}>
-                  <button className="ib" style={{color:editEmpId===e.id?'#6366f1':'#94a3b8'}} onClick={()=>editEmpId===e.id?resetEmp():startEditEmp(e)}><Ico n="edit" s={14}/></button>
-                  <button className="ib" onClick={()=>{if(editEmpId===e.id)resetEmp();setEmployees(employees.filter(x=>x.id!==e.id));}}><Ico n="trash" s={14}/></button>
+                <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                  <span style={{fontWeight:'800',fontSize:'15px',color:'#ef4444'}}>{P(p.amount)}</span>
+                  <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?resetPay():startEditPay(p)}><Ico n="edit" s={15}/></button>
+                  <button className="ib" onClick={()=>{if(isEditing)resetPay();setPayroll(allPayroll.filter(x=>x.id!==p.id));}}><Ico n="trash" s={15}/></button>
                 </div>
               </div>
-            ))}
-          </div>}
+            );
+          })}
         </div>
-        <div className="card" style={{padding:'22px',border:editPayId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
-          <p className="sect">{editPayId?'Edit Payment':'Record Payment'}</p>
-          <div className="col">
-            <div><span className="fl">Date</span><input className="fi" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
-            <div><span className="fl">Employee</span><select className="fi" value={employeeId} onChange={e=>setEmployeeId(e.target.value)}><option value="">— Select employee —</option>{employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-            <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
-            <div><span className="fl">Paid from Account</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
-            <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={savePay}><Ico n={editPayId?'check':'dollar'} s={14} c="#fff"/>{editPayId?'Save Payment':'Record Payment'}</button>
-              {editPayId&&<button className="btn bs" onClick={resetPay}>Cancel</button>}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="col" style={{gap:'8px',maxHeight:'75vh',overflowY:'auto'}}>
-        {payroll.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No payroll records this month.</div>}
-        {[...payroll].reverse().map(p=>{
-          const em=employees.find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);
-          const isEditing=editPayId===p.id;
-          return(
-            <div key={p.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':'3px solid transparent',background:isEditing?'#f5f3ff':'#fff',transition:'all .15s'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                <div style={{width:'34px',height:'34px',background:'#faf5ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="users" s={15} c="#7c3aed" sw={1.75}/></div>
-                <div>
-                  <p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:'0 0 3px'}}>{em?.name||'Unknown'}</p>
-                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{p.date}{ac?` · ${acctLabel(ac)}`:''}</p>
-                </div>
-              </div>
-              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-                <span style={{fontWeight:'800',fontSize:'15px',color:'#ef4444'}}>{P(p.amount)}</span>
-                <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?resetPay():startEditPay(p)}><Ico n="edit" s={15}/></button>
-                <button className="ib" onClick={()=>{if(isEditing)resetPay();setPayroll(allPayroll.filter(x=>x.id!==p.id));}}><Ico n="trash" s={15}/></button>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
