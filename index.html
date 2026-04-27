@@ -1461,7 +1461,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
   const delGroup=(id)=>setGroups(prev=>prev.filter(g=>g.id!==id));
   const removeFromGroup=(groupId,planId)=>setGroups(prev=>prev.map(g=>g.id===groupId?{...g,planIds:g.planIds.filter(id=>id!==planId)}:g).filter(g=>g.planIds.length>0));
 
-  /* ── Compute multi-plan account impact ── */
+  /* ── Compute multi-plan account impact (ALL items, not just checked) ── */
   const computeImpact=(planList)=>{
     const impact={};
     planList.forEach(plan=>{
@@ -1469,7 +1469,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
         const amt=parseFloat(plan.groceryTotal)||0;
         if(amt&&plan.groceryAcctId) impact[plan.groceryAcctId]=(impact[plan.groceryAcctId]||0)+amt;
       } else {
-        plan.items.filter(it=>it.checked&&it.accountId&&it.amount).forEach(it=>{
+        plan.items.filter(it=>it.accountId&&it.amount).forEach(it=>{
           impact[it.accountId]=(impact[it.accountId]||0)+(it.amount||0);
         });
       }
@@ -1477,26 +1477,25 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
     return impact;
   };
 
-  /* ── Account preview widget ── */
+  /* ── Simple account preview widget ── */
   const AccountPreviewWidget=({impact,label})=>{
-    if(Object.keys(impact).length===0) return null;
+    const affected=(accounts||[]).filter(a=>(impact[a.id]||0)>0);
+    if(affected.length===0) return null;
     return(
-      <div style={{background:'#f8fafc',border:'1px solid var(--border)',borderRadius:'12px',padding:'12px',marginTop:'8px'}}>
-        <p style={{margin:'0 0 8px',fontSize:'11px',fontWeight:'800',color:'#64748b',textTransform:'uppercase',letterSpacing:'.05em'}}>📊 {label||'Account Preview'}</p>
-        {(accounts||[]).map(a=>{
-          const spend=impact[a.id]||0;
+      <div style={{background:'#f8fafc',border:'1px solid var(--border)',borderRadius:'10px',padding:'10px 12px',marginTop:'8px'}}>
+        <p style={{margin:'0 0 7px',fontSize:'10px',fontWeight:'800',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em'}}>{label||'If you spend this plan'}</p>
+        {affected.map(a=>{
+          const spend=impact[a.id];
           const cur=accBal(a.id);
           const after=cur-spend;
           return(
-            <div key={a.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 0',borderBottom:'1px solid #f1f5f9'}}>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:'12px',fontWeight:'700',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</p>
-              </div>
-              <div style={{textAlign:'right',flexShrink:0}}>
-                {spend>0
-                  ?<p style={{margin:0,fontSize:'11px',color:'#94a3b8'}}>{P(cur)} → <span style={{fontWeight:'800',color:after<0?'#ef4444':'#10b981'}}>{P(after)}</span> <span style={{color:'#ef4444',fontSize:'10px'}}>−{P(spend)}</span></p>
-                  :<p style={{margin:0,fontSize:'11px',color:'#94a3b8'}}>{P(cur)}</p>
-                }
+            <div key={a.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f1f5f9'}}>
+              <span style={{fontSize:'13px',fontWeight:'700',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:'8px'}}>{a.name}</span>
+              <div style={{display:'flex',alignItems:'center',gap:'6px',flexShrink:0}}>
+                <span style={{fontSize:'12px',color:'#94a3b8'}}>{P(cur)}</span>
+                <span style={{fontSize:'11px',color:'#94a3b8'}}>→</span>
+                <span style={{fontSize:'13px',fontWeight:'900',color:after<0?'#ef4444':'#10b981'}}>{P(after)}</span>
+                <span style={{fontSize:'10px',fontWeight:'700',background:after<0?'#fee2e2':'#f0fdf4',color:after<0?'#ef4444':'#16a34a',padding:'1px 5px',borderRadius:'4px'}}>−{P(spend)}</span>
               </div>
             </div>
           );
@@ -1508,15 +1507,17 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
   /* ── Render individual plan card ── */
   const renderPlanCard=(plan,inGroup)=>{
     const isGrocery=plan.type==='grocery';
-    const total=isGrocery?0:plan.items.reduce((s,it)=>s+(it.amount||0),0);
-    const checkedTotal=isGrocery?0:plan.items.filter(it=>it.checked).reduce((s,it)=>s+(it.amount||0),0);
-    const pct=plan.budget>0?Math.min(100,Math.round((checkedTotal/plan.budget)*100)):0;
-    const isOver=plan.budget>0&&checkedTotal>plan.budget;
+    const total=isGrocery?(parseFloat(plan.groceryTotal)||0):plan.items.reduce((s,it)=>s+(it.amount||0),0);
+    const boughtTotal=isGrocery?0:plan.items.filter(it=>it.checked).reduce((s,it)=>s+(it.amount||0),0);
+    const checkedCount=plan.items.filter(it=>it.checked).length;
+    /* Progress = bought / total plan (not vs budget) */
+    const pct=total>0?Math.min(100,Math.round((boughtTotal/total)*100)):0;
     const isExpanded=expandedId===plan.id;
     const isDragging=dragPlanId===plan.id;
     const isDropTarget=dropHint?.type==='plan'&&dropHint?.id===plan.id;
+    /* Impact = ALL items (preview before buying) */
     const acctImpact={};
-    if(!isGrocery) plan.items.filter(it=>it.checked&&it.accountId&&it.amount).forEach(it=>{acctImpact[it.accountId]=(acctImpact[it.accountId]||0)+(it.amount||0);});
+    if(!isGrocery) plan.items.filter(it=>it.accountId&&it.amount).forEach(it=>{acctImpact[it.accountId]=(acctImpact[it.accountId]||0)+(it.amount||0);});
 
     return(
       <div key={plan.id}
@@ -1547,25 +1548,25 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
                 {isGrocery&&<span style={{fontSize:'9px',fontWeight:'800',background:'#d1fae5',color:'#065f46',padding:'2px 5px',borderRadius:'3px',flexShrink:0}}>🛒</span>}
               </div>
               <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>
-                {plan.items.length} item{plan.items.length!==1?'s':''} · {plan.items.filter(it=>it.checked).length} checked
-                {!isGrocery&&plan.budget>0?` · ${P(plan.budget)}`:''}
-                {isGrocery&&plan.groceryTotal?` · ${P(parseFloat(plan.groceryTotal)||0)}`:''}
+                {plan.items.length} item{plan.items.length!==1?'s':''}
+                {checkedCount>0?` · ${checkedCount} bought`:''}
+                {total>0?` · ${P(total)} planned`:''}
               </p>
             </div>
-            {!isGrocery&&plan.budget>0&&(
+            {total>0&&(
               <div style={{textAlign:'right',flexShrink:0}}>
-                <p style={{margin:0,fontSize:'12px',fontWeight:'900',color:isOver?'#ef4444':plan.color}}>{P(checkedTotal)}</p>
-                <p style={{margin:0,fontSize:'10px',color:'#94a3b8'}}>{pct}%</p>
+                <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:plan.color}}>{P(total)}</p>
+                {checkedCount>0&&<p style={{margin:0,fontSize:'10px',color:'#10b981',fontWeight:'700'}}>{pct}% bought</p>}
               </div>
             )}
             <span style={{color:'#94a3b8',fontSize:'12px',flexShrink:0}}>{isExpanded?'▲':'▼'}</span>
           </div>
         </div>
 
-        {/* Progress bar */}
-        {!isGrocery&&plan.budget>0&&(
+        {/* Progress bar: bought vs total planned */}
+        {total>0&&checkedCount>0&&(
           <div style={{height:'3px',background:'#f1f5f9',margin:'0 14px'}}>
-            <div style={{height:'100%',width:`${pct}%`,background:isOver?'#ef4444':plan.color,borderRadius:'2px',transition:'width .4s'}}/>
+            <div style={{height:'100%',width:`${pct}%`,background:'#10b981',borderRadius:'2px',transition:'width .4s'}}/>
           </div>
         )}
         {isDropTarget&&<div style={{height:'3px',background:'#818cf8',margin:'2px 14px',borderRadius:'2px'}}/>}
@@ -1685,23 +1686,23 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
               {plan.items.length>0&&(
                 <div style={{display:'flex',gap:'8px',marginBottom:'12px',flexWrap:'wrap'}}>
                   <div style={{flex:1,background:'#f8fafc',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
-                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Total</p>
+                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Plan Total</p>
                     <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:'var(--text)'}}>{P(total)}</p>
                   </div>
-                  <div style={{flex:1,background:plan.color+'12',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
-                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Checked</p>
-                    <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:plan.color}}>{P(checkedTotal)}</p>
+                  <div style={{flex:1,background:'#f0fdf4',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
+                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Bought</p>
+                    <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:'#10b981'}}>{P(boughtTotal)}</p>
                   </div>
-                  {plan.budget>0&&(
-                    <div style={{flex:1,background:isOver?'#fff5f5':'#f0fdf4',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
-                      <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Left</p>
-                      <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:isOver?'#ef4444':'#10b981'}}>{isOver?'-':''}{P(Math.abs(plan.budget-checkedTotal))}</p>
+                  {total>0&&(
+                    <div style={{flex:1,background:'#f8fafc',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
+                      <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Remaining</p>
+                      <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:plan.color}}>{P(total-boughtTotal)}</p>
                     </div>
                   )}
                 </div>
               )}
               <button className="btn bp" onClick={()=>addItem(plan.id,'standard')} style={{width:'100%',justifyContent:'center',marginBottom:'12px',fontSize:'13px',padding:'9px'}}>+ Add Item</button>
-              <AccountPreviewWidget impact={acctImpact} label="Account Preview (checked items)"/>
+              <AccountPreviewWidget impact={acctImpact} label="If you spend this plan"/>
             </>)}
 
             <button onClick={()=>{if(window.confirm('Delete this plan?'))delPlan(plan.id);}}
@@ -1750,7 +1751,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
         const impact=computeImpact(groupPlans);
         const isDropTarget=dropHint?.type==='group'&&dropHint?.id===group.id;
         const totalAmt=groupPlans.reduce((s,p)=>s+(p.type==='grocery'?parseFloat(p.groceryTotal||0):p.items.reduce((ss,it)=>ss+(it.amount||0),0)),0);
-        const totalChecked=groupPlans.reduce((s,p)=>s+(p.type==='grocery'?parseFloat(p.groceryTotal||0):p.items.filter(it=>it.checked).reduce((ss,it)=>ss+(it.amount||0),0)),0);
+        const totalBought=groupPlans.reduce((s,p)=>s+(p.type==='grocery'?0:p.items.filter(it=>it.checked).reduce((ss,it)=>ss+(it.amount||0),0)),0);
         return(
           <div key={group.id}
             data-drop-group={group.id}
@@ -1785,9 +1786,9 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
                 <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Total</p>
                 <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:'var(--text)'}}>{P(totalAmt)}</p>
               </div>
-              <div style={{background:group.color+'18',borderRadius:'8px',padding:'6px 12px',textAlign:'center',minWidth:'80px',border:`1px solid ${group.color}30`}}>
-                <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Committed</p>
-                <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:group.color}}>{P(totalChecked)}</p>
+              <div style={{background:'#f0fdf4',borderRadius:'8px',padding:'6px 12px',textAlign:'center',minWidth:'80px',border:'1px solid #bbf7d0'}}>
+                <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Bought</p>
+                <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:'#10b981'}}>{P(totalBought)}</p>
               </div>
             </div>
             {/* Combined account preview */}
