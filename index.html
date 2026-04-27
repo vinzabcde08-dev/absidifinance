@@ -781,7 +781,7 @@ function LoginScreen({onLogin}){
 /* pulls all user data FROM Firestore into localStorage so new devices get existing data */
 const syncFromFirebase=async(userId)=>{
   if(!db)return;
-  const keys=['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts'];
+  const keys=['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_plans'];
   await Promise.all(keys.map(async k=>{
     const docKey=k+'_'+userId;
     try{
@@ -862,6 +862,7 @@ function MainApp({onLogout}){
   const[savingsLog,setSavingsLog]=useState(()=>ls.get(uk('ph_savings_log'),[]));
   const[investLog,setInvestLog]=useState(()=>ls.get(uk('ph_invest_log'),[]));
   const[transfers,setTransfers]=useState(()=>ls.get(uk('ph_transfers'),[]));
+  const[plans,setPlans]=useState(()=>ls.get(uk('ph_plans'),[]));
   const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
   const[emergencyAcctId,setEmergencyAcctId]=useState(()=>ls.get(uk('ph_emerg_acct'),''));
   const[emergencyMonths,setEmergencyMonths]=useState(()=>ls.get(uk('ph_emerg_months'),3));
@@ -909,6 +910,7 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_savings_log'),savingsLog);},[savingsLog]);
   useEffect(()=>{ls.set(uk('ph_invest_log'),investLog);},[investLog]);
   useEffect(()=>{ls.set(uk('ph_transfers'),transfers);},[transfers]);
+  useEffect(()=>{ls.set(uk('ph_plans'),plans);},[plans]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_months'),emergencyMonths);},[emergencyMonths]);
@@ -1114,6 +1116,7 @@ function MainApp({onLogout}){
     {id:'budget',icon:'chart',label:'Budget'},
     {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
+    {id:'plans',icon:'chart',label:'Plans'},
   ];
 
   return(
@@ -1227,6 +1230,7 @@ function MainApp({onLogout}){
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
+        {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses}/>}
       </div>
 
       {/* SUBSCRIPTION REMINDER MODAL */}
@@ -1322,6 +1326,499 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
       <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':'External Broker')}>
         ✓ Done — Investment Moved
       </button>
+    </div>
+  );
+}
+
+/* ════════  PLANS  ════════ */
+function PlansTab({plans,setPlans,accounts,accBal,setExpenses}){
+  const[expandedId,setExpandedId]=useState(null);
+  const[groups,setGroups]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_plan_groups')||'[]')}catch{return[]}});
+  const[dragPlanId,setDragPlanId]=useState(null);
+  const[dropHint,setDropHint]=useState(null);
+  const dragRef=useRef({});
+  const groupsRef=useRef(groups);
+  const plansRef=useRef(plans);
+  const PLAN_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0891b2','#ec4899'];
+  const GROUP_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+
+  useEffect(()=>{groupsRef.current=groups;},[groups]);
+  useEffect(()=>{plansRef.current=plans;},[plans]);
+  useEffect(()=>{localStorage.setItem('absidi_plan_groups',JSON.stringify(groups));},[groups]);
+
+  /* ── Touch drag global listeners ── */
+  useEffect(()=>{
+    if(!dragPlanId) return;
+    const onTouchMove=(e)=>{
+      e.preventDefault();
+      const touch=e.touches[0];
+      const ghost=dragRef.current.ghost;
+      if(ghost){ghost.style.left=touch.clientX+'px';ghost.style.top=touch.clientY+'px';}
+      if(ghost) ghost.style.display='none';
+      const el=document.elementFromPoint(touch.clientX,touch.clientY);
+      if(ghost) ghost.style.display='';
+      if(!el){setDropHint(null);return;}
+      const gpEl=el.closest('[data-drop-group]');
+      const planEl=el.closest('[data-drop-plan]');
+      if(gpEl){const id=gpEl.getAttribute('data-drop-group');setDropHint({id,type:'group'});}
+      else if(planEl){const id=planEl.getAttribute('data-drop-plan');if(id!==dragRef.current.planId)setDropHint({id,type:'plan'});else setDropHint(null);}
+      else{setDropHint(null);}
+    };
+    const onTouchEnd=()=>{
+      const ghost=dragRef.current.ghost;
+      if(ghost&&ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      dragRef.current.ghost=null;
+      const hint=dropHint;
+      const dragId=dragRef.current.planId;
+      if(hint&&dragId){
+        if(hint.type==='group'){
+          setGroups(prev=>prev.map(g=>g.id===hint.id?{...g,planIds:[...new Set([...g.planIds,dragId])]}:{...g,planIds:g.planIds.filter(id=>id!==dragId)}));
+        } else if(hint.type==='plan'){
+          const existingGroup=groupsRef.current.find(g=>g.planIds.includes(hint.id));
+          if(existingGroup){
+            setGroups(prev=>prev.map(g=>g.id===existingGroup.id?{...g,planIds:[...new Set([...g.planIds,dragId])]}:{...g,planIds:g.planIds.filter(id=>id!==dragId)}));
+          } else {
+            const newGrp={id:uid(),name:'New Group',planIds:[hint.id,dragId],color:'#6366f1'};
+            setGroups(prev=>[...prev.filter(g=>!g.planIds.includes(dragId)&&!g.planIds.includes(hint.id)),newGrp]);
+          }
+        }
+      }
+      setDragPlanId(null);setDropHint(null);dragRef.current.planId=null;
+    };
+    document.addEventListener('touchmove',onTouchMove,{passive:false});
+    document.addEventListener('touchend',onTouchEnd);
+    return()=>{document.removeEventListener('touchmove',onTouchMove);document.removeEventListener('touchend',onTouchEnd);};
+  },[dragPlanId,dropHint]);
+
+  const startTouchDrag=(e,planId,title)=>{
+    const touch=e.touches[0];
+    dragRef.current.startX=touch.clientX;
+    dragRef.current.startY=touch.clientY;
+    dragRef.current.timer=setTimeout(()=>{
+      dragRef.current.planId=planId;
+      setDragPlanId(planId);
+      const ghost=document.createElement('div');
+      ghost.textContent=title||'Plan';
+      ghost.style.cssText=`position:fixed;z-index:9999;pointer-events:none;background:#6366f1;color:#fff;font-weight:700;font-size:13px;padding:8px 14px;border-radius:8px;box-shadow:0 8px 32px #0006;transform:translate(-50%,-50%);left:${touch.clientX}px;top:${touch.clientY}px;white-space:nowrap;`;
+      document.body.appendChild(ghost);
+      dragRef.current.ghost=ghost;
+    },350);
+  };
+  const cancelTouchDrag=()=>clearTimeout(dragRef.current.timer);
+
+  /* ── Desktop drag ── */
+  const onDragStart=(e,planId)=>{setDragPlanId(planId);dragRef.current.planId=planId;e.dataTransfer.effectAllowed='move';};
+  const onDragEnd=()=>{setDragPlanId(null);setDropHint(null);dragRef.current.planId=null;};
+  const onDragOver=(e,targetId,type)=>{e.preventDefault();if(targetId!==dragRef.current.planId)setDropHint({id:targetId,type});};
+  const onDropOnPlan=(e,targetPlanId)=>{
+    e.preventDefault();
+    const dragId=dragRef.current.planId;
+    if(!dragId||dragId===targetPlanId) return;
+    const existingGroup=groups.find(g=>g.planIds.includes(targetPlanId));
+    if(existingGroup){
+      setGroups(prev=>prev.map(g=>g.id===existingGroup.id?{...g,planIds:[...new Set([...g.planIds,dragId])]}:{...g,planIds:g.planIds.filter(id=>id!==dragId)}));
+    } else {
+      const newGrp={id:uid(),name:'New Group',planIds:[targetPlanId,dragId],color:'#6366f1'};
+      setGroups(prev=>[...prev.filter(g=>!g.planIds.includes(dragId)&&!g.planIds.includes(targetPlanId)),newGrp]);
+    }
+    setDragPlanId(null);setDropHint(null);
+  };
+  const onDropOnGroup=(e,groupId)=>{
+    e.preventDefault();
+    const dragId=dragRef.current.planId;
+    if(!dragId) return;
+    setGroups(prev=>prev.map(g=>g.id===groupId?{...g,planIds:[...new Set([...g.planIds,dragId])]}:{...g,planIds:g.planIds.filter(id=>id!==dragId)}));
+    setDragPlanId(null);setDropHint(null);
+  };
+
+  /* ── Plan CRUD ── */
+  const addPlan=(type='standard')=>{
+    const p={id:uid(),title:type==='grocery'?'Grocery Run':'New Plan',budget:0,items:[],type,color:type==='grocery'?'#10b981':'#6366f1',groceryTotal:'',groceryAcctId:'',createdAt:TODAY};
+    setPlans(prev=>[p,...prev]);setExpandedId(p.id);
+  };
+  const delPlan=(id)=>{
+    setPlans(prev=>prev.filter(p=>p.id!==id));
+    setGroups(prev=>prev.map(g=>({...g,planIds:g.planIds.filter(pid=>pid!==id)})).filter(g=>g.planIds.length>0));
+  };
+  const updatePlan=(id,patch)=>setPlans(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
+  const addItem=(planId,type)=>{
+    const item=type==='grocery'?{id:uid(),label:'',checked:false}:{id:uid(),label:'',amount:0,accountId:'',checked:false};
+    setPlans(prev=>prev.map(p=>p.id===planId?{...p,items:[...p.items,item]}:p));
+  };
+  const updateItem=(planId,itemId,patch)=>setPlans(prev=>prev.map(p=>p.id===planId?{...p,items:p.items.map(it=>it.id===itemId?{...it,...patch}:it)}:p));
+  const delItem=(planId,itemId)=>setPlans(prev=>prev.map(p=>p.id===planId?{...p,items:p.items.filter(it=>it.id!==itemId)}:p));
+
+  const exportGrocery=(plan)=>{
+    const amt=parseFloat(plan.groceryTotal);
+    if(!amt||!plan.groceryAcctId){alert('Enter a total amount and select an account first.');return;}
+    const exp={id:uid(),date:TODAY,amount:amt,category:'Groceries',accountId:plan.groceryAcctId,note:plan.title+(plan.items.length?': '+plan.items.map(i=>i.label).filter(Boolean).join(', '):''),alloc:''};
+    setExpenses(prev=>[exp,...prev]);
+    alert(`✓ Exported "${plan.title}" as ₱${amt.toLocaleString()} Groceries expense.`);
+  };
+
+  /* ── Group CRUD ── */
+  const updateGroup=(id,patch)=>setGroups(prev=>prev.map(g=>g.id===id?{...g,...patch}:g));
+  const delGroup=(id)=>setGroups(prev=>prev.filter(g=>g.id!==id));
+  const removeFromGroup=(groupId,planId)=>setGroups(prev=>prev.map(g=>g.id===groupId?{...g,planIds:g.planIds.filter(id=>id!==planId)}:g).filter(g=>g.planIds.length>0));
+
+  /* ── Compute multi-plan account impact ── */
+  const computeImpact=(planList)=>{
+    const impact={};
+    planList.forEach(plan=>{
+      if(plan.type==='grocery'){
+        const amt=parseFloat(plan.groceryTotal)||0;
+        if(amt&&plan.groceryAcctId) impact[plan.groceryAcctId]=(impact[plan.groceryAcctId]||0)+amt;
+      } else {
+        plan.items.filter(it=>it.checked&&it.accountId&&it.amount).forEach(it=>{
+          impact[it.accountId]=(impact[it.accountId]||0)+(it.amount||0);
+        });
+      }
+    });
+    return impact;
+  };
+
+  /* ── Account preview widget ── */
+  const AccountPreviewWidget=({impact,label})=>{
+    if(Object.keys(impact).length===0) return null;
+    return(
+      <div style={{background:'#f8fafc',border:'1px solid var(--border)',borderRadius:'12px',padding:'12px',marginTop:'8px'}}>
+        <p style={{margin:'0 0 8px',fontSize:'11px',fontWeight:'800',color:'#64748b',textTransform:'uppercase',letterSpacing:'.05em'}}>📊 {label||'Account Preview'}</p>
+        {(accounts||[]).map(a=>{
+          const spend=impact[a.id]||0;
+          const cur=accBal(a.id);
+          const after=cur-spend;
+          return(
+            <div key={a.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 0',borderBottom:'1px solid #f1f5f9'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:'12px',fontWeight:'700',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</p>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                {spend>0
+                  ?<p style={{margin:0,fontSize:'11px',color:'#94a3b8'}}>{P(cur)} → <span style={{fontWeight:'800',color:after<0?'#ef4444':'#10b981'}}>{P(after)}</span> <span style={{color:'#ef4444',fontSize:'10px'}}>−{P(spend)}</span></p>
+                  :<p style={{margin:0,fontSize:'11px',color:'#94a3b8'}}>{P(cur)}</p>
+                }
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* ── Render individual plan card ── */
+  const renderPlanCard=(plan,inGroup)=>{
+    const isGrocery=plan.type==='grocery';
+    const total=isGrocery?0:plan.items.reduce((s,it)=>s+(it.amount||0),0);
+    const checkedTotal=isGrocery?0:plan.items.filter(it=>it.checked).reduce((s,it)=>s+(it.amount||0),0);
+    const pct=plan.budget>0?Math.min(100,Math.round((checkedTotal/plan.budget)*100)):0;
+    const isOver=plan.budget>0&&checkedTotal>plan.budget;
+    const isExpanded=expandedId===plan.id;
+    const isDragging=dragPlanId===plan.id;
+    const isDropTarget=dropHint?.type==='plan'&&dropHint?.id===plan.id;
+    const acctImpact={};
+    if(!isGrocery) plan.items.filter(it=>it.checked&&it.accountId&&it.amount).forEach(it=>{acctImpact[it.accountId]=(acctImpact[it.accountId]||0)+(it.amount||0);});
+
+    return(
+      <div key={plan.id}
+        data-drop-plan={plan.id}
+        draggable={!isExpanded}
+        onDragStart={e=>!isExpanded&&onDragStart(e,plan.id)}
+        onDragEnd={onDragEnd}
+        onDragOver={e=>onDragOver(e,plan.id,'plan')}
+        onDrop={e=>onDropOnPlan(e,plan.id)}
+        className="card"
+        style={{marginBottom:'10px',overflow:'hidden',
+          border:`2px solid ${isDropTarget?'#818cf8':isExpanded?plan.color:'transparent'}`,
+          transition:'border-color .2s,opacity .2s',opacity:isDragging?0.35:1}}>
+        {/* Plan header */}
+        <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'12px 14px'}}>
+          {/* Drag handle */}
+          <div
+            onTouchStart={e=>{e.stopPropagation();startTouchDrag(e,plan.id,plan.title||'Plan');}}
+            onTouchEnd={e=>{e.stopPropagation();cancelTouchDrag();}}
+            style={{cursor:'grab',color:'#cbd5e1',fontSize:'18px',padding:'2px 3px',flexShrink:0,userSelect:'none',touchAction:'none',lineHeight:1}}
+            title="Hold & drag to group">⠿</div>
+          {/* Expand/collapse */}
+          <div style={{display:'flex',alignItems:'center',gap:'8px',flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setExpandedId(isExpanded?null:plan.id)}>
+            <div style={{width:'10px',height:'10px',borderRadius:'50%',background:plan.color,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                <p style={{margin:0,fontWeight:'800',fontSize:'14px',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{plan.title||'Untitled'}</p>
+                {isGrocery&&<span style={{fontSize:'9px',fontWeight:'800',background:'#d1fae5',color:'#065f46',padding:'2px 5px',borderRadius:'3px',flexShrink:0}}>🛒</span>}
+              </div>
+              <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>
+                {plan.items.length} item{plan.items.length!==1?'s':''} · {plan.items.filter(it=>it.checked).length} checked
+                {!isGrocery&&plan.budget>0?` · ${P(plan.budget)}`:''}
+                {isGrocery&&plan.groceryTotal?` · ${P(parseFloat(plan.groceryTotal)||0)}`:''}
+              </p>
+            </div>
+            {!isGrocery&&plan.budget>0&&(
+              <div style={{textAlign:'right',flexShrink:0}}>
+                <p style={{margin:0,fontSize:'12px',fontWeight:'900',color:isOver?'#ef4444':plan.color}}>{P(checkedTotal)}</p>
+                <p style={{margin:0,fontSize:'10px',color:'#94a3b8'}}>{pct}%</p>
+              </div>
+            )}
+            <span style={{color:'#94a3b8',fontSize:'12px',flexShrink:0}}>{isExpanded?'▲':'▼'}</span>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {!isGrocery&&plan.budget>0&&(
+          <div style={{height:'3px',background:'#f1f5f9',margin:'0 14px'}}>
+            <div style={{height:'100%',width:`${pct}%`,background:isOver?'#ef4444':plan.color,borderRadius:'2px',transition:'width .4s'}}/>
+          </div>
+        )}
+        {isDropTarget&&<div style={{height:'3px',background:'#818cf8',margin:'2px 14px',borderRadius:'2px'}}/>}
+
+        {/* Expanded body */}
+        {isExpanded&&(
+          <div style={{padding:'12px 14px 14px',borderTop:'1px solid var(--border)',marginTop:'4px'}}>
+            {/* Settings row */}
+            <div style={{display:'flex',gap:'8px',marginBottom:'12px',flexWrap:'wrap'}}>
+              <input className="fi" style={{flex:'2',minWidth:'120px',fontWeight:'700',fontSize:'14px'}}
+                value={plan.title} onChange={e=>updatePlan(plan.id,{title:e.target.value})} placeholder="Plan name"/>
+              {!isGrocery&&(
+                <div style={{display:'flex',alignItems:'center',gap:'6px',flex:'1',minWidth:'100px'}}>
+                  <span style={{fontSize:'12px',color:'#94a3b8',whiteSpace:'nowrap'}}>Budget ₱</span>
+                  <input className="fi" type="number" style={{flex:1,fontWeight:'700'}}
+                    value={plan.budget||''} onChange={e=>updatePlan(plan.id,{budget:parseFloat(e.target.value)||0})} placeholder="0"/>
+                </div>
+              )}
+              <div style={{display:'flex',gap:'3px',alignItems:'center',flexWrap:'wrap'}}>
+                {PLAN_COLORS.map(c=>(
+                  <div key={c} onClick={()=>updatePlan(plan.id,{color:c})}
+                    style={{width:'15px',height:'15px',borderRadius:'50%',background:c,cursor:'pointer',
+                      outline:plan.color===c?`2px solid ${c}`:'2px solid transparent',outlineOffset:'2px'}}/>
+                ))}
+              </div>
+            </div>
+
+            {/* GROCERY */}
+            {isGrocery&&(<>
+              <p style={{fontSize:'11px',fontWeight:'700',color:'#64748b',textTransform:'uppercase',letterSpacing:'.05em',margin:'0 0 8px'}}>Shopping List</p>
+              <div style={{marginBottom:'10px'}}>
+                {plan.items.length===0&&<p style={{fontSize:'13px',color:'#94a3b8',margin:'0 0 8px'}}>Add items to your list.</p>}
+                {plan.items.map((item,idx)=>(
+                  <div key={item.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div onClick={()=>updateItem(plan.id,item.id,{checked:!item.checked})}
+                      style={{width:'20px',height:'20px',borderRadius:'6px',border:`2px solid ${item.checked?plan.color:'#cbd5e1'}`,
+                        background:item.checked?plan.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',
+                        cursor:'pointer',flexShrink:0,transition:'all .15s'}}>
+                      {item.checked&&<span style={{color:'#fff',fontSize:'11px',fontWeight:'900'}}>✓</span>}
+                    </div>
+                    <input className="fi" style={{flex:1,fontSize:'13px',padding:'5px 8px',
+                      textDecoration:item.checked?'line-through':'none',color:item.checked?'#94a3b8':'var(--text)'}}
+                      value={item.label} onChange={e=>updateItem(plan.id,item.id,{label:e.target.value})}
+                      placeholder={`Item ${idx+1}`}/>
+                    <button onClick={()=>delItem(plan.id,item.id)}
+                      style={{background:'none',border:'none',cursor:'pointer',color:'#cbd5e1',fontSize:'16px',padding:'4px',lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
+                      onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}>×</button>
+                  </div>
+                ))}
+              </div>
+              <button className="btn bs" onClick={()=>addItem(plan.id,'grocery')} style={{width:'100%',justifyContent:'center',marginBottom:'12px',fontSize:'13px'}}>+ Add Item</button>
+              <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'12px',padding:'12px',marginBottom:'10px'}}>
+                <p style={{margin:'0 0 8px',fontSize:'12px',fontWeight:'700',color:'#065f46',textTransform:'uppercase'}}>💳 Export as Expense</p>
+                <div style={{display:'flex',gap:'8px',marginBottom:'8px',flexWrap:'wrap'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'6px',flex:'1',minWidth:'110px'}}>
+                    <span style={{fontSize:'12px',color:'#64748b',whiteSpace:'nowrap'}}>Total ₱</span>
+                    <input className="fi" type="number" style={{flex:1,fontWeight:'700',fontSize:'14px'}}
+                      value={plan.groceryTotal} onChange={e=>updatePlan(plan.id,{groceryTotal:e.target.value})} placeholder="Enter total"/>
+                  </div>
+                  <select className="fi" style={{flex:'1',minWidth:'120px'}}
+                    value={plan.groceryAcctId} onChange={e=>updatePlan(plan.id,{groceryAcctId:e.target.value})}>
+                    <option value="">— Account —</option>
+                    {(accounts||[]).map(a=><option key={a.id} value={a.id}>{a.name} · {P(accBal(a.id))}</option>)}
+                  </select>
+                </div>
+                {plan.groceryAcctId&&plan.groceryTotal&&(()=>{
+                  const acct=(accounts||[]).find(a=>a.id===plan.groceryAcctId);
+                  const after=accBal(plan.groceryAcctId)-(parseFloat(plan.groceryTotal)||0);
+                  return(<p style={{fontSize:'12px',color:'#64748b',margin:'0 0 8px'}}>{acct?.name}: {P(accBal(plan.groceryAcctId))} → <b style={{color:after<0?'#ef4444':'#065f46'}}>{P(after)}</b></p>);
+                })()}
+                <button onClick={()=>exportGrocery(plan)} className="btn"
+                  style={{width:'100%',justifyContent:'center',background:'#10b981',color:'#fff',padding:'9px',fontSize:'13px',fontWeight:'700',borderRadius:'8px',border:'none',cursor:'pointer'}}>
+                  ✓ Export to Expenses
+                </button>
+              </div>
+            </>)}
+
+            {/* STANDARD */}
+            {!isGrocery&&(<>
+              <p style={{fontSize:'11px',fontWeight:'700',color:'#64748b',textTransform:'uppercase',letterSpacing:'.05em',margin:'0 0 8px'}}>Items</p>
+              <div style={{marginBottom:'10px'}}>
+                {plan.items.length===0&&<p style={{fontSize:'13px',color:'#94a3b8',margin:'0 0 8px',textAlign:'center',padding:'8px 0'}}>No items yet</p>}
+                {plan.items.map((item,idx)=>(
+                  <div key={item.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'5px'}}>
+                      <div onClick={()=>updateItem(plan.id,item.id,{checked:!item.checked})}
+                        style={{width:'20px',height:'20px',borderRadius:'6px',border:`2px solid ${item.checked?plan.color:'#cbd5e1'}`,
+                          background:item.checked?plan.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',
+                          cursor:'pointer',flexShrink:0,transition:'all .15s'}}>
+                        {item.checked&&<span style={{color:'#fff',fontSize:'11px',fontWeight:'900'}}>✓</span>}
+                      </div>
+                      <input className="fi" style={{flex:2,minWidth:'80px',fontSize:'13px',padding:'5px 8px',
+                        textDecoration:item.checked?'line-through':'none',color:item.checked?'#94a3b8':'var(--text)'}}
+                        value={item.label} onChange={e=>updateItem(plan.id,item.id,{label:e.target.value})}
+                        placeholder={`Item ${idx+1}`}/>
+                      <div style={{display:'flex',alignItems:'center',gap:'4px',flexShrink:0}}>
+                        <span style={{fontSize:'12px',color:'#94a3b8'}}>₱</span>
+                        <input className="fi" type="number" style={{width:'72px',fontSize:'13px',fontWeight:'700',padding:'5px 8px'}}
+                          value={item.amount||''} onChange={e=>updateItem(plan.id,item.id,{amount:parseFloat(e.target.value)||0})} placeholder="0"/>
+                      </div>
+                      <button onClick={()=>delItem(plan.id,item.id)}
+                        style={{background:'none',border:'none',cursor:'pointer',color:'#cbd5e1',fontSize:'16px',padding:'4px',lineHeight:1,flexShrink:0}}
+                        onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
+                        onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}>×</button>
+                    </div>
+                    <div style={{paddingLeft:'28px'}}>
+                      <select className="fi" style={{fontSize:'11px',padding:'3px 8px',color:'#64748b'}}
+                        value={item.accountId||''} onChange={e=>updateItem(plan.id,item.id,{accountId:e.target.value})}>
+                        <option value="">— From which account? —</option>
+                        {(accounts||[]).map(a=><option key={a.id} value={a.id}>{a.name} · {P(accBal(a.id))}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {plan.items.length>0&&(
+                <div style={{display:'flex',gap:'8px',marginBottom:'12px',flexWrap:'wrap'}}>
+                  <div style={{flex:1,background:'#f8fafc',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
+                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Total</p>
+                    <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:'var(--text)'}}>{P(total)}</p>
+                  </div>
+                  <div style={{flex:1,background:plan.color+'12',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
+                    <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Checked</p>
+                    <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:plan.color}}>{P(checkedTotal)}</p>
+                  </div>
+                  {plan.budget>0&&(
+                    <div style={{flex:1,background:isOver?'#fff5f5':'#f0fdf4',borderRadius:'8px',padding:'8px 10px',textAlign:'center',minWidth:'70px'}}>
+                      <p style={{margin:0,fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Left</p>
+                      <p style={{margin:0,fontSize:'13px',fontWeight:'900',color:isOver?'#ef4444':'#10b981'}}>{isOver?'-':''}{P(Math.abs(plan.budget-checkedTotal))}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button className="btn bp" onClick={()=>addItem(plan.id,'standard')} style={{width:'100%',justifyContent:'center',marginBottom:'12px',fontSize:'13px',padding:'9px'}}>+ Add Item</button>
+              <AccountPreviewWidget impact={acctImpact} label="Account Preview (checked items)"/>
+            </>)}
+
+            <button onClick={()=>{if(window.confirm('Delete this plan?'))delPlan(plan.id);}}
+              style={{background:'none',border:'1px solid #fee2e2',borderRadius:'8px',padding:'8px 14px',fontSize:'12px',color:'#ef4444',cursor:'pointer',fontWeight:'700',width:'100%',marginTop:'12px'}}>
+              Delete Plan
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const groupedPlanIds=new Set(groups.flatMap(g=>g.planIds));
+  const ungroupedPlans=plans.filter(p=>!groupedPlanIds.has(p.id));
+
+  return(
+    <div style={{maxWidth:'680px',margin:'0 auto',padding:'20px 16px'}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'16px'}}>
+        <div>
+          <h2 style={{margin:0,fontWeight:'900',fontSize:'20px',color:'var(--text)'}}>📋 Plans</h2>
+          <p style={{margin:'2px 0 0',fontSize:'12px',color:'#94a3b8'}}>Future expenses · Checklists · <b>⠿ drag</b> to group</p>
+        </div>
+        <div style={{display:'flex',gap:'8px'}}>
+          <button className="btn bs" onClick={()=>addPlan('grocery')} style={{padding:'9px 14px',fontSize:'12px',fontWeight:'700'}}>🛒 Grocery</button>
+          <button className="btn bp" onClick={()=>addPlan('standard')} style={{padding:'9px 14px',fontSize:'12px',fontWeight:'700'}}>+ Plan</button>
+        </div>
+      </div>
+
+      {plans.length===0&&(
+        <div style={{textAlign:'center',padding:'50px 20px',color:'#94a3b8'}}>
+          <div style={{fontSize:'44px',marginBottom:'10px'}}>📝</div>
+          <p style={{fontWeight:'700',color:'#64748b',margin:'0 0 6px'}}>No plans yet</p>
+          <p style={{fontSize:'13px',margin:'0 0 20px'}}>Use <b>+ Plan</b> for budgeted checklists, or <b>🛒 Grocery</b> for shopping lists. <br/>Drag the <b>⠿</b> handle to combine plans into groups.</p>
+          <div style={{display:'flex',gap:'8px',justifyContent:'center'}}>
+            <button className="btn bs" onClick={()=>addPlan('grocery')}>🛒 New Grocery Run</button>
+            <button className="btn bp" onClick={()=>addPlan('standard')}>+ New Plan</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── GROUPS ── */}
+      {groups.map(group=>{
+        const groupPlans=plans.filter(p=>group.planIds.includes(p.id));
+        if(groupPlans.length===0) return null;
+        const impact=computeImpact(groupPlans);
+        const isDropTarget=dropHint?.type==='group'&&dropHint?.id===group.id;
+        const totalAmt=groupPlans.reduce((s,p)=>s+(p.type==='grocery'?parseFloat(p.groceryTotal||0):p.items.reduce((ss,it)=>ss+(it.amount||0),0)),0);
+        const totalChecked=groupPlans.reduce((s,p)=>s+(p.type==='grocery'?parseFloat(p.groceryTotal||0):p.items.filter(it=>it.checked).reduce((ss,it)=>ss+(it.amount||0),0)),0);
+        return(
+          <div key={group.id}
+            data-drop-group={group.id}
+            onDragOver={e=>onDragOver(e,group.id,'group')}
+            onDrop={e=>onDropOnGroup(e,group.id)}
+            style={{marginBottom:'18px',borderRadius:'16px',
+              border:`2px dashed ${isDropTarget?group.color:'#cbd5e1'}`,
+              background:isDropTarget?group.color+'08':'var(--card)',
+              transition:'border-color .2s,background .2s',padding:'14px 14px 8px'}}>
+            {/* Group header */}
+            <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px'}}>
+              <div style={{width:'12px',height:'12px',borderRadius:'50%',background:group.color,flexShrink:0}}/>
+              <input className="fi" style={{flex:1,fontWeight:'800',fontSize:'15px',background:'transparent',border:'none',padding:'2px 4px'}}
+                value={group.name} onChange={e=>updateGroup(group.id,{name:e.target.value})} placeholder="Group name"/>
+              {GROUP_COLORS.map(c=>(
+                <div key={c} onClick={()=>updateGroup(group.id,{color:c})}
+                  style={{width:'13px',height:'13px',borderRadius:'50%',background:c,cursor:'pointer',
+                    outline:group.color===c?`2px solid ${c}`:'2px solid transparent',outlineOffset:'2px',flexShrink:0}}/>
+              ))}
+              <button onClick={()=>{if(window.confirm('Remove this group? Plans will stay.'))delGroup(group.id);}}
+                style={{background:'none',border:'none',cursor:'pointer',color:'#cbd5e1',fontSize:'16px',padding:'4px',lineHeight:1,flexShrink:0}}
+                onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
+                onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}>×</button>
+            </div>
+            {/* Group summary pills */}
+            <div style={{display:'flex',gap:'6px',marginBottom:'10px',flexWrap:'wrap'}}>
+              <div style={{background:'#f1f5f9',borderRadius:'8px',padding:'6px 12px',textAlign:'center',minWidth:'60px'}}>
+                <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Plans</p>
+                <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:'var(--text)'}}>{groupPlans.length}</p>
+              </div>
+              <div style={{background:'#f1f5f9',borderRadius:'8px',padding:'6px 12px',textAlign:'center',minWidth:'80px'}}>
+                <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Total</p>
+                <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:'var(--text)'}}>{P(totalAmt)}</p>
+              </div>
+              <div style={{background:group.color+'18',borderRadius:'8px',padding:'6px 12px',textAlign:'center',minWidth:'80px',border:`1px solid ${group.color}30`}}>
+                <p style={{margin:0,fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase'}}>Committed</p>
+                <p style={{margin:0,fontSize:'14px',fontWeight:'900',color:group.color}}>{P(totalChecked)}</p>
+              </div>
+            </div>
+            {/* Combined account preview */}
+            <AccountPreviewWidget impact={impact} label="Combined Account Impact"/>
+            {/* Plans in group */}
+            <div style={{marginTop:'10px'}}>
+              {groupPlans.map(plan=>(
+                <div key={plan.id} style={{position:'relative'}}>
+                  {renderPlanCard(plan,true)}
+                  <button onClick={()=>removeFromGroup(group.id,plan.id)}
+                    style={{position:'absolute',top:'10px',right:'12px',background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:'6px',
+                      padding:'3px 7px',fontSize:'10px',color:'#64748b',cursor:'pointer',fontWeight:'700',zIndex:3}}
+                    title="Remove from group">↗ ungroup</button>
+                </div>
+              ))}
+            </div>
+            {/* Drop hint */}
+            {isDropTarget&&(
+              <div style={{border:`2px dashed ${group.color}`,borderRadius:'10px',padding:'10px',textAlign:'center',marginTop:'6px'}}>
+                <p style={{margin:0,fontSize:'12px',color:group.color,fontWeight:'700'}}>➕ Drop to add to {group.name}</p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* ── UNGROUPED PLANS ── */}
+      {ungroupedPlans.length>0&&groups.length>0&&(
+        <p style={{fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.05em',margin:'4px 0 10px'}}>Individual Plans</p>
+      )}
+      {ungroupedPlans.map(plan=>renderPlanCard(plan,false))}
     </div>
   );
 }
@@ -2027,7 +2524,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
           ].map(s=>(
             <div key={s.label} style={{background:s.bg,borderRadius:'10px',padding:'10px 12px',textAlign:'center'}}>
               <p style={{fontSize:'10px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>{s.label}</p>
-              <p style={{fontSize:'16px',fontWeight:'900',color:s.color,margin:0}}>{s.val>=0&&s.label==='Q Net'?'+':''}{P(s.val)}</p>
+              <p style={{fontSize:'13px',fontWeight:'900',color:s.color,margin:0,wordBreak:'break-word',overflowWrap:'anywhere'}}>{s.val>=0&&s.label==='Q Net'?'+':''}{P(s.val)}</p>
             </div>
           ))}
         </div>
