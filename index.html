@@ -1789,17 +1789,6 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
     );
   };
 
-  const groupedPlanIds=new Set(groups.flatMap(g=>g.planIds));
-  const ungroupedPlans=plans.filter(p=>!groupedPlanIds.has(p.id));
-  const payrollInGroup=groups.some(g=>g.planIds.includes('__payroll__'));
-  /* Virtual payroll plan — treated like a real plan for grouping & impact */
-  const virtualPayrollPlan={
-    id:'__payroll__',type:'payroll',title:'👷 Payroll',
-    items:planEmpSchedules.filter(s=>!s.alreadyPaid).map(s=>({
-      id:s.emp.id,label:s.emp.name,amount:s.amount,accountId:payrollPlanAcctId||''
-    }))
-  };
-
   /* ── Payroll schedule for Plans tab ── */
   const planFmtD=(d)=>{const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),dy=String(d.getDate()).padStart(2,'0');return`${y}-${mo}-${dy}`;};
   const planIsOverdue=(str)=>!!str&&new Date(str+'T12:00:00')<new Date(TODAY+'T12:00:00');
@@ -1837,6 +1826,16 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
   }):[];
   const planTotalUnpaid=planEmpSchedules.filter(s=>!s.alreadyPaid).reduce((t,s)=>t+s.amount,0);
   const planOverdueCount=planEmpSchedules.filter(s=>!s.alreadyPaid&&planIsOverdue(s.nextDateStr)).length;
+
+  const groupedPlanIds=new Set(groups.flatMap(g=>g.planIds));
+  const ungroupedPlans=plans.filter(p=>!groupedPlanIds.has(p.id));
+  const payrollInGroup=groups.some(g=>g.planIds.includes('__payroll__'));
+  const virtualPayrollPlan={
+    id:'__payroll__',type:'payroll',title:'👷 Payroll',
+    items:planEmpSchedules.filter(s=>!s.alreadyPaid).map(s=>({
+      id:s.emp.id,label:s.emp.name,amount:s.amount,accountId:payrollPlanAcctId||''
+    }))
+  };
 
   return(
     <div style={{maxWidth:'680px',margin:'0 auto',padding:'20px 16px'}}>
