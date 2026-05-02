@@ -411,9 +411,9 @@ function InfoIcon({text,title}){
 
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
-const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg'};
+const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg',categoryBudgets:[]};
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const getWeekKey=()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;};
+const getWeekKey=()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);const mo=String(d.getMonth()+1).padStart(2,'0');return `${d.getFullYear()}-${mo}-W${String(wk).padStart(2,'0')}`;};
 
 /* converts a username into a valid Firebase Auth email */
 const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifinance.app';
@@ -1037,9 +1037,8 @@ function MainApp({onLogout}){
   /* mExpAll = everything for net/total calculations (excludes pure transfers, includes payroll) */
   const mExpAll=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='transfer_in'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
-  /* Expected payroll based on employee salary × frequency — used as budget floor */
-  const FREQ_MULT={'Weekly':4,'Biweekly':2,'Monthly':1};
-  const expectedPayroll=employees.reduce((s,e)=>s+(e.salary&&e.frequency?((e.salary||0)*(FREQ_MULT[e.frequency]||1)):0),0);
+  /* Expected payroll = sum of monthly salaries (salary field is always per-month regardless of frequency) */
+  const expectedPayroll=employees.reduce((s,e)=>s+(e.salary||0),0);
   const mPayBudget=Math.max(mPay,expectedPayroll); /* whichever is higher protects the budget */
   const netClientExpected=expectedFromClients-mPayBudget;
 
@@ -1233,7 +1232,7 @@ function MainApp({onLogout}){
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll}/>}
@@ -3397,20 +3396,23 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 /* ════════  PAYROLL  ════════ */
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
+  const[empBank,setEmpBank]=useState('');const[empAcctName,setEmpAcctName]=useState('');const[empAcctNum,setEmpAcctNum]=useState('');const[empPayMethod,setEmpPayMethod]=useState('Bank Transfer');
+  const[showPayDetails,setShowPayDetails]=useState(null); /* employee id whose details are expanded */
   const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');const[editPayId,setEditPayId]=useState(null);
   /* Inline quick-pay picker state */
   const[inlinePayEmpId,setInlinePayEmpId]=useState(null);
   const[inlinePayAccId,setInlinePayAccId]=useState('');
 
   const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks — Fri)','Monthly':'Monthly (15th or 30th)'};
-  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);};
-  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');setEmpPayDay(e.payDay||30);};
+  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);setEmpBank('');setEmpAcctName('');setEmpAcctNum('');setEmpPayMethod('Bank Transfer');};
+  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');setEmpPayDay(e.payDay||30);setEmpBank(e.bank||'');setEmpAcctName(e.acctName||'');setEmpAcctNum(e.acctNum||'');setEmpPayMethod(e.payMethod||'Bank Transfer');};
   const saveEmp=()=>{
     if(!empName.trim())return;
     const sal=empSalary?parseFloat(empSalary):undefined;
     const pd=empFreq==='Monthly'?empPayDay:undefined;
-    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd}:x));}
-    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd}]);}
+    const payInfo={bank:empBank.trim(),acctName:empAcctName.trim(),acctNum:empAcctNum.trim(),payMethod:empPayMethod};
+    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo}:x));}
+    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo}]);}
     resetEmp();
   };
 
@@ -3688,6 +3690,20 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                   </select>
                 </div>
               )}
+              {/* Payment details section */}
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:'12px',marginTop:'4px'}}>
+                <p style={{margin:'0 0 8px',fontSize:'11px',fontWeight:'800',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em'}}>💳 Payment Details</p>
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  <div><span className="fl">Payment Method</span>
+                    <select className="fi" value={empPayMethod} onChange={e=>setEmpPayMethod(e.target.value)}>
+                      {['Bank Transfer','GCash','Maya','PayPal','Cash','Other'].map(m=><option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div><span className="fl">Bank / e-Wallet Name</span><input className="fi" value={empBank} onChange={e=>setEmpBank(e.target.value)} placeholder="e.g. BDO, GCash, UnionBank"/></div>
+                  <div><span className="fl">Account Holder Name</span><input className="fi" value={empAcctName} onChange={e=>setEmpAcctName(e.target.value)} placeholder="Full name on account"/></div>
+                  <div><span className="fl">Account / Number</span><input className="fi" value={empAcctNum} onChange={e=>setEmpAcctNum(e.target.value)} placeholder="Account or phone number"/></div>
+                </div>
+              </div>
               <div style={{display:'flex',gap:'8px'}}>
                 <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={saveEmp}><Ico n={editEmpId?'check':'users'} s={14} c="#fff"/>{editEmpId?'Save Employee':'Add Employee'}</button>
                 {editEmpId&&<button className="btn bs" onClick={resetEmp}>Cancel</button>}
@@ -3711,6 +3727,21 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                         <p style={{fontSize:'10px',color:sc.alreadyPaid?'#16a34a':isOverdue(sc.nextDate)?'#ef4444':'#6366f1',margin:'1px 0 0',fontWeight:'700'}}>
                           {sc.alreadyPaid?`✓ Paid · Next: ${sc.nextDate}`:`${isOverdue(sc.nextDate)?'⚠ Due':'Next:'} ${sc.nextDate} · ${P(sc.amount)}`}
                         </p>
+                        {/* Payment details toggle */}
+                        {(e.bank||e.acctNum||e.acctName)&&(
+                          <button onClick={()=>setShowPayDetails(showPayDetails===e.id?null:e.id)}
+                            style={{background:'none',border:'none',padding:'2px 0',fontSize:'10px',color:'#6366f1',cursor:'pointer',fontWeight:'700',textAlign:'left'}}>
+                            {showPayDetails===e.id?'▲ Hide payment details':'💳 Show payment details'}
+                          </button>
+                        )}
+                        {showPayDetails===e.id&&(
+                          <div style={{marginTop:'6px',padding:'8px 10px',background:'#f0f4ff',borderRadius:'8px',fontSize:'11px',color:'#3730a3',lineHeight:'1.6'}}>
+                            {e.payMethod&&<div><b>Method:</b> {e.payMethod}</div>}
+                            {e.bank&&<div><b>Bank/Wallet:</b> {e.bank}</div>}
+                            {e.acctName&&<div><b>Account Name:</b> {e.acctName}</div>}
+                            {e.acctNum&&<div><b>Account #:</b> {e.acctNum}</div>}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div style={{display:'flex',gap:'4px'}}>
@@ -3780,7 +3811,30 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths}){
+function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
+
+  /* Category budget limits state */
+  const catBudgets=settings.categoryBudgets||[];
+  const[showCatForm,setShowCatForm]=useState(false);
+  const[newCatLabel,setNewCatLabel]=useState('Groceries');
+  const[newCatAmt,setNewCatAmt]=useState('');
+
+  /* Compute per-category spending from this month's expenses */
+  const catSpending=React.useMemo(()=>{
+    const map={};
+    (expenses||[]).forEach(x=>{if(!x.alloc&&x.category)map[x.category]=(map[x.category]||0)+(x.amount||0);});
+    return map;
+  },[expenses]);
+
+  const addCatBudget=()=>{
+    if(!newCatLabel||!newCatAmt)return;
+    const updated=[...catBudgets,{id:uid(),label:newCatLabel,amount:parseFloat(newCatAmt)||0}];
+    setSettings(s=>({...s,categoryBudgets:updated}));
+    setShowCatForm(false);setNewCatAmt('');
+  };
+  const removeCatBudget=(id)=>{
+    setSettings(s=>({...s,categoryBudgets:(s.categoryBudgets||[]).filter(x=>x.id!==id)}));
+  };
 
   /* Emergency fund calc */
   const emergAcct=accounts.find(a=>a.id===emergencyAcctId);
@@ -3955,6 +4009,79 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
           <p style={{fontSize:'12px',color:'#ef4444',margin:'6px 0 0',fontWeight:'600'}}>⚠ Over budget by {P(essentialsSpent-essentialsAllowed)}</p>
         )}
         <p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0',fontStyle:'italic'}}>Computed from actual logged expenses. Updates as you confirm allocations.</p>
+      </div>
+
+      {/* ── 4b. CATEGORY SPENDING LIMITS ── */}
+      <div style={{background:'var(--card2)',borderRadius:'12px',padding:'16px 18px',border:'1px solid var(--border)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:catBudgets.length>0||showCatForm?'12px':'0'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>📊 Category Limits</span>
+            <InfoIcon text="Set a monthly ₱ cap per category. When your spending in that category hits the limit, you'll see a warning. This helps you control specific buckets like Groceries or Fuel without touching the overall Essentials budget." title="Category Spending Limits"/>
+          </div>
+          <button onClick={()=>{setShowCatForm(v=>!v);setNewCatAmt('');}} className="btn bs" style={{padding:'4px 12px',fontSize:'12px',fontWeight:'700'}}>
+            {showCatForm?'✕ Cancel':'+ Add Limit'}
+          </button>
+        </div>
+
+        {showCatForm&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 130px auto',gap:'8px',marginBottom:'12px',alignItems:'end'}}>
+            <div>
+              <span className="fl">Category</span>
+              <CategorySelect value={newCatLabel} onChange={setNewCatLabel}/>
+            </div>
+            <div>
+              <span className="fl">Monthly Limit (₱)</span>
+              <input className="fi" type="number" min="0" step="100" value={newCatAmt}
+                onChange={e=>setNewCatAmt(e.target.value)} placeholder="e.g. 8000"/>
+            </div>
+            <button className="btn bp" style={{alignSelf:'end',padding:'9px 14px',fontSize:'13px',fontWeight:'700'}}
+              onClick={addCatBudget}>Save</button>
+          </div>
+        )}
+
+        {catBudgets.length===0&&!showCatForm&&(
+          <p style={{fontSize:'12px',color:'var(--text4)',margin:'8px 0 0',textAlign:'center',padding:'8px 0'}}>
+            No limits set yet. Tap <b>+ Add Limit</b> to cap a category like Groceries or Fuel.
+          </p>
+        )}
+
+        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+          {catBudgets.map(cb=>{
+            const spent=catSpending[cb.label]||0;
+            const pct=cb.amount>0?Math.min(100,Math.round((spent/cb.amount)*100)):0;
+            const over=spent>cb.amount&&cb.amount>0;
+            const near=!over&&pct>=80;
+            const meta=getCatMeta(cb.label);
+            return(
+              <div key={cb.id}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                    <span style={{width:'8px',height:'8px',borderRadius:'50%',background:meta.color,flexShrink:0,display:'inline-block'}}/>
+                    <span style={{fontSize:'13px',fontWeight:'700',color:'var(--text)'}}>{cb.label}</span>
+                    {near&&!over&&<span style={{fontSize:'10px',fontWeight:'700',color:'#f59e0b',background:'#fffbeb',padding:'1px 6px',borderRadius:'99px'}}>near limit</span>}
+                    {over&&<span style={{fontSize:'10px',fontWeight:'700',color:'#ef4444',background:'#fef2f2',padding:'1px 6px',borderRadius:'99px'}}>over!</span>}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                    <span style={{fontSize:'12px',color:over?'#ef4444':near?'#f59e0b':'var(--text3)',fontWeight:'700'}}>
+                      {P(spent)}<span style={{fontWeight:'400',color:'var(--text4)'}}> / {P(cb.amount)}</span>
+                    </span>
+                    <button onClick={()=>removeCatBudget(cb.id)}
+                      style={{background:'none',border:'none',cursor:'pointer',color:'#cbd5e1',fontSize:'15px',lineHeight:1,padding:'2px 4px',borderRadius:'4px'}}
+                      onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
+                      onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}
+                      title="Remove limit">✕</button>
+                  </div>
+                </div>
+                <div style={{height:'7px',borderRadius:'99px',background:'var(--pbar-bg)',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${pct}%`,background:over?'#ef4444':near?'#f59e0b':meta.color,borderRadius:'99px',transition:'width .4s'}}/>
+                </div>
+                {over&&(
+                  <p style={{fontSize:'11px',color:'#ef4444',margin:'3px 0 0',fontWeight:'600'}}>⚠ Over by {P(spent-cb.amount)} — consider cutting back or adjusting your limit.</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── 5. EMERGENCY FUND ── */}
