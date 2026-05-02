@@ -2092,7 +2092,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
       if(byAcctTithe.length>0){
         setExpenses(prev=>[...(prev||[]),...byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe wk ${wk}`}))]);
       }
-      setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY}]);
+      setTitheLog(prev=>[...prev.filter(t=>t.week!==wk),{week:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase}]);
     }
     /* — Savings — */
     if(consoSavings&&!savingsDone&&savings>0){
