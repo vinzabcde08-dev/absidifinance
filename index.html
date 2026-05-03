@@ -1346,6 +1346,10 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
   const plansRef=useRef(plans);
   const[payrollPlanAcctId,setPayrollPlanAcctId]=useState(()=>localStorage.getItem('absidi_payroll_plan_acct')||'');
   useEffect(()=>{localStorage.setItem('absidi_payroll_plan_acct',payrollPlanAcctId);},[payrollPlanAcctId]);
+  const[skippedPayDates,setSkippedPayDates]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_skip_pay')||'[]')}catch{return[]}});
+  useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
+  const skipPayDate=(empId,date)=>setSkippedPayDates(prev=>[...prev.filter(s=>!(s.empId===empId&&s.date===date)),{empId,date}]);
+  const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
   const PLAN_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0891b2','#ec4899'];
   const GROUP_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
 
@@ -1802,8 +1806,16 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
       const y=today.getFullYear(),m=today.getMonth();
       const day=today.getDate();
       let periodStart,nextDate,missedDate=null;
-      if(day<=pd){nextDate=new Date(y,m,pd);periodStart=planFmtD(new Date(y,m-1,pd));}
-      else{periodStart=planFmtD(new Date(y,m,pd));nextDate=new Date(y,m+1,pd);missedDate=planFmtD(new Date(y,m,pd));}
+      if(day<=pd){
+        nextDate=new Date(y,m,pd);
+        periodStart=planFmtD(new Date(y,m-1,pd));
+        /* if last month's pay day has already passed, it may be overdue */
+        if(periodStart<=TODAY) missedDate=periodStart;
+      } else {
+        periodStart=planFmtD(new Date(y,m,pd));
+        nextDate=new Date(y,m+1,pd);
+        missedDate=planFmtD(new Date(y,m,pd));
+      }
       alreadyPaid=empPays.some(p=>p.date>=periodStart&&p.date<=TODAY);
       lastEntry=alreadyPaid?empPays.find(p=>p.date>=periodStart&&p.date<=TODAY):null;
       const displayDate=(!alreadyPaid&&missedDate)?missedDate:planFmtD(nextDate);
@@ -1814,17 +1826,28 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
         const daysSince=Math.round((today-lastD)/(1000*60*60*24));
         if(daysSince<14){alreadyPaid=true;lastEntry=empPays[0];const nd=new Date(lastD);nd.setDate(lastD.getDate()+14);const dow=nd.getDay();if(dow!==5)nd.setDate(nd.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(nd);}
         else{const missedD=new Date(lastD);missedD.setDate(lastD.getDate()+14);const dow=missedD.getDay();if(dow!==5)missedD.setDate(missedD.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(missedD);}
-      } else {const nd=new Date(today);const dow=nd.getDay();nd.setDate(nd.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(nd);}
+      } else {
+        /* No history — check if a recent past Friday was a missed pay day */
+        const dowToday=today.getDay();
+        const daysSinceFri=dowToday===5?0:(dowToday+7-5)%7;
+        if(daysSinceFri>0&&daysSinceFri<14){
+          const pastFri=new Date(today);pastFri.setDate(today.getDate()-daysSinceFri);
+          nextDateStr=planFmtD(pastFri); /* overdue — recent Friday passed unpaid */
+        } else {
+          const nd=new Date(today);nd.setDate(today.getDate()+((5-today.getDay()+7)%7));nextDateStr=planFmtD(nd);
+        }
+      }
       amount=Math.round(sal/2);
     } else {
       if(empPays.length>0){lastEntry=empPays[0];alreadyPaid=Math.round((today-new Date(lastEntry.date+'T12:00:00'))/(1000*60*60*24))<7;}
       const nd=new Date(today);const dow=nd.getDay();nd.setDate(nd.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(nd);
       amount=Math.round(sal/4);
     }
-    return{emp,nextDateStr,amount,alreadyPaid,lastEntry,freq};
+    const isSkipped=!alreadyPaid&&skippedPayDates.some(s=>s.empId===emp.id&&s.date===nextDateStr);
+    return{emp,nextDateStr,amount,alreadyPaid,lastEntry,freq,isSkipped};
   }):[];
-  const planTotalUnpaid=planEmpSchedules.filter(s=>!s.alreadyPaid).reduce((t,s)=>t+s.amount,0);
-  const planOverdueCount=planEmpSchedules.filter(s=>!s.alreadyPaid&&planIsOverdue(s.nextDateStr)).length;
+  const planTotalUnpaid=planEmpSchedules.filter(s=>!s.alreadyPaid&&!s.isSkipped).reduce((t,s)=>t+s.amount,0);
+  const planOverdueCount=planEmpSchedules.filter(s=>!s.alreadyPaid&&!s.isSkipped&&planIsOverdue(s.nextDateStr)).length;
 
   const groupedPlanIds=new Set(groups.flatMap(g=>g.planIds));
   const ungroupedPlans=plans.filter(p=>!groupedPlanIds.has(p.id));
@@ -2000,25 +2023,31 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
             </select>
           </div>
           {/* Employee rows */}
-          {planEmpSchedules.map(({emp,nextDateStr,amount,alreadyPaid,lastEntry,freq})=>{
-            const overdue=!alreadyPaid&&planIsOverdue(nextDateStr);
+          {planEmpSchedules.map(({emp,nextDateStr,amount,alreadyPaid,lastEntry,freq,isSkipped})=>{
+            const overdue=!alreadyPaid&&!isSkipped&&planIsOverdue(nextDateStr);
             const diff=nextDateStr?Math.round((new Date(nextDateStr+'T12:00:00')-new Date(TODAY+'T12:00:00'))/(1000*60*60*24)):0;
             const diffLabel=diff<0?`${Math.abs(diff)}d overdue`:diff===0?'Today':diff===1?'Tomorrow':`in ${diff}d`;
             return(
               <div key={emp.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'8px 14px',borderTop:'1px solid #e0e7ff'}}>
-                <div style={{width:'28px',height:'28px',background:alreadyPaid?'#dcfce7':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <span style={{fontSize:'12px'}}>{alreadyPaid?'✓':'👤'}</span>
+                <div style={{width:'28px',height:'28px',background:alreadyPaid?'#dcfce7':isSkipped?'#f1f5f9':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <span style={{fontSize:'12px'}}>{alreadyPaid?'✓':isSkipped?'⏭':'👤'}</span>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</p>
                   <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>{emp.role||freq}</p>
                   {alreadyPaid&&lastEntry&&<p style={{margin:'1px 0 0',fontSize:'10px',color:'#16a34a',fontWeight:'700'}}>✓ Paid {lastEntry.date} · {P(lastEntry.amount)}</p>}
-                  {!alreadyPaid&&nextDateStr&&<p style={{margin:'1px 0 0',fontSize:'10px',color:overdue?'#ef4444':'#6366f1',fontWeight:'700'}}>{overdue?'⚠':'🗓'} {nextDateStr} ({diffLabel})</p>}
+                  {isSkipped&&nextDateStr&&<p style={{margin:'1px 0 0',fontSize:'10px',color:'#94a3b8',fontWeight:'700'}}>⏭ Skipped {nextDateStr}</p>}
+                  {!alreadyPaid&&!isSkipped&&nextDateStr&&<p style={{margin:'1px 0 0',fontSize:'10px',color:overdue?'#ef4444':'#6366f1',fontWeight:'700'}}>{overdue?'⚠ Overdue':'🗓'} {nextDateStr}{!overdue?` (${diffLabel})`:` (${Math.abs(diff)}d ago)`}</p>}
                 </div>
-                <div style={{textAlign:'right',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:'6px',flexShrink:0}}>
+                  {!alreadyPaid&&nextDateStr&&(
+                    isSkipped
+                      ?<button onClick={()=>unskipPayDate(emp.id,nextDateStr)} style={{fontSize:'10px',padding:'3px 8px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'none',cursor:'pointer',color:'#6366f1',fontWeight:'700'}}>Restore</button>
+                      :<button onClick={()=>skipPayDate(emp.id,nextDateStr)} style={{fontSize:'10px',padding:'3px 8px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'none',cursor:'pointer',color:'#94a3b8',fontWeight:'600'}}>Skip</button>
+                  )}
                   {alreadyPaid
                     ?<span style={{fontSize:'11px',fontWeight:'800',color:'#16a34a',background:'#dcfce7',padding:'3px 8px',borderRadius:'6px'}}>✓ Paid</span>
-                    :<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(amount)}</span>}
+                    :!isSkipped&&<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(amount)}</span>}
                 </div>
               </div>
             );
@@ -2074,7 +2103,9 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   /* ── Consolidate & Withdraw modal ── */
   const[showConsolidate,setShowConsolidate]=useState(false);
   const[consoDest,setConsoDest]=useState('');
-  const[consoFee,setConsoFee]=useState('');
+  const[consoFeeTithe,setConsoFeeTithe]=useState('');
+  const[consoFeeSavings,setConsoFeeSavings]=useState('');
+  const[consoFeeInvest,setConsoFeeInvest]=useState('');
   const[consoTithe,setConsoTithe]=useState(true);
   const[consoSavings,setConsoSavings]=useState(true);
   const[consoInvest,setConsoInvest]=useState(true);
@@ -2120,11 +2151,16 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     if(nonInvestTotal>0){
       setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:nonInvestTotal,type:'Allocation Transfer In',accountId:consoDest,alloc:'allocation_in',note:`Consolidated to ${destAcct?acctLabel(destAcct):'account'}`}]);
     }
-    /* — ATM fee — */
-    if(consoFee&&parseFloat(consoFee)>0){
-      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(consoFee),category:'Bank Fees',accountId:consoDest,note:'ATM withdrawal fee'}]);
-    }
-    setShowConsolidate(false);setConsoDest('');setConsoFee('');setConsoTithe(true);setConsoSavings(true);setConsoInvest(true);
+    /* — Individual transfer fees — */
+    const feeEntries=[];
+    if(consoTithe&&!titheDone&&consoFeeTithe&&parseFloat(consoFeeTithe)>0)
+      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeTithe),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Tithes withdrawal'});
+    if(consoSavings&&!savingsDone&&consoFeeSavings&&parseFloat(consoFeeSavings)>0)
+      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeSavings),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Savings withdrawal'});
+    if(consoInvest&&!investDone&&consoFeeInvest&&parseFloat(consoFeeInvest)>0)
+      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeInvest),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Investment withdrawal'});
+    if(feeEntries.length>0) setExpenses(prev=>[...(prev||[]),...feeEntries]);
+    setShowConsolidate(false);setConsoDest('');setConsoFeeTithe('');setConsoFeeSavings('');setConsoFeeInvest('');setConsoTithe(true);setConsoSavings(true);setConsoInvest(true);
   };
 
   const[qaMode,setQaMode]=useState(null); /* null | 'income' | 'expense' */
@@ -2396,38 +2432,62 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               </div>
             </div>
 
-            {/* Allocation checkboxes */}
+            {/* Allocation checkboxes with individual fees */}
             <p style={{fontSize:'11px',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.05em',margin:'0 0 10px'}}>Select allocations to consolidate</p>
             <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'18px'}}>
               {tithe>0&&(
-                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoTithe&&!titheDone?'#fffbeb':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoTithe&&!titheDone?'#f59e0b':'#e2e8f0'}`,cursor:titheDone?'not-allowed':'pointer',opacity:titheDone?0.5:1}}>
-                  <input type="checkbox" checked={consoTithe&&!titheDone} disabled={titheDone} onChange={e=>setConsoTithe(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#f59e0b'}}/>
-                  <div style={{flex:1}}>
-                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>🙏 Tithes</span>
-                    {titheDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
-                  </div>
-                  <span style={{fontWeight:'800',color:'#b45309'}}>{P(tithe)}</span>
-                </label>
+                <div style={{background:consoTithe&&!titheDone?'#fffbeb':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoTithe&&!titheDone?'#f59e0b':'#e2e8f0'}`,opacity:titheDone?0.5:1,overflow:'hidden'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',cursor:titheDone?'not-allowed':'pointer'}}>
+                    <input type="checkbox" checked={consoTithe&&!titheDone} disabled={titheDone} onChange={e=>setConsoTithe(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#f59e0b'}}/>
+                    <div style={{flex:1}}>
+                      <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>🙏 Tithes</span>
+                      {titheDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                    </div>
+                    <span style={{fontWeight:'800',color:'#b45309'}}>{P(tithe)}</span>
+                  </label>
+                  {consoTithe&&!titheDone&&(
+                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontSize:'11px',color:'#92400e',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeTithe} onChange={e=>setConsoFeeTithe(e.target.value)} placeholder="₱0 (optional)"/>
+                    </div>
+                  )}
+                </div>
               )}
               {savings>0&&(
-                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoSavings&&!savingsDone?'#f0fdf4':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoSavings&&!savingsDone?'#10b981':'#e2e8f0'}`,cursor:savingsDone?'not-allowed':'pointer',opacity:savingsDone?0.5:1}}>
-                  <input type="checkbox" checked={consoSavings&&!savingsDone} disabled={savingsDone} onChange={e=>setConsoSavings(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#10b981'}}/>
-                  <div style={{flex:1}}>
-                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>💰 Savings</span>
-                    {savingsDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
-                  </div>
-                  <span style={{fontWeight:'800',color:'#059669'}}>{P(savings)}</span>
-                </label>
+                <div style={{background:consoSavings&&!savingsDone?'#f0fdf4':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoSavings&&!savingsDone?'#10b981':'#e2e8f0'}`,opacity:savingsDone?0.5:1,overflow:'hidden'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',cursor:savingsDone?'not-allowed':'pointer'}}>
+                    <input type="checkbox" checked={consoSavings&&!savingsDone} disabled={savingsDone} onChange={e=>setConsoSavings(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#10b981'}}/>
+                    <div style={{flex:1}}>
+                      <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>💰 Savings</span>
+                      {savingsDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                    </div>
+                    <span style={{fontWeight:'800',color:'#059669'}}>{P(savings)}</span>
+                  </label>
+                  {consoSavings&&!savingsDone&&(
+                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontSize:'11px',color:'#065f46',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeSavings} onChange={e=>setConsoFeeSavings(e.target.value)} placeholder="₱0 (optional)"/>
+                    </div>
+                  )}
+                </div>
               )}
               {invest>0&&(
-                <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',background:consoInvest&&!investDone?'#f5f3ff':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoInvest&&!investDone?'#6366f1':'#e2e8f0'}`,cursor:investDone?'not-allowed':'pointer',opacity:investDone?0.5:1}}>
-                  <input type="checkbox" checked={consoInvest&&!investDone} disabled={investDone} onChange={e=>setConsoInvest(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#6366f1'}}/>
-                  <div style={{flex:1}}>
-                    <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>📈 Investment</span>
-                    {investDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
-                  </div>
-                  <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(invest)}</span>
-                </label>
+                <div style={{background:consoInvest&&!investDone?'#f5f3ff':'var(--bg)',borderRadius:'10px',border:`1.5px solid ${consoInvest&&!investDone?'#6366f1':'#e2e8f0'}`,opacity:investDone?0.5:1,overflow:'hidden'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:'12px',padding:'12px 14px',cursor:investDone?'not-allowed':'pointer'}}>
+                    <input type="checkbox" checked={consoInvest&&!investDone} disabled={investDone} onChange={e=>setConsoInvest(e.target.checked)} style={{width:'16px',height:'16px',accentColor:'#6366f1'}}/>
+                    <div style={{flex:1}}>
+                      <span style={{fontWeight:'700',fontSize:'13px',color:'var(--text)'}}>📈 Investment</span>
+                      {investDone&&<span style={{fontSize:'11px',color:'#10b981',marginLeft:'6px'}}>✓ already done</span>}
+                    </div>
+                    <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(invest)}</span>
+                  </label>
+                  {consoInvest&&!investDone&&(
+                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontSize:'11px',color:'#3730a3',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeInvest} onChange={e=>setConsoFeeInvest(e.target.value)} placeholder="₱0 (optional)"/>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -2438,18 +2498,12 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             </div>
 
             {/* Destination account */}
-            <div style={{marginBottom:'14px'}}>
+            <div style={{marginBottom:'22px'}}>
               <span className="fl">Destination Account (where to receive the money)</span>
               <select className="fi" value={consoDest} onChange={e=>setConsoDest(e.target.value)}>
                 <option value="">— Pick account to withdraw from —</option>
                 {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
               </select>
-            </div>
-
-            {/* ATM fee */}
-            <div style={{marginBottom:'22px'}}>
-              <span className="fl">ATM Withdrawal Fee (optional)</span>
-              <input className="fi" type="number" value={consoFee} onChange={e=>setConsoFee(e.target.value)} placeholder="e.g. 15 — auto-logged as Bank Fees expense"/>
             </div>
 
             <div style={{display:'flex',gap:'10px'}}>
