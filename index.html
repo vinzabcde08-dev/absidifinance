@@ -2103,9 +2103,9 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   /* ── Consolidate & Withdraw modal ── */
   const[showConsolidate,setShowConsolidate]=useState(false);
   const[consoDest,setConsoDest]=useState('');
-  const[consoFeeTithe,setConsoFeeTithe]=useState('');
-  const[consoFeeSavings,setConsoFeeSavings]=useState('');
-  const[consoFeeInvest,setConsoFeeInvest]=useState('');
+  const[consoFeesTithe,setConsoFeesTithe]=useState({});   /* {[acctId]: amountStr} per account */
+  const[consoFeesSavings,setConsoFeesSavings]=useState({});
+  const[consoFeesInvest,setConsoFeesInvest]=useState({});
   const[consoTithe,setConsoTithe]=useState(true);
   const[consoSavings,setConsoSavings]=useState(true);
   const[consoInvest,setConsoInvest]=useState(true);
@@ -2151,16 +2151,22 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     if(nonInvestTotal>0){
       setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:nonInvestTotal,type:'Allocation Transfer In',accountId:consoDest,alloc:'allocation_in',note:`Consolidated to ${destAcct?acctLabel(destAcct):'account'}`}]);
     }
-    /* — Individual transfer fees — */
+    /* — Per-account transfer fees — */
     const feeEntries=[];
-    if(consoTithe&&!titheDone&&consoFeeTithe&&parseFloat(consoFeeTithe)>0)
-      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeTithe),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Tithes withdrawal'});
-    if(consoSavings&&!savingsDone&&consoFeeSavings&&parseFloat(consoFeeSavings)>0)
-      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeSavings),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Savings withdrawal'});
-    if(consoInvest&&!investDone&&consoFeeInvest&&parseFloat(consoFeeInvest)>0)
-      feeEntries.push({id:uid(),date:TODAY,amount:parseFloat(consoFeeInvest),category:'Bank Fees',accountId:consoDest,note:'Transfer fee — Investment withdrawal'});
+    const pushFees=(feesMap,label)=>{
+      Object.entries(feesMap).forEach(([acctId,feeStr])=>{
+        const fee=parseFloat(feeStr)||0;
+        if(fee>0){
+          const srcAcct=accounts.find(a=>a.id===acctId);
+          feeEntries.push({id:uid(),date:TODAY,amount:fee,category:'Bank Fees',accountId:acctId==='_'?consoDest:acctId,note:`Transfer fee — ${label}${srcAcct?' from '+acctLabel(srcAcct):''}`});
+        }
+      });
+    };
+    if(consoTithe&&!titheDone) pushFees(consoFeesTithe,'Tithe withdrawal');
+    if(consoSavings&&!savingsDone) pushFees(consoFeesSavings,'Savings withdrawal');
+    if(consoInvest&&!investDone) pushFees(consoFeesInvest,'Investment withdrawal');
     if(feeEntries.length>0) setExpenses(prev=>[...(prev||[]),...feeEntries]);
-    setShowConsolidate(false);setConsoDest('');setConsoFeeTithe('');setConsoFeeSavings('');setConsoFeeInvest('');setConsoTithe(true);setConsoSavings(true);setConsoInvest(true);
+    setShowConsolidate(false);setConsoDest('');setConsoFeesTithe({});setConsoFeesSavings({});setConsoFeesInvest({});setConsoTithe(true);setConsoSavings(true);setConsoInvest(true);
   };
 
   const[qaMode,setQaMode]=useState(null); /* null | 'income' | 'expense' */
@@ -2446,9 +2452,19 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                     <span style={{fontWeight:'800',color:'#b45309'}}>{P(tithe)}</span>
                   </label>
                   {consoTithe&&!titheDone&&(
-                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
-                      <span style={{fontSize:'11px',color:'#92400e',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
-                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeTithe} onChange={e=>setConsoFeeTithe(e.target.value)} placeholder="₱0 (optional)"/>
+                    <div style={{padding:'2px 14px 10px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                      {byAcctTithe.length>0?byAcctTithe.map(({acct,titheAmt})=>(
+                        <div key={acct.id} style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                          <span style={{fontSize:'11px',color:'#92400e',fontWeight:'600',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acctLabel(acct)} · {P(titheAmt)}</span>
+                          <span style={{fontSize:'10px',color:'#b45309',whiteSpace:'nowrap',flexShrink:0}}>Fee:</span>
+                          <input className="fi" type="number" min="0" style={{padding:'4px 7px',fontSize:'11px',width:'88px',flexShrink:0}} value={consoFeesTithe[acct.id]||''} onChange={e=>setConsoFeesTithe(prev=>({...prev,[acct.id]:e.target.value}))} placeholder="₱0"/>
+                        </div>
+                      )):(
+                        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                          <span style={{fontSize:'11px',color:'#92400e',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                          <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeesTithe['_']||''} onChange={e=>setConsoFeesTithe({'_':e.target.value})} placeholder="₱0 (optional)"/>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2464,9 +2480,22 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                     <span style={{fontWeight:'800',color:'#059669'}}>{P(savings)}</span>
                   </label>
                   {consoSavings&&!savingsDone&&(
-                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
-                      <span style={{fontSize:'11px',color:'#065f46',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
-                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeSavings} onChange={e=>setConsoFeeSavings(e.target.value)} placeholder="₱0 (optional)"/>
+                    <div style={{padding:'2px 14px 10px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                      {byAcctTithe.length>0?byAcctTithe.map(({acct,inc})=>{
+                        const savAmt=parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2));
+                        return(
+                          <div key={acct.id} style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            <span style={{fontSize:'11px',color:'#065f46',fontWeight:'600',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acctLabel(acct)} · {P(savAmt)}</span>
+                            <span style={{fontSize:'10px',color:'#059669',whiteSpace:'nowrap',flexShrink:0}}>Fee:</span>
+                            <input className="fi" type="number" min="0" style={{padding:'4px 7px',fontSize:'11px',width:'88px',flexShrink:0}} value={consoFeesSavings[acct.id]||''} onChange={e=>setConsoFeesSavings(prev=>({...prev,[acct.id]:e.target.value}))} placeholder="₱0"/>
+                          </div>
+                        );
+                      }):(
+                        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                          <span style={{fontSize:'11px',color:'#065f46',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                          <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeesSavings['_']||''} onChange={e=>setConsoFeesSavings({'_':e.target.value})} placeholder="₱0 (optional)"/>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2482,9 +2511,22 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                     <span style={{fontWeight:'800',color:'#4f46e5'}}>{P(invest)}</span>
                   </label>
                   {consoInvest&&!investDone&&(
-                    <div style={{padding:'0 14px 10px',display:'flex',alignItems:'center',gap:'8px'}}>
-                      <span style={{fontSize:'11px',color:'#3730a3',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
-                      <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeeInvest} onChange={e=>setConsoFeeInvest(e.target.value)} placeholder="₱0 (optional)"/>
+                    <div style={{padding:'2px 14px 10px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                      {byAcctTithe.length>0?byAcctTithe.map(({acct,inc})=>{
+                        const invAmt=parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2));
+                        return(
+                          <div key={acct.id} style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            <span style={{fontSize:'11px',color:'#3730a3',fontWeight:'600',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acctLabel(acct)} · {P(invAmt)}</span>
+                            <span style={{fontSize:'10px',color:'#4f46e5',whiteSpace:'nowrap',flexShrink:0}}>Fee:</span>
+                            <input className="fi" type="number" min="0" style={{padding:'4px 7px',fontSize:'11px',width:'88px',flexShrink:0}} value={consoFeesInvest[acct.id]||''} onChange={e=>setConsoFeesInvest(prev=>({...prev,[acct.id]:e.target.value}))} placeholder="₱0"/>
+                          </div>
+                        );
+                      }):(
+                        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                          <span style={{fontSize:'11px',color:'#3730a3',fontWeight:'600',whiteSpace:'nowrap'}}>Transfer fee:</span>
+                          <input className="fi" type="number" min="0" style={{padding:'5px 8px',fontSize:'12px',flex:1}} value={consoFeesInvest['_']||''} onChange={e=>setConsoFeesInvest({'_':e.target.value})} placeholder="₱0 (optional)"/>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
