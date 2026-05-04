@@ -1042,6 +1042,8 @@ function MainApp({onLogout}){
   /* mExpAll = everything for net/total calculations (excludes pure transfers, includes payroll) */
   const mExpAll=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='transfer_in'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
+  /* Static monthly salary sum — used for display labels in HomeTab/BudgetTab */
+  const expectedPayroll=employees.reduce((s,e)=>s+(e.salary||0),0);
   /* Pending payroll = actual obligations from pay schedule (overdue + upcoming), mirrors PayrollTab logic */
   const pendingPayroll=employees.reduce((sum,emp)=>{
     const freq=emp.frequency||'Monthly';
