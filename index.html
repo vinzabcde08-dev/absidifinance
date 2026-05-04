@@ -863,6 +863,9 @@ function MainApp({onLogout}){
   const[investLog,setInvestLog]=useState(()=>ls.get(uk('ph_invest_log'),[]));
   const[transfers,setTransfers]=useState(()=>ls.get(uk('ph_transfers'),[]));
   const[plans,setPlans]=useState(()=>ls.get(uk('ph_plans'),[]));
+  const[skippedPayDates,setSkippedPayDates]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_skip_pay')||'[]')}catch{return[]}});
+  const skipPayDate=(empId,date)=>setSkippedPayDates(prev=>[...prev.filter(s=>!(s.empId===empId&&s.date===date)),{empId,date}]);
+  const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
   const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
   const[emergencyAcctId,setEmergencyAcctId]=useState(()=>ls.get(uk('ph_emerg_acct'),''));
   const[emergencyMonths,setEmergencyMonths]=useState(()=>ls.get(uk('ph_emerg_months'),3));
@@ -911,6 +914,7 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_invest_log'),investLog);},[investLog]);
   useEffect(()=>{ls.set(uk('ph_transfers'),transfers);},[transfers]);
   useEffect(()=>{ls.set(uk('ph_plans'),plans);},[plans]);
+  useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_months'),emergencyMonths);},[emergencyMonths]);
@@ -1231,11 +1235,11 @@ function MainApp({onLogout}){
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
-        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts}/>}
+        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
-        {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll}/>}
+        {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
       </div>
 
       {/* SUBSCRIPTION REMINDER MODAL */}
@@ -1336,7 +1340,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  PLANS  ════════ */
-function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,allPayroll,setPayroll}){
+function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,allPayroll,setPayroll,skippedPayDates,skipPayDate,unskipPayDate}){
   const[expandedId,setExpandedId]=useState(null);
   const[groups,setGroups]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_plan_groups')||'[]')}catch{return[]}});
   const[dragPlanId,setDragPlanId]=useState(null);
@@ -1346,10 +1350,6 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
   const plansRef=useRef(plans);
   const[payrollPlanAcctId,setPayrollPlanAcctId]=useState(()=>localStorage.getItem('absidi_payroll_plan_acct')||'');
   useEffect(()=>{localStorage.setItem('absidi_payroll_plan_acct',payrollPlanAcctId);},[payrollPlanAcctId]);
-  const[skippedPayDates,setSkippedPayDates]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_skip_pay')||'[]')}catch{return[]}});
-  useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
-  const skipPayDate=(empId,date)=>setSkippedPayDates(prev=>[...prev.filter(s=>!(s.empId===empId&&s.date===date)),{empId,date}]);
-  const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
   const PLAN_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0891b2','#ec4899'];
   const GROUP_COLORS=['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6'];
 
@@ -3490,7 +3490,7 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 }
 
 /* ════════  PAYROLL  ════════ */
-function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts}){
+function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,skippedPayDates,skipPayDate,unskipPayDate}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
   const[empBank,setEmpBank]=useState('');const[empAcctName,setEmpAcctName]=useState('');const[empAcctNum,setEmpAcctNum]=useState('');const[empPayMethod,setEmpPayMethod]=useState('Bank Transfer');
   const[showPayDetails,setShowPayDetails]=useState(null); /* employee id whose details are expanded */
@@ -3626,17 +3626,21 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     }
   };
 
-  const schedules=employees.map(emp=>({emp,sched:getSchedule(emp)}));
+  const schedules=employees.map(emp=>{
+    const sched=getSchedule(emp);
+    const isSkipped=!sched.alreadyPaid&&(skippedPayDates||[]).some(s=>s.empId===emp.id&&s.date===sched.nextDate);
+    return{emp,sched,isSkipped};
+  });
   /* Group by next pay date */
   const dateGroups={};
-  schedules.forEach(({emp,sched})=>{
+  schedules.forEach(({emp,sched,isSkipped})=>{
     const k=sched.nextDate;
     if(!dateGroups[k]) dateGroups[k]=[];
-    dateGroups[k].push({emp,sched});
+    dateGroups[k].push({emp,sched,isSkipped});
   });
   const sortedDates=Object.keys(dateGroups).sort();
-  const totalUnpaid=schedules.filter(s=>!s.sched.alreadyPaid).reduce((sum,s)=>sum+s.sched.amount,0);
-  const overdueCount=schedules.filter(s=>!s.sched.alreadyPaid&&isOverdue(s.sched.nextDate)).length;
+  const totalUnpaid=schedules.filter(s=>!s.sched.alreadyPaid&&!s.isSkipped).reduce((sum,s)=>sum+s.sched.amount,0);
+  const overdueCount=schedules.filter(s=>!s.sched.alreadyPaid&&!s.isSkipped&&isOverdue(s.sched.nextDate)).length;
 
   /* Quick-record payment — opens inline picker in the banner row */
   const quickPay=(emp,sched)=>{
@@ -3685,46 +3689,55 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
           {/* Per-date groups */}
           {sortedDates.map((dateKey,di)=>{
             const group=dateGroups[dateKey];
-            const groupTotal=group.filter(g=>!g.sched.alreadyPaid).reduce((s,g)=>s+g.sched.amount,0);
-            const allPaid=group.every(g=>g.sched.alreadyPaid);
+            const groupTotal=group.filter(g=>!g.sched.alreadyPaid&&!g.isSkipped).reduce((s,g)=>s+g.sched.amount,0);
+            const allPaid=group.every(g=>g.sched.alreadyPaid||g.isSkipped);
+            const allActuallyPaid=group.every(g=>g.sched.alreadyPaid);
             const overdue=!allPaid&&isOverdue(dateKey);
-            const borderColor=overdue?'#fca5a5':allPaid?'#86efac':'#c7d2fe';
-            const bgColor=overdue?'#fff5f5':allPaid?'#f0fdf4':'#fff';
+            const borderColor=overdue?'#fca5a5':allActuallyPaid?'#86efac':'#c7d2fe';
+            const bgColor=overdue?'#fff5f5':allActuallyPaid?'#f0fdf4':'#fff';
             return(
               <div key={dateKey} style={{margin:'0 16px 12px',borderRadius:'12px',border:`1.5px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
                 {/* Date header */}
                 <div style={{padding:'10px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${borderColor}`}}>
                   <div>
-                    <span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':allPaid?'#16a34a':'#4338ca'}}>
-                      {overdue?'⚠ ':allPaid?'✓ ':di===0?'🔜 ':''}{labelDate(dateKey)}
+                    <span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':allActuallyPaid?'#16a34a':'#4338ca'}}>
+                      {overdue?'⚠ ':allActuallyPaid?'✓ ':di===0?'🔜 ':''}{labelDate(dateKey)}
                     </span>
                   </div>
                   {!allPaid&&<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(groupTotal)}</span>}
-                  {allPaid&&<span style={{fontSize:'11px',fontWeight:'700',color:'#16a34a',background:'#dcfce7',padding:'2px 8px',borderRadius:'99px'}}>All Paid ✓</span>}
+                  {allActuallyPaid&&<span style={{fontSize:'11px',fontWeight:'700',color:'#16a34a',background:'#dcfce7',padding:'2px 8px',borderRadius:'99px'}}>All Paid ✓</span>}
                 </div>
                 {/* Employees in this group */}
-                {group.map(({emp,sched})=>{
+                {group.map(({emp,sched,isSkipped})=>{
                   const isInlinePay=inlinePayEmpId===emp.id;
                   return(
                   <div key={emp.id} style={{borderBottom:'1px solid #f1f5f9'}}>
                     {/* Main row */}
                     <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px'}}>
-                      <div style={{width:'32px',height:'32px',background:sched.alreadyPaid?'#dcfce7':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                        <Ico n="user" s={14} c={sched.alreadyPaid?'#16a34a':'#6366f1'} sw={1.75}/>
+                      <div style={{width:'32px',height:'32px',background:sched.alreadyPaid?'#dcfce7':isSkipped?'#f1f5f9':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <Ico n="user" s={14} c={sched.alreadyPaid?'#16a34a':isSkipped?'#94a3b8':'#6366f1'} sw={1.75}/>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
-                        <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'#1e293b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</p>
+                        <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'#1e293b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}{isSkipped&&<span style={{fontSize:'10px',color:'#94a3b8',fontWeight:'600',marginLeft:'6px'}}>⏭ skipped</span>}</p>
                         <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>{emp.role||''}{emp.role?' · ':''}{sched.label}</p>
                         {sched.alreadyPaid&&sched.lastEntry&&(
                           <p style={{margin:'1px 0 0',fontSize:'10px',color:'#16a34a',fontWeight:'700'}}>✓ Paid {sched.lastEntry.date} · {P(sched.lastEntry.amount)}</p>
+                        )}
+                        {!sched.alreadyPaid&&!isSkipped&&isOverdue(sched.nextDate)&&(
+                          <p style={{margin:'1px 0 0',fontSize:'10px',color:'#ef4444',fontWeight:'700'}}>⚠ Overdue {sched.nextDate} ({Math.abs(sched.daysUntil)}d ago)</p>
                         )}
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
                         {sched.alreadyPaid?(
                           <span style={{fontSize:'11px',fontWeight:'800',color:'#16a34a',background:'#dcfce7',padding:'3px 8px',borderRadius:'6px'}}>✓ Paid</span>
+                        ):isSkipped?(
+                          <button onClick={()=>unskipPayDate(emp.id,sched.nextDate)}
+                            style={{fontSize:'10px',fontWeight:'700',background:'none',color:'#6366f1',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 9px',cursor:'pointer'}}>Restore</button>
                         ):(
                           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
                             <span style={{fontSize:'14px',fontWeight:'900',color:overdue?'#dc2626':'#4338ca'}}>{P(sched.amount)}</span>
+                            <button onClick={()=>skipPayDate(emp.id,sched.nextDate)}
+                              style={{fontSize:'10px',fontWeight:'600',background:'none',color:'#94a3b8',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 8px',cursor:'pointer'}}>Skip</button>
                             <button onClick={()=>quickPay(emp,sched)}
                               style={{fontSize:'11px',fontWeight:'700',background:isInlinePay?'#4338ca':'#6366f1',color:'#fff',border:'none',borderRadius:'6px',padding:'4px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
                               {isInlinePay?'✕ Cancel':'+ Pay'}
