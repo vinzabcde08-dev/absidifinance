@@ -1041,9 +1041,29 @@ function MainApp({onLogout}){
   /* mExpAll = everything for net/total calculations (excludes pure transfers, includes payroll) */
   const mExpAll=byMonth(expenses).filter(x=>x.alloc!=='transfer_out'&&x.alloc!=='transfer_in'&&x.alloc!=='allocation_in').reduce((s,x)=>s+(x.amount||0),0);
   const mSub=byMonth(subs).reduce((s,x)=>s+(x.amount||0),0);
-  /* Expected payroll = sum of monthly salaries (salary field is always per-month regardless of frequency) */
-  const expectedPayroll=employees.reduce((s,e)=>s+(e.salary||0),0);
-  const mPayBudget=Math.max(mPay,expectedPayroll); /* whichever is higher protects the budget */
+  /* Pending payroll = actual obligations from pay schedule (overdue + upcoming), mirrors PayrollTab logic */
+  const pendingPayroll=employees.reduce((sum,emp)=>{
+    const freq=emp.frequency||'Monthly';
+    const sal=emp.salary||0;
+    const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
+    const interval=freq==='Biweekly'?14:freq==='Weekly'?7:null;
+    const today=new Date(TODAY+'T12:00:00');
+    const lastPay=[...payroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>b.date.localeCompare(a.date))[0];
+    let owed=0;
+    if(freq==='Monthly'){
+      const pd=emp.payDay||30,day=today.getDate(),m=today.getMonth(),y=today.getFullYear();
+      const periodStart=day<=pd?fmtD(new Date(y,m-1,pd)):fmtD(new Date(y,m,pd));
+      const paid=lastPay&&lastPay.date>=periodStart&&lastPay.date<=TODAY;
+      /* overdue+upcoming OR just upcoming */
+      owed=(!paid&&day>pd)?pc*2:pc;
+    }else{
+      const daysSince=lastPay?Math.round((today-new Date(lastPay.date+'T12:00:00'))/(1000*60*60*24)):999;
+      /* paid recently=next upcoming; overdue=overdue+upcoming */
+      owed=daysSince<interval?pc:pc*2;
+    }
+    return sum+owed;
+  },0);
+  const mPayBudget=Math.max(mPay,pendingPayroll); /* actual pending vs already paid, whichever is higher */
   const netClientExpected=expectedFromClients-mPayBudget;
 
   /* Computed allocation values (used before tithe recalc logic) */
@@ -3651,11 +3671,13 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     const sched=getSchedule(emp);
     const primarySkipped=!sched.alreadyPaid&&(skippedPayDates||[]).some(s=>s.empId===emp.id&&s.date===sched.nextDate);
     const items=[{emp,sched,isSkipped:primarySkipped,isUpcoming:false}];
-    /* If overdue and not skipped, auto-generate the next upcoming payment entry */
+    /* If overdue and not skipped, add a rollup entry on the next pay date.
+       pendingOverdueAmt = overdue amount carried into that future pay group for display.
+       sched.amount on the rollup = just the NEXT period's pay (no double-count in totalUnpaid). */
     if(!sched.alreadyPaid&&!primarySkipped&&sched.upcomingDate){
       const upDays=Math.round((new Date(sched.upcomingDate+'T12:00:00')-new Date(TODAY+'T12:00:00'))/(1000*60*60*24));
-      const upcomingSched={...sched,nextDate:sched.upcomingDate,daysUntil:upDays,upcomingDate:null};
-      items.push({emp,sched:upcomingSched,isSkipped:false,isUpcoming:true});
+      const upcomingSched={...sched,nextDate:sched.upcomingDate,daysUntil:upDays,upcomingDate:null,pendingOverdueAmt:sched.amount};
+      items.push({emp,sched:upcomingSched,isSkipped:false,isUpcoming:false});
     }
     return items;
   });
@@ -3669,7 +3691,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   const sortedDates=Object.keys(dateGroups).sort();
   /* alreadyPaid = current period paid, but NEXT date is still an upcoming obligation */
   const totalUnpaid=schedules.filter(s=>!s.isSkipped).reduce((sum,s)=>sum+s.sched.amount,0);
-  const overdueCount=schedules.filter(s=>!s.sched.alreadyPaid&&!s.isSkipped&&!s.isUpcoming&&isOverdue(s.sched.nextDate)).length;
+  const overdueCount=schedules.filter(s=>!s.sched.alreadyPaid&&!s.isSkipped&&isOverdue(s.sched.nextDate)&&!s.sched.pendingOverdueAmt).length;
 
   /* Quick-record payment — opens inline picker in the banner row */
   const quickPay=(emp,sched)=>{
@@ -3720,40 +3742,45 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
           {sortedDates.map((dateKey,di)=>{
             const group=dateGroups[dateKey];
             /* alreadyPaid = current period paid; nextDate is STILL an upcoming obligation */
-            const groupTotal=group.filter(g=>!g.isSkipped).reduce((s,g)=>s+g.sched.amount,0);
+            const groupBaseTotal=group.filter(g=>!g.isSkipped).reduce((s,g)=>s+g.sched.amount,0);
+            /* Add pending overdue amounts for display so user sees full preparation needed */
+            const groupPendingOverdue=group.filter(g=>!g.isSkipped&&g.sched.pendingOverdueAmt).reduce((s,g)=>s+(g.sched.pendingOverdueAmt||0),0);
+            const groupTotal=groupBaseTotal+groupPendingOverdue;
             const allPaid=group.every(g=>g.isSkipped);
-            const allUpcomingGroup=group.every(g=>g.isUpcoming);
-            const overdue=!allPaid&&!allUpcomingGroup&&isOverdue(dateKey);
-            const borderColor=overdue?'#fca5a5':allUpcomingGroup?'#bae6fd':'#c7d2fe';
-            const bgColor=overdue?'#fff5f5':allUpcomingGroup?'#f0f9ff':'#fff';
+            const overdue=!allPaid&&isOverdue(dateKey)&&!group.some(g=>g.sched.pendingOverdueAmt);
+            const hasPendingRollup=group.some(g=>g.sched.pendingOverdueAmt);
+            const borderColor=overdue?'#fca5a5':hasPendingRollup?'#fde68a':'#c7d2fe';
+            const bgColor=overdue?'#fff5f5':hasPendingRollup?'#fffbeb':'#fff';
             return(
               <div key={dateKey} style={{margin:'0 16px 12px',borderRadius:'12px',border:`1.5px solid ${borderColor}`,background:bgColor,overflow:'hidden'}}>
                 {/* Date header */}
                 <div style={{padding:'10px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${borderColor}`}}>
                   <div>
-                    <span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':allUpcomingGroup?'#0ea5e9':'#4338ca'}}>
-                      {overdue?'⚠ ':allUpcomingGroup?'📅 ':di===0?'🔜 ':''}{labelDate(dateKey)}
+                    <span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':hasPendingRollup?'#d97706':'#4338ca'}}>
+                      {overdue?'⚠ ':hasPendingRollup?'⚠ ':di===0?'🔜 ':''}{labelDate(dateKey)}
                     </span>
+                    {hasPendingRollup&&<span style={{fontSize:'10px',fontWeight:'700',color:'#d97706',background:'#fef3c7',padding:'2px 8px',borderRadius:'99px',marginLeft:'6px'}}>includes overdue</span>}
                   </div>
-                  {!allPaid&&<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':allUpcomingGroup?'#0ea5e9':'#4338ca'}}>{P(groupTotal)}</span>}
+                  {!allPaid&&<span style={{fontSize:'13px',fontWeight:'900',color:overdue?'#dc2626':hasPendingRollup?'#d97706':'#4338ca'}}>{P(groupTotal)}</span>}
                 </div>
                 {/* Employees in this group */}
                 {group.map(({emp,sched,isSkipped,isUpcoming})=>{
                   const rowKey=emp.id+'|'+sched.nextDate;
                   const isInlinePay=inlinePayEmpId===rowKey;
-                  const rowOverdue=!sched.alreadyPaid&&!isSkipped&&!isUpcoming&&isOverdue(sched.nextDate);
+                  const rowOverdue=!sched.alreadyPaid&&!isSkipped&&isOverdue(sched.nextDate)&&!sched.pendingOverdueAmt;
+                  const isPendingRollup=!!(sched.pendingOverdueAmt);
+                  const displayAmt=sched.amount+(isPendingRollup?sched.pendingOverdueAmt:0);
                   return(
-                  <div key={emp.id+(isUpcoming?'_up':'')} style={{borderBottom:'1px solid #f1f5f9'}}>
+                  <div key={emp.id+(isPendingRollup?'_rollup':'')} style={{borderBottom:'1px solid #f1f5f9'}}>
                     {/* Main row */}
-                    <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',background:isUpcoming?'#fafafe':'transparent'}}>
-                      <div style={{width:'32px',height:'32px',background:isSkipped?'#f1f5f9':isUpcoming?'#f0f9ff':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                        <Ico n="user" s={14} c={isSkipped?'#94a3b8':isUpcoming?'#0ea5e9':'#6366f1'} sw={1.75}/>
+                    <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px'}}>
+                      <div style={{width:'32px',height:'32px',background:isSkipped?'#f1f5f9':'#eef2ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <Ico n="user" s={14} c={isSkipped?'#94a3b8':'#6366f1'} sw={1.75}/>
                       </div>
                       <div style={{flex:1,minWidth:0}}>
                         <p style={{margin:0,fontWeight:'700',fontSize:'13px',color:'#1e293b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                           {emp.name}
                           {isSkipped&&<span style={{fontSize:'10px',color:'#94a3b8',fontWeight:'600',marginLeft:'6px'}}>⏭ skipped</span>}
-                          {isUpcoming&&<span style={{fontSize:'10px',color:'#0ea5e9',fontWeight:'600',marginLeft:'6px'}}>📅 next due</span>}
                         </p>
                         <p style={{margin:'1px 0 0',fontSize:'11px',color:'#94a3b8'}}>{emp.role||''}{emp.role?' · ':''}{sched.label}</p>
                         {sched.alreadyPaid&&sched.lastEntry&&(
@@ -3762,8 +3789,10 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                         {rowOverdue&&(
                           <p style={{margin:'1px 0 0',fontSize:'10px',color:'#ef4444',fontWeight:'700'}}>⚠ Overdue {sched.nextDate} ({Math.abs(sched.daysUntil)}d ago)</p>
                         )}
-                        {isUpcoming&&(
-                          <p style={{margin:'1px 0 0',fontSize:'10px',color:'#0ea5e9',fontWeight:'600'}}>In {sched.daysUntil}d — auto-generated from overdue</p>
+                        {isPendingRollup&&(
+                          <p style={{margin:'1px 0 0',fontSize:'10px',color:'#d97706',fontWeight:'600'}}>
+                            {P(sched.amount)} next pay + {P(sched.pendingOverdueAmt)} overdue unpaid
+                          </p>
                         )}
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
@@ -3772,13 +3801,14 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                             style={{fontSize:'10px',fontWeight:'700',background:'none',color:'#6366f1',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 9px',cursor:'pointer'}}>Restore</button>
                         ):(
                           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                            <span style={{fontSize:'14px',fontWeight:'900',color:rowOverdue?'#dc2626':isUpcoming?'#0ea5e9':'#4338ca'}}>{P(sched.amount)}</span>
-                            {!isUpcoming&&(
-                              <button onClick={()=>skipPayDate(emp.id,sched.nextDate)}
-                                style={{fontSize:'10px',fontWeight:'600',background:'none',color:'#94a3b8',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 8px',cursor:'pointer'}}>Skip</button>
-                            )}
+                            <div style={{textAlign:'right'}}>
+                              <span style={{fontSize:'14px',fontWeight:'900',color:rowOverdue?'#dc2626':isPendingRollup?'#d97706':'#4338ca'}}>{P(displayAmt)}</span>
+                              {isPendingRollup&&<p style={{margin:'1px 0 0',fontSize:'9px',color:'#d97706',fontWeight:'600'}}>prepare by {labelDate(sched.nextDate)}</p>}
+                            </div>
+                            <button onClick={()=>skipPayDate(emp.id,sched.nextDate)}
+                              style={{fontSize:'10px',fontWeight:'600',background:'none',color:'#94a3b8',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'4px 8px',cursor:'pointer'}}>Skip</button>
                             <button onClick={()=>quickPay(emp,sched)}
-                              style={{fontSize:'11px',fontWeight:'700',background:isInlinePay?'#4338ca':isUpcoming?'#0ea5e9':'#6366f1',color:'#fff',border:'none',borderRadius:'6px',padding:'4px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                              style={{fontSize:'11px',fontWeight:'700',background:isInlinePay?'#4338ca':'#6366f1',color:'#fff',border:'none',borderRadius:'6px',padding:'4px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>
                               {isInlinePay?'✕ Cancel':'+ Pay'}
                             </button>
                           </div>
