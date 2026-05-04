@@ -210,6 +210,7 @@ const CUR_MONTH=new Date().getMonth();
 const CUR_DAY=new Date().getDate();
 const P=(n)=>'₱'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
+const fmtD=(d)=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return`${y}-${m}-${day}`;};
 const acctLabel=a=>a?`${a.name}${a.subtype?` · ${a.subtype}`:a.type==='Cash on Hand'?' · Cash':''}`:'';
 
 /* ── Category metadata: bucket + color ── */
