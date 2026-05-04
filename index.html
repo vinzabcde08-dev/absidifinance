@@ -1235,7 +1235,7 @@ function MainApp({onLogout}){
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
-        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
+        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
@@ -3490,7 +3490,7 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 }
 
 /* ════════  PAYROLL  ════════ */
-function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,skippedPayDates,skipPayDate,unskipPayDate}){
+function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,accBal,skippedPayDates,skipPayDate,unskipPayDate}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
   const[empBank,setEmpBank]=useState('');const[empAcctName,setEmpAcctName]=useState('');const[empAcctNum,setEmpAcctNum]=useState('');const[empPayMethod,setEmpPayMethod]=useState('Bank Transfer');
   const[showPayDetails,setShowPayDetails]=useState(null); /* employee id whose details are expanded */
@@ -3795,7 +3795,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                           <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none'}}
                             value={inlinePayAccId} onChange={e=>setInlinePayAccId(e.target.value)}>
                             <option value="">— Select account —</option>
-                            {accounts.map(a=><option key={a.id} value={a.id}>{a.name} · {P(a.balance||0)}</option>)}
+                            {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P((accBal||{})[a.id]||0)}</option>)}
                           </select>
                         </div>
                         <div style={{display:'flex',gap:'6px',alignItems:'flex-end',paddingTop:'18px'}}>
