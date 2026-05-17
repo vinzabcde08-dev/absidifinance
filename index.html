@@ -1126,7 +1126,7 @@ function MainApp({onLogout}){
   const investActualAmt=budgetFixed?(settings.investAmt||0):(mInc*settings.investPct)/100;
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
   const titheBase=Math.max(0,(mInc-mPay)-(investMovedThisMonth?investActualAmt:0));
-  const tithe=budgetFixed?(settings.titheAmt||0):(titheBase*settings.tithePct)/100;
+  const tithe=(titheBase*settings.tithePct)/100; /* always % — tithe is non-negotiable, not a fixed amount */
   /* Desires carry-over: if last month overspent, penalise this month */
   const lastMK=(()=>{const d=new Date(yr,selMonth-1,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;})();
   const lastMDesiresActual=expenses.filter(x=>mK(x.date)===lastMK&&!x.alloc&&getCatMeta(x.category).bucket==='Desires').reduce((s,x)=>s+(x.amount||0),0);
@@ -1857,13 +1857,71 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
   /* ── Payroll schedule for Plans tab ── */
   const planFmtD=(d)=>{const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),dy=String(d.getDate()).padStart(2,'0');return`${y}-${mo}-${dy}`;};
   const planIsOverdue=(str)=>!!str&&new Date(str+'T12:00:00')<new Date(TODAY+'T12:00:00');
+  /* helper: generate fixed pay dates for planEmpSchedules */
+  const planGenFixedDates=(emp,fromStr,toStr)=>{
+    const freq=emp.frequency||'Monthly';
+    const fromD=new Date(fromStr+'T12:00:00');
+    const dates=[];
+    if(freq==='Monthly'){
+      const pd=emp.fixedDate1||emp.payDay||30;
+      let d=new Date(fromD.getFullYear(),fromD.getMonth(),pd);
+      while(planFmtD(d)<=toStr){if(planFmtD(d)>=fromStr)dates.push(planFmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
+    } else if(freq==='Biweekly'){
+      const d1=emp.fixedDate1||1,d2=emp.fixedDate2||15;
+      let y=fromD.getFullYear(),m=fromD.getMonth();
+      while(true){
+        const dim=new Date(y,m+1,0).getDate();
+        const s1=planFmtD(new Date(y,m,Math.min(d1,dim)));
+        const s2=planFmtD(new Date(y,m,Math.min(d2,dim)));
+        if(s1>=fromStr&&s1<=toStr)dates.push(s1);
+        if(s2>=fromStr&&s2<=toStr&&s2!==s1)dates.push(s2);
+        m++;if(m>11){m=0;y++;}if(planFmtD(new Date(y,m,1))>toStr)break;
+      }
+    } else {
+      const dow=emp.fixedDOW!==undefined?emp.fixedDOW:5;
+      let d=new Date(fromD);while(d.getDay()!==dow)d.setDate(d.getDate()+1);
+      while(planFmtD(d)<=toStr){if(planFmtD(d)>=fromStr)dates.push(planFmtD(d));d.setDate(d.getDate()+7);}
+    }
+    return dates.sort();
+  };
+
   const planEmpSchedules=(employees&&employees.length>0)?employees.map(emp=>{
     const empPays=(allPayroll||[]).filter(p=>p.employeeId===emp.id).sort((a,b)=>b.date.localeCompare(a.date));
     const freq=emp.frequency||'Monthly';
     const sal=emp.salary||0;
     const today=new Date(TODAY+'T12:00:00');
-    let nextDateStr='',amount=sal,alreadyPaid=false,lastEntry=null;
-    if(freq==='Monthly'){
+    const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
+    let nextDateStr='',amount=pc,alreadyPaid=false,lastEntry=null;
+
+    if(emp.scheduleType==='fixed'){
+      /* Fixed schedule — mirror getFixedSchedule logic */
+      const periodDays=freq==='Biweekly'?17:freq==='Weekly'?9:36;
+      const lastPay=empPays.length>0?empPays[0]:null;
+      const refDate=lastPay?lastPay.date:TODAY;
+      const lb=new Date(refDate+'T12:00:00');lb.setDate(lb.getDate()-periodDays);
+      const fromStr=planFmtD(lb);
+      const toD=new Date(today);toD.setDate(toD.getDate()+90);
+      const toStr=planFmtD(toD);
+      const allDates=planGenFixedDates(emp,fromStr,toStr);
+      const pastDates=allDates.filter(d=>d<=TODAY);
+      const futureDates=allDates.filter(d=>d>TODAY);
+      /* Find which fixed date the last payment covers */
+      let lastCoveredDate=null;
+      if(lastPay){lastCoveredDate=[...pastDates].reverse().find(d=>d<=lastPay.date)||null;}
+      const checkDates=lastCoveredDate?pastDates.filter(d=>d>lastCoveredDate):pastDates;
+      const covd=new Set();
+      empPays.forEach(pay=>{if(lastCoveredDate&&pay.date<=lastCoveredDate)return;const n=[...checkDates].reverse().find(d=>d<=pay.date);if(n)covd.add(n);});
+      const overdueDates=checkDates.filter(d=>!covd.has(d));
+      alreadyPaid=overdueDates.length===0;
+      lastEntry=lastPay;
+      if(alreadyPaid){
+        nextDateStr=futureDates[0]||planFmtD(new Date(today.getFullYear(),today.getMonth()+1,1));
+        amount=pc;
+      } else {
+        nextDateStr=overdueDates[0];
+        amount=overdueDates.length*pc;
+      }
+    } else if(freq==='Monthly'){
       const pd=parseInt(emp.payDay||30);
       const y=today.getFullYear(),m=today.getMonth();
       const day=today.getDate();
@@ -1871,7 +1929,6 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
       if(day<=pd){
         nextDate=new Date(y,m,pd);
         periodStart=planFmtD(new Date(y,m-1,pd));
-        /* if last month's pay day has already passed, it may be overdue */
         if(periodStart<=TODAY) missedDate=periodStart;
       } else {
         periodStart=planFmtD(new Date(y,m,pd));
@@ -1889,12 +1946,11 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
         if(daysSince<14){alreadyPaid=true;lastEntry=empPays[0];const nd=new Date(lastD);nd.setDate(lastD.getDate()+14);const dow=nd.getDay();if(dow!==5)nd.setDate(nd.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(nd);}
         else{const missedD=new Date(lastD);missedD.setDate(lastD.getDate()+14);const dow=missedD.getDay();if(dow!==5)missedD.setDate(missedD.getDate()+((5-dow+7)%7));nextDateStr=planFmtD(missedD);}
       } else {
-        /* No history — check if a recent past Friday was a missed pay day */
         const dowToday=today.getDay();
         const daysSinceFri=dowToday===5?0:(dowToday+7-5)%7;
         if(daysSinceFri>0&&daysSinceFri<14){
           const pastFri=new Date(today);pastFri.setDate(today.getDate()-daysSinceFri);
-          nextDateStr=planFmtD(pastFri); /* overdue — recent Friday passed unpaid */
+          nextDateStr=planFmtD(pastFri);
         } else {
           const nd=new Date(today);nd.setDate(today.getDate()+((5-today.getDay()+7)%7));nextDateStr=planFmtD(nd);
         }
@@ -4210,6 +4266,9 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
   const removeCatBudget=(id)=>{
     setSettings(s=>({...s,categoryBudgets:(s.categoryBudgets||[]).filter(x=>x.id!==id)}));
   };
+  const updateCatBudgetAmt=(id,val)=>{
+    setSettings(s=>({...s,categoryBudgets:(s.categoryBudgets||[]).map(x=>x.id===id?{...x,amount:parseFloat(val)||0}:x)}));
+  };
 
   /* Emergency fund calc */
   const emergAcct=accounts.find(a=>a.id===emergencyAcctId);
@@ -4312,26 +4371,34 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
 
         {/* FIXED ₱ MODE inputs */}
         {budgetFixed&&(
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'14px'}}>
-            {[
-              {label:'Tithes ₱',key:'titheAmt',color:'#f59e0b',actual:tithe},
-              {label:'Investment ₱',key:'investAmt',color:'#6366f1',actual:invest},
-              {label:'Savings ₱',key:'savingsAmt',color:'#10b981',actual:savings},
-              {label:'Desires ₱',key:'desiresAmt',color:'#ec4899',actual:desires},
-            ].map(({label,key,color,actual})=>(
-              <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:'1px solid var(--border)'}}>
-                <span className="fl" style={{color}}>{label}</span>
-                <input type="number" className="fi" style={{borderColor:color}} value={settings[key]||''} min="0" step="100"
-                  placeholder="₱ amount"
-                  onChange={e=>setSettings(s=>({...s,[key]:parseFloat(e.target.value)||0}))}/>
-                {mInc>0&&(settings[key]||0)>0&&(
-                  <span style={{fontSize:'11px',color:'var(--text4)',marginTop:'4px',display:'block'}}>
-                    ≈ {((settings[key]||0)/mInc*100).toFixed(1)}% of this month's income
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+          <>
+            {/* Tithe info — always auto-calculated as %, not a fixed amount */}
+            <div style={{display:'flex',alignItems:'center',gap:'8px',padding:'9px 13px',borderRadius:'9px',background:'#fffbeb',border:'1px solid #fde68a',marginBottom:'10px'}}>
+              <span style={{fontSize:'13px'}}>🙏</span>
+              <span style={{fontSize:'12px',color:'#92400e',fontWeight:'600'}}>
+                Tithes are always <b>{settings.tithePct}%</b> of your actual income — calculated automatically, not a fixed amount.
+              </span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'14px'}}>
+              {[
+                {label:'Investment ₱',key:'investAmt',color:'#6366f1'},
+                {label:'Savings ₱',key:'savingsAmt',color:'#10b981'},
+                {label:'Desires ₱',key:'desiresAmt',color:'#ec4899'},
+              ].map(({label,key,color})=>(
+                <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:'1px solid var(--border)'}}>
+                  <span className="fl" style={{color}}>{label}</span>
+                  <input type="number" className="fi" style={{borderColor:color}} value={settings[key]||''} min="0" step="100"
+                    placeholder="₱ amount"
+                    onChange={e=>setSettings(s=>({...s,[key]:parseFloat(e.target.value)||0}))}/>
+                  {mInc>0&&(settings[key]||0)>0&&(
+                    <span style={{fontSize:'11px',color:'var(--text4)',marginTop:'4px',display:'block'}}>
+                      ≈ {((settings[key]||0)/mInc*100).toFixed(1)}% of this month's income
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/* Summary row */}
@@ -4439,26 +4506,31 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
         <p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0',fontStyle:'italic'}}>Computed from actual logged expenses. Updates as you confirm allocations.</p>
       </div>
 
-      {/* ── 4b. CATEGORY SPENDING LIMITS ── */}
+      {/* ── 4b. CATEGORY EXPENSE BUDGETS ── */}
       <div style={{background:'var(--card2)',borderRadius:'12px',padding:'16px 18px',border:'1px solid var(--border)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:catBudgets.length>0||showCatForm?'12px':'0'}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>📊 Category Limits</span>
-            <InfoIcon text="Set a monthly ₱ cap per category. When your spending in that category hits the limit, you'll see a warning. This helps you control specific buckets like Groceries or Fuel without touching the overall Essentials budget." title="Category Spending Limits"/>
+            <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🛒 Expense Budgets</span>
+            <InfoIcon text="Set a fixed monthly ₱ budget per expense category — e.g. Groceries ₱8,000, Fuel ₱3,000. You'll see a progress bar as you spend. Add custom categories with any name you like." title="Expense Category Budgets"/>
           </div>
-          <button onClick={()=>{setShowCatForm(v=>!v);setNewCatAmt('');}} className="btn bs" style={{padding:'4px 12px',fontSize:'12px',fontWeight:'700'}}>
-            {showCatForm?'✕ Cancel':'+ Add Limit'}
+          <button onClick={()=>{setShowCatForm(v=>!v);setNewCatAmt('');if(!showCatForm)setNewCatLabel('Groceries');}} className="btn bs" style={{padding:'4px 12px',fontSize:'12px',fontWeight:'700'}}>
+            {showCatForm?'✕ Cancel':'+ Add Budget'}
           </button>
         </div>
 
         {showCatForm&&(
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px auto',gap:'8px',marginBottom:'12px',alignItems:'end'}}>
             <div>
-              <span className="fl">Category</span>
-              <CategorySelect value={newCatLabel} onChange={setNewCatLabel}/>
+              <span className="fl">Category name</span>
+              <input className="fi" type="text" value={newCatLabel}
+                onChange={e=>setNewCatLabel(e.target.value)} placeholder="e.g. Groceries, Fuel, Other…"
+                list="catSuggestions"/>
+              <datalist id="catSuggestions">
+                {['Groceries','Fuel','Electricity','Water','Rent','Medicine','School','Dining','Transportation','Other'].map(s=><option key={s} value={s}/>)}
+              </datalist>
             </div>
             <div>
-              <span className="fl">Monthly Limit (₱)</span>
+              <span className="fl">Monthly Budget (₱)</span>
               <input className="fi" type="number" min="0" step="100" value={newCatAmt}
                 onChange={e=>setNewCatAmt(e.target.value)} placeholder="e.g. 8000"/>
             </div>
@@ -4469,7 +4541,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
 
         {catBudgets.length===0&&!showCatForm&&(
           <p style={{fontSize:'12px',color:'var(--text4)',margin:'8px 0 0',textAlign:'center',padding:'8px 0'}}>
-            No limits set yet. Tap <b>+ Add Limit</b> to cap a category like Groceries or Fuel.
+            No budgets set yet. Tap <b>+ Add Budget</b> to set limits for Groceries, Fuel, or any custom category.
           </p>
         )}
 
@@ -4491,13 +4563,16 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                     <span style={{fontSize:'12px',color:over?'#ef4444':near?'#f59e0b':'var(--text3)',fontWeight:'700'}}>
-                      {P(spent)}<span style={{fontWeight:'400',color:'var(--text4)'}}> / {P(cb.amount)}</span>
+                      {P(spent)}<span style={{fontWeight:'400',color:'var(--text4)'}}> / </span>
                     </span>
+                    <input type="number" min="0" step="100" value={cb.amount||''}
+                      onChange={e=>updateCatBudgetAmt(cb.id,e.target.value)}
+                      style={{width:'76px',fontSize:'12px',fontWeight:'700',border:'1px solid var(--border)',borderRadius:'6px',padding:'2px 6px',background:'var(--card)',color:over?'#ef4444':near?'#f59e0b':'var(--text)',textAlign:'right'}}/>
                     <button onClick={()=>removeCatBudget(cb.id)}
                       style={{background:'none',border:'none',cursor:'pointer',color:'#cbd5e1',fontSize:'15px',lineHeight:1,padding:'2px 4px',borderRadius:'4px'}}
                       onMouseEnter={e=>e.currentTarget.style.color='#ef4444'}
                       onMouseLeave={e=>e.currentTarget.style.color='#cbd5e1'}
-                      title="Remove limit">✕</button>
+                      title="Remove">✕</button>
                   </div>
                 </div>
                 <div style={{height:'7px',borderRadius:'99px',background:'var(--pbar-bg)',overflow:'hidden'}}>
