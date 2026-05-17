@@ -2117,7 +2117,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const gExp=mExpAll+mSub+mPay;
   const gMax=Math.max(gExpected,gExp,expectedFromClients||0,1);
   const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
-  const gNet=gPaid-gExp;
+  const gNet=mInc-gExp; /* matches Net This Month — uses total income, not paid-only */
   const totalUnlinked=(unlinkedIncome||0)+(unlinkedExpenses||0);
 
   /* quick-add modal */
@@ -2217,10 +2217,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
      info:'Sum of all income entries logged this month, regardless of account. Includes paid and pending.',title:'Monthly Income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
      info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
-    {label:'Monthly Expenses',value:P(mExpAll),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
-     info:'Sum of all expense entries this month including subscriptions and payroll. Does not include tithe/savings/investment auto-transfers (those are tracked separately).',title:'Monthly Expenses'},
+    {label:'Total Expenses',value:P(mExpAll+mSub+mPay),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
+     info:`All money out this month:\n• Regular expenses: ${P(mExpAll)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPay)}\nTotal: ${P(mExpAll+mSub+mPay)}\n\nNote: Tithe, savings, and investment transfers are included in regular expenses above.`,title:'Total Expenses'},
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
-     info:'Monthly Income minus all expenses (expenses + subscriptions + payroll). Positive = surplus, Negative = you spent more than you earned.',title:'Net This Month'},
+     info:`Monthly Income (${P(mInc)}) minus Total Expenses (${P(mExpAll+mSub+mPay)}) = ${P(net)}.\n\nPositive = you earned more than you spent. Negative = overspent.`,title:'Net This Month'},
     {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
      info:`Remaining spendable budget ÷ days left in month. Spendable = Income − Tithes − Investment − Savings − Desires − Subscriptions − Payroll (${P(mPay)}${expectedPayroll>0&&(mPayActual||0)<expectedPayroll?`, expected from employee salaries`:''}). Days left: ${daysLeft}.`,title:'Daily Spend Cap'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
@@ -2709,7 +2709,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               {label:'Client Expected Income',sub:`From ${clients.length} client(s) · after payroll: ${P(netClientExpected||0)}`,value:expectedFromClients||0,color:'#8b5cf6',mixed:false},
               {label:'Billed Income',sub:'Paid + Pending entries',value:gExpected,color:'#6366f1',mixed:true,paid:gPaid,pending:gPending},
               {label:'Actual Received',sub:'Paid entries only',value:gPaid,color:'#10b981',mixed:false},
-              {label:'Total Expenses',sub:'Expenses + Subs + Payroll',value:gExp,color:'#ef4444',mixed:false},
+              {label:'Total Expenses',sub:`Expenses ${P(mExpAll)} · Subs ${P(mSub)} · Payroll ${P(mPay)}`,value:gExp,color:'#ef4444',mixed:false},
             ].map(b=>(
               <div key={b.label}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
@@ -2762,8 +2762,8 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             ))}
             <div style={{padding:'14px 18px',borderRadius:'10px',background:gNet>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'4px'}}>
               <div>
-                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{gNet>=0?'✓ Surplus this month':'⚠ Shortfall this month'}</p>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Received income minus all expenses</p>
+                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{gNet>=0?'✓ Net This Month':'⚠ Net This Month (shortfall)'}</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Total Income − Total Expenses</p>
               </div>
               <span style={{fontSize:'20px',fontWeight:'900',color:gNet>=0?'#10b981':'#ef4444'}}>{gNet>=0?'+':''}{P(gNet)}</span>
             </div>
@@ -3158,7 +3158,7 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedF
   const netClientExpected=(expectedFromClients||0)-(mPay||0);
   const graphMax=Math.max(totalExpected,totalExpenses,expectedFromClients||0,1);
   const pct=(v)=>Math.min(100,Math.round((v/graphMax)*100));
-  const net=totalPaid-totalExpenses;
+  const net=totalExpected-totalExpenses; /* total income (paid+pending) minus all expenses — matches Net This Month */
 
   const bars=[
     {label:'Client Expected Income',sublabel:`(${fxLoaded?'Live':'Est.'} FX · after payroll: ${P(netClientExpected)})`,value:expectedFromClients||0,color:'#8b5cf6',bg:'#f5f3ff',mixed:false},
@@ -3217,8 +3217,8 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedF
             ))}
             <div style={{marginTop:'4px',padding:'14px 18px',borderRadius:'10px',background:net>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div>
-                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{net>=0?'✓ Surplus this month':'⚠ Shortfall this month'}</p>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Received income minus all expenses</p>
+                <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{net>=0?'✓ Net This Month':'⚠ Net This Month (shortfall)'}</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Total Income − Total Expenses (incl. subs + payroll)</p>
               </div>
               <span style={{fontSize:'20px',fontWeight:'900',color:net>=0?'#10b981':'#ef4444'}}>{net>=0?'+':''}{P(net)}</span>
             </div>
@@ -3410,7 +3410,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
         );})}
         {expenses.length===0&&(payroll||[]).length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No expenses recorded this month.</div>}
         {expenses.length===0&&(payroll||[]).length>0&&<p style={{fontSize:'12px',color:'#94a3b8',textAlign:'center'}}>No manual expenses this month.</p>}
-        {[...expenses].reverse().map(e=>{
+        {[...expenses].reverse().filter(e=>e.alloc!=='transfer_out'&&e.alloc!=='transfer_in'&&e.alloc!=='allocation_in').map(e=>{
           const ac=accounts.find(a=>a.id===e.accountId);const cd=cards.find(c=>c.id===e.cardId);
           const noAcct=!e.accountId&&!e.cardId;
           const isEditing=editId===e.id;
@@ -3826,7 +3826,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                           <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none'}}
                             value={inlinePayAccId} onChange={e=>setInlinePayAccId(e.target.value)}>
                             <option value="">— Select account —</option>
-                            {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P((accBal||{})[a.id]||0)}</option>)}
+                            {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
                           </select>
                         </div>
                         <div style={{display:'flex',gap:'6px',alignItems:'flex-end',paddingTop:'18px'}}>
