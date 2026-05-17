@@ -412,7 +412,7 @@ function InfoIcon({text,title}){
 
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
-const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg',categoryBudgets:[]};
+const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg',budgetType:'pct',titheAmt:0,investAmt:0,savingsAmt:0,desiresAmt:0,categoryBudgets:[]};
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const getWeekKey=()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);const mo=String(d.getMonth()+1).padStart(2,'0');return `${d.getFullYear()}-${mo}-W${String(wk).padStart(2,'0')}`;};
 
@@ -1049,19 +1049,49 @@ function MainApp({onLogout}){
     const freq=emp.frequency||'Monthly';
     const sal=emp.salary||0;
     const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
-    const interval=freq==='Biweekly'?14:freq==='Weekly'?7:null;
     const today=new Date(TODAY+'T12:00:00');
-    const lastPay=[...payroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>b.date.localeCompare(a.date))[0];
+    const empPays=[...payroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>a.date.localeCompare(b.date));
+    const lastPay=empPays.length>0?empPays[empPays.length-1]:null;
     let owed=0;
-    if(freq==='Monthly'){
+    if(emp.scheduleType==='fixed'){
+      /* Fixed mode: generate past dates and count uncovered ones */
+      const fromD=new Date(today);fromD.setDate(today.getDate()-90);
+      const toStr=TODAY;const fromStr=fmtD(fromD);
+      const pastDates=[];
+      if(freq==='Monthly'){
+        const pd=emp.fixedDate1||emp.payDay||30;
+        let d=new Date(fromD.getFullYear(),fromD.getMonth(),pd);
+        while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)pastDates.push(fmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
+      } else if(freq==='Biweekly'){
+        const d1=emp.fixedDate1||1,d2=emp.fixedDate2||15;
+        let y=fromD.getFullYear(),m=fromD.getMonth();
+        while(true){
+          const dim=new Date(y,m+1,0).getDate();
+          const s1=fmtD(new Date(y,m,Math.min(d1,dim)));
+          const s2=fmtD(new Date(y,m,Math.min(d2,dim)));
+          if(s1>=fromStr&&s1<=toStr)pastDates.push(s1);
+          if(s2>=fromStr&&s2<=toStr)pastDates.push(s2);
+          m++;if(m>11){m=0;y++;}if(fmtD(new Date(y,m,1))>toStr)break;
+        }
+      } else {
+        const dow=emp.fixedDOW!==undefined?emp.fixedDOW:5;
+        let d=new Date(fromD);while(d.getDay()!==dow)d.setDate(d.getDate()+1);
+        while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)pastDates.push(fmtD(d));d.setDate(d.getDate()+7);}
+      }
+      pastDates.sort();
+      const covered=new Set();
+      empPays.forEach(pay=>{const n=[...pastDates].reverse().find(d=>d<=pay.date);if(n)covered.add(n);});
+      const overdue=pastDates.filter(d=>!covered.has(d)).length;
+      /* owed = all overdue + next upcoming */
+      owed=pc*(overdue+1);
+    } else if(freq==='Monthly'){
       const pd=emp.payDay||30,day=today.getDate(),m=today.getMonth(),y=today.getFullYear();
       const periodStart=day<=pd?fmtD(new Date(y,m-1,pd)):fmtD(new Date(y,m,pd));
       const paid=lastPay&&lastPay.date>=periodStart&&lastPay.date<=TODAY;
-      /* overdue+upcoming OR just upcoming */
       owed=(!paid&&day>pd)?pc*2:pc;
     }else{
+      const interval=freq==='Biweekly'?14:7;
       const daysSince=lastPay?Math.round((today-new Date(lastPay.date+'T12:00:00'))/(1000*60*60*24)):999;
-      /* paid recently=next upcoming; overdue=overdue+upcoming */
       owed=daysSince<interval?pc:pc*2;
     }
     return sum+owed;
@@ -1083,25 +1113,30 @@ function MainApp({onLogout}){
   });
   const avg3=last3.reduce((a,b)=>a+b,0)/3;
   const base=settings.budgetMode==='avg'?avg3:mInc;
-  const invest=(base*settings.investPct)/100;
+  const budgetFixed=settings.budgetType==='fixed'; /* true = use fixed ₱ amounts instead of % */
+  const invest=budgetFixed?(settings.investAmt||0):(base*settings.investPct)/100;
   /* Tithe on NET income:
      - Always subtract payroll (mPay) — wages paid out are not your income
      - Subtract investment amount only if already transferred this month
      - Never uses the 3-month average — always actual income */
-  const investActualAmt=(mInc*settings.investPct)/100;
+  const investActualAmt=budgetFixed?(settings.investAmt||0):(mInc*settings.investPct)/100;
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
   const titheBase=Math.max(0,(mInc-mPay)-(investMovedThisMonth?investActualAmt:0));
-  const tithe=(titheBase*settings.tithePct)/100;
+  const tithe=budgetFixed?(settings.titheAmt||0):(titheBase*settings.tithePct)/100;
   /* Desires carry-over: if last month overspent, penalise this month */
   const lastMK=(()=>{const d=new Date(yr,selMonth-1,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;})();
   const lastMDesiresActual=expenses.filter(x=>mK(x.date)===lastMK&&!x.alloc&&getCatMeta(x.category).bucket==='Desires').reduce((s,x)=>s+(x.amount||0),0);
-  const lastMDesiresAlloc=(base*settings.desiresPct)/100;
+  const lastMDesiresAlloc=budgetFixed?(settings.desiresAmt||0):(base*settings.desiresPct)/100;
   const desiresCarryPenalty=Math.max(0,lastMDesiresActual-lastMDesiresAlloc);
-  const desires=Math.max(0,(base*settings.desiresPct)/100-desiresCarryPenalty);
-  const savings=(base*settings.savingsPct)/100;
+  const desires=budgetFixed?Math.max(0,(settings.desiresAmt||0)-desiresCarryPenalty):Math.max(0,(base*settings.desiresPct)/100-desiresCarryPenalty);
+  const savings=budgetFixed?(settings.savingsAmt||0):(base*settings.savingsPct)/100;
   const spendBudget=base-tithe-invest-desires-savings-mSub-mPayBudget;
-  const dailyCap=daysLeft>0?Math.max(0,(spendBudget-mExp)/daysLeft):0;
-  const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct;
+  /* Daily cap: always based on last month's income as a stable estimate/suggestion */
+  const lastMonthInc=last3[1]||0;
+  const capBase=lastMonthInc>0?lastMonthInc:(avg3||base);
+  const capSpendBudget=capBase-tithe-invest-desires-savings-mSub-mPayBudget;
+  const dailyCap=daysLeft>0?Math.max(0,(capSpendBudget-mExp)/daysLeft):0;
+  const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct; /* % total, used in % mode */
 
   /* Per-account tithe breakdown — real income only, no transfers */
   const mIncByAcct=byMonth(income).filter(x=>x.accountId&&!x.alloc);
@@ -1251,7 +1286,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1259,7 +1294,7 @@ function MainApp({onLogout}){
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
@@ -2085,7 +2120,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
   const net=mInc-mExpAll-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -2221,8 +2256,8 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
      info:`All money out this month:\n• Regular expenses: ${P(mExpAll)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPay)}\nTotal: ${P(mExpAll+mSub+mPay)}\n\nNote: Tithe, savings, and investment transfers are included in regular expenses above.`,title:'Total Expenses'},
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
      info:`Monthly Income (${P(mInc)}) minus Total Expenses (${P(mExpAll+mSub+mPay)}) = ${P(net)}.\n\nPositive = you earned more than you spent. Negative = overspent.`,title:'Net This Month'},
-    {label:'Daily Spend Cap',value:P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
-     info:`Remaining spendable budget ÷ days left in month. Spendable = Income − Tithes − Investment − Savings − Desires − Subscriptions − Payroll (${P(mPay)}${expectedPayroll>0&&(mPayActual||0)<expectedPayroll?`, expected from employee salaries`:''}). Days left: ${daysLeft}.`,title:'Daily Spend Cap'},
+    {label:'Daily Spend Est.',value:'~'+P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
+     info:`A suggestion only — not a hard limit.\n\nBased on last month's income as a stable reference (${P(lastMonthInc||avg3)}) so this number doesn't jump around as income arrives this month.\n\nFormula: (Last month income − allocations − subs − payroll − expenses so far) ÷ ${daysLeft} days left.`,title:'Daily Spend Estimate'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
      info:'Sum of all current balances in the Debt tab (credit cards, personal loans, and loans combined).',title:'Total Debt'},
   ];
@@ -3516,6 +3551,11 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,accBal,skippedPayDates,skipPayDate,unskipPayDate}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
   const[empBank,setEmpBank]=useState('');const[empAcctName,setEmpAcctName]=useState('');const[empAcctNum,setEmpAcctNum]=useState('');const[empPayMethod,setEmpPayMethod]=useState('Bank Transfer');
+  /* Fixed schedule state */
+  const[empSchedType,setEmpSchedType]=useState('auto'); /* 'auto' | 'fixed' */
+  const[empFixDate1,setEmpFixDate1]=useState(1);  /* 1st pay date of month */
+  const[empFixDate2,setEmpFixDate2]=useState(15); /* 2nd pay date (biweekly) */
+  const[empFixDOW,setEmpFixDOW]=useState(5);      /* day of week for weekly (5=Fri) */
   const[showPayDetails,setShowPayDetails]=useState(null); /* employee id whose details are expanded */
   const[date,setDate]=useState(TODAY);const[employeeId,setEmployeeId]=useState('');const[amount,setAmount]=useState('');const[accountId,setAccountId]=useState('');const[editPayId,setEditPayId]=useState(null);
   /* Inline quick-pay picker state */
@@ -3523,15 +3563,16 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   const[inlinePayAccId,setInlinePayAccId]=useState('');
 
   const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks — Fri)','Monthly':'Monthly (15th or 30th)'};
-  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);setEmpBank('');setEmpAcctName('');setEmpAcctNum('');setEmpPayMethod('Bank Transfer');};
-  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');setEmpPayDay(e.payDay||30);setEmpBank(e.bank||'');setEmpAcctName(e.acctName||'');setEmpAcctNum(e.acctNum||'');setEmpPayMethod(e.payMethod||'Bank Transfer');};
+  const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);setEmpBank('');setEmpAcctName('');setEmpAcctNum('');setEmpPayMethod('Bank Transfer');setEmpSchedType('auto');setEmpFixDate1(1);setEmpFixDate2(15);setEmpFixDOW(5);};
+  const startEditEmp=(e)=>{setEditEmpId(e.id);setEmpName(e.name);setEmpRole(e.role||'');setEmpSalary(e.salary!=null?String(e.salary):'');setEmpFreq(e.frequency||'Biweekly');setEmpPayDay(e.payDay||30);setEmpBank(e.bank||'');setEmpAcctName(e.acctName||'');setEmpAcctNum(e.acctNum||'');setEmpPayMethod(e.payMethod||'Bank Transfer');setEmpSchedType(e.scheduleType||'auto');setEmpFixDate1(e.fixedDate1||1);setEmpFixDate2(e.fixedDate2||15);setEmpFixDOW(e.fixedDOW!==undefined?e.fixedDOW:5);};
   const saveEmp=()=>{
     if(!empName.trim())return;
     const sal=empSalary?parseFloat(empSalary):undefined;
     const pd=empFreq==='Monthly'?empPayDay:undefined;
     const payInfo={bank:empBank.trim(),acctName:empAcctName.trim(),acctNum:empAcctNum.trim(),payMethod:empPayMethod};
-    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo}:x));}
-    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo}]);}
+    const schedInfo={scheduleType:empSchedType,fixedDate1:empSchedType==='fixed'?empFixDate1:undefined,fixedDate2:(empSchedType==='fixed'&&empFreq==='Biweekly')?empFixDate2:undefined,fixedDOW:(empSchedType==='fixed'&&empFreq==='Weekly')?empFixDOW:undefined};
+    if(editEmpId){setEmployees(employees.map(x=>x.id===editEmpId?{...x,name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo,...schedInfo}:x));}
+    else{setEmployees([...employees,{id:uid(),name:empName.trim(),role:empRole.trim(),salary:sal,frequency:empFreq,payDay:pd,...payInfo,...schedInfo}]);}
     resetEmp();
   };
 
@@ -3561,7 +3602,75 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   };
   const isOverdue=(str)=>{if(!str)return false;return new Date(str+'T12:00:00')<new Date(TODAY+'T12:00:00');};
 
+  /* ── Fixed schedule logic ──
+     Generates a list of fixed pay dates and matches payments to them.
+     A payment "covers" the most recent fixed date that falls on or before the payment date.
+     Example: pay dates 15th+30th; payment on May 4 → covers April 30; May 15 = overdue. */
+  const getFixedSchedule=(emp)=>{
+    const today=new Date(TODAY+'T12:00:00');
+    const freq=emp.frequency||'Monthly';
+    const sal=emp.salary||0;
+    const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
+    const empPays=[...allPayroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>a.date.localeCompare(b.date));
+    /* Generate dates 90 days back and 90 days ahead */
+    const fromD=new Date(today);fromD.setDate(today.getDate()-90);
+    const toD=new Date(today);toD.setDate(today.getDate()+90);
+    const fromStr=fmtD(fromD),toStr=fmtD(toD);
+    const allDates=[];
+    if(freq==='Monthly'){
+      const pd=emp.fixedDate1||emp.payDay||30;
+      let d=new Date(fromD.getFullYear(),fromD.getMonth(),pd);
+      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)allDates.push(fmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
+    } else if(freq==='Biweekly'){
+      const d1=emp.fixedDate1||1,d2=emp.fixedDate2||15;
+      let y=fromD.getFullYear(),m=fromD.getMonth();
+      while(true){
+        const dim=new Date(y,m+1,0).getDate();
+        const s1=fmtD(new Date(y,m,Math.min(d1,dim)));
+        const s2=fmtD(new Date(y,m,Math.min(d2,dim)));
+        if(s1>=fromStr&&s1<=toStr)allDates.push(s1);
+        if(s2>=fromStr&&s2<=toStr)allDates.push(s2);
+        m++;if(m>11){m=0;y++;}
+        if(fmtD(new Date(y,m,1))>toStr)break;
+      }
+    } else { /* Weekly */
+      const dow=emp.fixedDOW!==undefined?emp.fixedDOW:5;
+      let d=new Date(fromD);
+      while(d.getDay()!==dow)d.setDate(d.getDate()+1);
+      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)allDates.push(fmtD(d));d.setDate(d.getDate()+7);}
+    }
+    allDates.sort();
+    const pastDates=allDates.filter(d=>d<=TODAY);
+    const futureDates=allDates.filter(d=>d>TODAY);
+    /* Match: each payment covers the latest fixed date on or before the payment date */
+    const coveredDates=new Set();
+    empPays.forEach(pay=>{
+      const nearest=[...pastDates].reverse().find(d=>d<=pay.date);
+      if(nearest)coveredDates.add(nearest);
+    });
+    const overdueDates=pastDates.filter(d=>!coveredDates.has(d));
+    const alreadyPaid=overdueDates.length===0;
+    const lastEntry=empPays.length>0?empPays[empPays.length-1]:null;
+    const DOW_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const schedLabel=freq==='Monthly'?`Fixed · ${emp.fixedDate1||emp.payDay||30}th`:
+      freq==='Biweekly'?`Fixed · ${emp.fixedDate1||1}th & ${emp.fixedDate2||15}th`:
+      `Fixed · every ${DOW_NAMES[emp.fixedDOW||5]}`;
+    if(alreadyPaid){
+      const nextDate=futureDates[0]||fmtD(new Date(today.getFullYear(),today.getMonth()+1,1));
+      const daysUntil=Math.round((new Date(nextDate+'T12:00:00')-today)/(1000*60*60*24));
+      return{nextDate,daysUntil,alreadyPaid:true,amount:pc,lastEntry,label:schedLabel,missedDate:null,upcomingDate:null};
+    } else {
+      /* Show oldest overdue; combine all overdue periods into total owed */
+      const oldestOverdue=overdueDates[0];
+      const totalOwed=overdueDates.length*pc;
+      const daysUntil=Math.round((new Date(oldestOverdue+'T12:00:00')-today)/(1000*60*60*24));
+      const upcomingDate=futureDates[0]||null;
+      return{nextDate:oldestOverdue,daysUntil,alreadyPaid:false,amount:totalOwed,lastEntry,label:schedLabel,missedDate:oldestOverdue,upcomingDate,overdueCount:overdueDates.length};
+    }
+  };
+
   const getSchedule=(emp)=>{
+    if(emp.scheduleType==='fixed')return getFixedSchedule(emp);
     const today=new Date(TODAY+'T12:00:00');
     const freq=emp.frequency||'Monthly';
     const sal=emp.salary||0;
@@ -3871,6 +3980,61 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                   </select>
                 </div>
               )}
+              {/* Schedule Type */}
+              <div>
+                <span className="fl">Pay Schedule Mode</span>
+                <div style={{display:'flex',borderRadius:'8px',overflow:'hidden',border:'1px solid var(--border)'}}>
+                  {[{val:'auto',label:'Auto (days since last pay)'},{val:'fixed',label:'Fixed dates'}].map(opt=>(
+                    <button key={opt.val} onClick={()=>setEmpSchedType(opt.val)}
+                      style={{flex:1,padding:'8px 4px',fontSize:'12px',fontWeight:'700',border:'none',cursor:'pointer',
+                        background:empSchedType===opt.val?'#4f46e5':'transparent',
+                        color:empSchedType===opt.val?'#fff':'var(--text3)',transition:'all .2s'}}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {empSchedType==='auto'&&<p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>Next due = last payment date + pay interval. Can drift if you pay late.</p>}
+              </div>
+              {/* Fixed schedule date inputs */}
+              {empSchedType==='fixed'&&empFreq==='Biweekly'&&(
+                <div style={{background:'#f5f3ff',borderRadius:'10px',padding:'12px 14px',border:'1px solid #ede9fe'}}>
+                  <p style={{fontSize:'12px',fontWeight:'700',color:'#6366f1',margin:'0 0 10px'}}>📅 Fixed Pay Dates</p>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
+                    <div>
+                      <span className="fl">1st date of month</span>
+                      <select className="fi" value={empFixDate1} onChange={e=>setEmpFixDate1(parseInt(e.target.value))}>
+                        {[1,2,3,5,7,10,14,15].map(d=><option key={d} value={d}>{d}{d===1?'st':d===2?'nd':d===3?'rd':'th'}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <span className="fl">2nd date of month</span>
+                      <select className="fi" value={empFixDate2} onChange={e=>setEmpFixDate2(parseInt(e.target.value))}>
+                        {[15,16,20,25,28,30,31].map(d=><option key={d} value={d}>{d}{d===30||d===31?'th/last':'th'}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <p style={{fontSize:'11px',color:'#7c3aed',margin:'8px 0 0'}}>
+                    💡 A payment on any date will be matched to the nearest past fixed date.<br/>
+                    e.g. Pay on May 4 → covers {empFixDate1}th → {empFixDate2}th still due.
+                  </p>
+                </div>
+              )}
+              {empSchedType==='fixed'&&empFreq==='Weekly'&&(
+                <div style={{background:'#f5f3ff',borderRadius:'10px',padding:'12px 14px',border:'1px solid #ede9fe'}}>
+                  <span className="fl">Pay day of week</span>
+                  <select className="fi" value={empFixDOW} onChange={e=>setEmpFixDOW(parseInt(e.target.value))}>
+                    {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>(
+                      <option key={i} value={i}>{d}</option>
+                    ))}
+                  </select>
+                  <p style={{fontSize:'11px',color:'#7c3aed',margin:'6px 0 0'}}>Pay schedule will track every {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][empFixDOW]} as a pay date.</p>
+                </div>
+              )}
+              {empSchedType==='fixed'&&empFreq==='Monthly'&&(
+                <div style={{background:'#f5f3ff',borderRadius:'10px',padding:'8px 14px',border:'1px solid #ede9fe'}}>
+                  <p style={{fontSize:'12px',color:'#7c3aed',margin:0}}>✓ Monthly schedule uses your Pay Day setting above. Payments are matched to that fixed date each month.</p>
+                </div>
+              )}
               {/* Payment details section */}
               <div style={{borderTop:'1px solid var(--border)',paddingTop:'12px',marginTop:'4px'}}>
                 <p style={{margin:'0 0 8px',fontSize:'11px',fontWeight:'800',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em'}}>💳 Payment Details</p>
@@ -3903,6 +4067,8 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                           {e.role||''}
                           {e.salary?` · ${P(e.salary)}/mo`:''}
                           {e.frequency?` · ${e.frequency}`:''}
+                          {e.scheduleType==='fixed'?` · Fixed`:''}
+                          {e.scheduleType==='fixed'&&e.frequency==='Biweekly'?` (${e.fixedDate1||1}/${e.fixedDate2||15})`:''}
                           {e.frequency==='Monthly'&&e.payDay?` (${e.payDay}th)`:''}
                         </p>
                         <p style={{fontSize:'10px',color:sc.alreadyPaid?'#16a34a':isOverdue(sc.nextDate)?'#ef4444':'#6366f1',margin:'1px 0 0',fontWeight:'700'}}>
@@ -3992,7 +4158,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
+function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,budgetFixed,lastMonthInc,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
 
   /* Category budget limits state */
   const catBudgets=settings.categoryBudgets||[];
@@ -4069,36 +4235,89 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
   return(
     <div className="col fade" style={{gap:'20px'}}>
 
-      {/* ALLOCATION % SETTINGS */}
+      {/* ALLOCATION SETTINGS */}
       <div className="card" style={{padding:'22px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px',flexWrap:'wrap',gap:'10px'}}>
           <p className="sect" style={{margin:0}}>Allocation Settings</p>
-          <select className="fi" style={{width:'auto',fontSize:'13px',padding:'5px 10px'}} value={settings.budgetMode} onChange={e=>setSettings(s=>({...s,budgetMode:e.target.value}))}>
-            <option value="avg">Base: 3-month avg income</option>
-            <option value="current">Base: This month's income</option>
-          </select>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'12px',marginBottom:'14px'}}>
-          {[
-            {label:'Tithes %',key:'tithePct',color:'#f59e0b'},
-            {label:'Investment %',key:'investPct',color:'#6366f1'},
-            {label:'Savings %',key:'savingsPct',color:'#10b981'},
-            {label:'Desires %',key:'desiresPct',color:'#ec4899'},
-          ].map(({label,key,color})=>(
-            <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:`1px solid var(--border)`}}>
-              <span className="fl" style={{color}}>{label}</span>
-              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                <input type="number" className="pct-input" style={{borderColor:color,color}} value={settings[key]||0} min="0" max="100"
-                  onChange={e=>setSettings(s=>({...s,[key]:Math.min(100,Math.max(0,parseInt(e.target.value)||0))}))}/>
-                <span style={{fontSize:'13px',color:'var(--text3)'}}>= {P((base*(settings[key]||0))/100)}</span>
-              </div>
+          <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+            {/* % vs Fixed toggle */}
+            <div style={{display:'flex',borderRadius:'8px',overflow:'hidden',border:'1px solid var(--border)'}}>
+              {[{val:'pct',label:'% of Income'},{val:'fixed',label:'Fixed ₱'}].map(opt=>(
+                <button key={opt.val} onClick={()=>setSettings(s=>({...s,budgetType:opt.val}))}
+                  style={{padding:'5px 12px',fontSize:'12px',fontWeight:'700',border:'none',cursor:'pointer',
+                    background:settings.budgetType===opt.val?'#4f46e5':'transparent',
+                    color:settings.budgetType===opt.val?'#fff':'var(--text3)',transition:'all .2s'}}>
+                  {opt.label}
+                </button>
+              ))}
             </div>
-          ))}
+            {/* Income base selector — only relevant in % mode */}
+            {!budgetFixed&&(
+              <select className="fi" style={{width:'auto',fontSize:'13px',padding:'5px 10px'}} value={settings.budgetMode} onChange={e=>setSettings(s=>({...s,budgetMode:e.target.value}))}>
+                <option value="avg">Base: 3-month avg</option>
+                <option value="current">Base: This month</option>
+              </select>
+            )}
+          </div>
         </div>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:totalFixed>100?'#fff5f5':'#f0fdf4',border:`1px solid ${totalFixed>100?'#fca5a5':'#86efac'}`}}>
-          <span style={{fontSize:'13px',fontWeight:'700',color:totalFixed>100?'#ef4444':'#16a34a'}}>Total allocated: {totalFixed}%</span>
-          <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials get: {Math.max(0,100-totalFixed)}% = {P(Math.max(0,spendBudget))}</span>
-        </div>
+
+        {/* % MODE inputs */}
+        {!budgetFixed&&(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'12px',marginBottom:'14px'}}>
+            {[
+              {label:'Tithes %',key:'tithePct',color:'#f59e0b'},
+              {label:'Investment %',key:'investPct',color:'#6366f1'},
+              {label:'Savings %',key:'savingsPct',color:'#10b981'},
+              {label:'Desires %',key:'desiresPct',color:'#ec4899'},
+            ].map(({label,key,color})=>(
+              <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:'1px solid var(--border)'}}>
+                <span className="fl" style={{color}}>{label}</span>
+                <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                  <input type="number" className="pct-input" style={{borderColor:color,color}} value={settings[key]||0} min="0" max="100"
+                    onChange={e=>setSettings(s=>({...s,[key]:Math.min(100,Math.max(0,parseInt(e.target.value)||0))}))}/>
+                  <span style={{fontSize:'13px',color:'var(--text3)'}}>= {P((base*(settings[key]||0))/100)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* FIXED ₱ MODE inputs */}
+        {budgetFixed&&(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'12px',marginBottom:'14px'}}>
+            {[
+              {label:'Tithes ₱',key:'titheAmt',color:'#f59e0b',actual:tithe},
+              {label:'Investment ₱',key:'investAmt',color:'#6366f1',actual:invest},
+              {label:'Savings ₱',key:'savingsAmt',color:'#10b981',actual:savings},
+              {label:'Desires ₱',key:'desiresAmt',color:'#ec4899',actual:desires},
+            ].map(({label,key,color,actual})=>(
+              <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:'1px solid var(--border)'}}>
+                <span className="fl" style={{color}}>{label}</span>
+                <input type="number" className="fi" style={{borderColor:color}} value={settings[key]||''} min="0" step="100"
+                  placeholder="₱ amount"
+                  onChange={e=>setSettings(s=>({...s,[key]:parseFloat(e.target.value)||0}))}/>
+                {mInc>0&&(settings[key]||0)>0&&(
+                  <span style={{fontSize:'11px',color:'var(--text4)',marginTop:'4px',display:'block'}}>
+                    ≈ {((settings[key]||0)/mInc*100).toFixed(1)}% of this month's income
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Summary row */}
+        {!budgetFixed?(
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:totalFixed>100?'#fff5f5':'#f0fdf4',border:`1px solid ${totalFixed>100?'#fca5a5':'#86efac'}`}}>
+            <span style={{fontSize:'13px',fontWeight:'700',color:totalFixed>100?'#ef4444':'#16a34a'}}>Total allocated: {totalFixed}%</span>
+            <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials get: {Math.max(0,100-totalFixed)}% = {P(Math.max(0,spendBudget))}</span>
+          </div>
+        ):(
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:'#f0fdf4',border:'1px solid #86efac'}}>
+            <span style={{fontSize:'13px',fontWeight:'700',color:'#16a34a'}}>Fixed allocations: {P(tithe+invest+savings+desires)}</span>
+            <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials budget: {P(Math.max(0,spendBudget))}</span>
+          </div>
+        )}
       </div>
 
       {/* BASE INCOME INFO */}
@@ -4301,14 +4520,14 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
         {!emergencyAcctId&&<p style={{fontSize:'12px',color:'#f59e0b',margin:'8px 0 0',fontWeight:'600'}}>⚠ Pick a dedicated emergency fund account to track your balance here.</p>}
       </div>
 
-      {/* DAILY CAP */}
+      {/* DAILY ESTIMATE */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
         <div className="card" style={{padding:'16px 18px',background:'#fffbeb'}}>
           <p style={{fontSize:'11px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>
-            Daily Spend Cap <InfoIcon text={`Remaining essentials budget ÷ ${daysLeft} days left this month. = ${P(essentialsAllowed-essentialsSpent)} ÷ ${daysLeft} = ${P(dailyCap)}`} title="Daily Spend Cap"/>
+            Daily Spend Est. <InfoIcon text={`Suggestion only — not a hard limit.\n\nUses last month's income (${P(lastMonthInc)}) as a stable reference so this number doesn't change every time income arrives.\n\nFormula: (Last month income − allocations − subscriptions − payroll − expenses so far) ÷ ${daysLeft} days left`} title="Daily Spend Estimate"/>
           </p>
-          <p style={{fontSize:'24px',fontWeight:'900',color:'#d97706',margin:0}}>{P(dailyCap)}</p>
-          <p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>{daysLeft} days left</p>
+          <p style={{fontSize:'24px',fontWeight:'900',color:'#d97706',margin:0}}>~{P(dailyCap)}</p>
+          <p style={{fontSize:'11px',color:'var(--text4)',margin:'4px 0 0'}}>{daysLeft} days left · based on last month</p>
         </div>
         <div className="card" style={{padding:'16px 18px',background:'#f0fdf4'}}>
           <p style={{fontSize:'11px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>
