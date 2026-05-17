@@ -1054,35 +1054,39 @@ function MainApp({onLogout}){
     const lastPay=empPays.length>0?empPays[empPays.length-1]:null;
     let owed=0;
     if(emp.scheduleType==='fixed'){
-      /* Fixed mode: generate past dates and count uncovered ones */
-      const fromD=new Date(today);fromD.setDate(today.getDate()-90);
-      const toStr=TODAY;const fromStr=fmtD(fromD);
+      /* Fixed mode: same "start from last payment" logic as getFixedSchedule */
+      const periodDays=freq==='Biweekly'?17:freq==='Weekly'?9:36;
+      const refDate=lastPay?lastPay.date:TODAY;
+      const lb=new Date(refDate+'T12:00:00');lb.setDate(lb.getDate()-periodDays);
+      const fromStr=fmtD(lb),toStr=TODAY;
       const pastDates=[];
       if(freq==='Monthly'){
         const pd=emp.fixedDate1||emp.payDay||30;
-        let d=new Date(fromD.getFullYear(),fromD.getMonth(),pd);
+        let d=new Date(lb.getFullYear(),lb.getMonth(),pd);
         while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)pastDates.push(fmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
       } else if(freq==='Biweekly'){
         const d1=emp.fixedDate1||1,d2=emp.fixedDate2||15;
-        let y=fromD.getFullYear(),m=fromD.getMonth();
+        let y=lb.getFullYear(),m=lb.getMonth();
         while(true){
           const dim=new Date(y,m+1,0).getDate();
           const s1=fmtD(new Date(y,m,Math.min(d1,dim)));
           const s2=fmtD(new Date(y,m,Math.min(d2,dim)));
           if(s1>=fromStr&&s1<=toStr)pastDates.push(s1);
-          if(s2>=fromStr&&s2<=toStr)pastDates.push(s2);
+          if(s2>=fromStr&&s2<=toStr&&s2!==s1)pastDates.push(s2);
           m++;if(m>11){m=0;y++;}if(fmtD(new Date(y,m,1))>toStr)break;
         }
       } else {
         const dow=emp.fixedDOW!==undefined?emp.fixedDOW:5;
-        let d=new Date(fromD);while(d.getDay()!==dow)d.setDate(d.getDate()+1);
+        let d=new Date(lb);while(d.getDay()!==dow)d.setDate(d.getDate()+1);
         while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)pastDates.push(fmtD(d));d.setDate(d.getDate()+7);}
       }
       pastDates.sort();
-      const covered=new Set();
-      empPays.forEach(pay=>{const n=[...pastDates].reverse().find(d=>d<=pay.date);if(n)covered.add(n);});
-      const overdue=pastDates.filter(d=>!covered.has(d)).length;
-      /* owed = all overdue + next upcoming */
+      /* Find last covered date — everything before it is settled */
+      const lastCov=lastPay?([...pastDates].reverse().find(d=>d<=lastPay.date)||null):null;
+      const checkDates=lastCov?pastDates.filter(d=>d>lastCov):pastDates;
+      const covd=new Set();
+      empPays.forEach(pay=>{if(lastCov&&pay.date<=lastCov)return;const n=[...checkDates].reverse().find(d=>d<=pay.date);if(n)covd.add(n);});
+      const overdue=checkDates.filter(d=>!covd.has(d)).length;
       owed=pc*(overdue+1);
     } else if(freq==='Monthly'){
       const pd=emp.payDay||30,day=today.getDate(),m=today.getMonth(),y=today.getFullYear();
@@ -3603,24 +3607,17 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   const isOverdue=(str)=>{if(!str)return false;return new Date(str+'T12:00:00')<new Date(TODAY+'T12:00:00');};
 
   /* ── Fixed schedule logic ──
-     Generates a list of fixed pay dates and matches payments to them.
-     A payment "covers" the most recent fixed date that falls on or before the payment date.
-     Example: pay dates 15th+30th; payment on May 4 → covers April 30; May 15 = overdue. */
-  const getFixedSchedule=(emp)=>{
-    const today=new Date(TODAY+'T12:00:00');
+     Key rule: start checking from the last payment's covered date forward.
+     Everything before the last payment is considered settled — no ancient history.
+     e.g. pay dates 1st+15th; last payment May 4 → covers May 1 → only check May 15+ */
+  const genFixedDates=(emp,fromStr,toStr)=>{
     const freq=emp.frequency||'Monthly';
-    const sal=emp.salary||0;
-    const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
-    const empPays=[...allPayroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>a.date.localeCompare(b.date));
-    /* Generate dates 90 days back and 90 days ahead */
-    const fromD=new Date(today);fromD.setDate(today.getDate()-90);
-    const toD=new Date(today);toD.setDate(today.getDate()+90);
-    const fromStr=fmtD(fromD),toStr=fmtD(toD);
-    const allDates=[];
+    const dates=[];
+    const fromD=new Date(fromStr+'T12:00:00');
     if(freq==='Monthly'){
       const pd=emp.fixedDate1||emp.payDay||30;
       let d=new Date(fromD.getFullYear(),fromD.getMonth(),pd);
-      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)allDates.push(fmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
+      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)dates.push(fmtD(d));d=new Date(d.getFullYear(),d.getMonth()+1,pd);}
     } else if(freq==='Biweekly'){
       const d1=emp.fixedDate1||1,d2=emp.fixedDate2||15;
       let y=fromD.getFullYear(),m=fromD.getMonth();
@@ -3628,39 +3625,70 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
         const dim=new Date(y,m+1,0).getDate();
         const s1=fmtD(new Date(y,m,Math.min(d1,dim)));
         const s2=fmtD(new Date(y,m,Math.min(d2,dim)));
-        if(s1>=fromStr&&s1<=toStr)allDates.push(s1);
-        if(s2>=fromStr&&s2<=toStr)allDates.push(s2);
+        if(s1>=fromStr&&s1<=toStr)dates.push(s1);
+        if(s2>=fromStr&&s2<=toStr&&s2!==s1)dates.push(s2);
         m++;if(m>11){m=0;y++;}
         if(fmtD(new Date(y,m,1))>toStr)break;
       }
-    } else { /* Weekly */
+    } else {
       const dow=emp.fixedDOW!==undefined?emp.fixedDOW:5;
       let d=new Date(fromD);
       while(d.getDay()!==dow)d.setDate(d.getDate()+1);
-      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)allDates.push(fmtD(d));d.setDate(d.getDate()+7);}
+      while(fmtD(d)<=toStr){if(fmtD(d)>=fromStr)dates.push(fmtD(d));d.setDate(d.getDate()+7);}
     }
-    allDates.sort();
-    const pastDates=allDates.filter(d=>d<=TODAY);
-    const futureDates=allDates.filter(d=>d>TODAY);
-    /* Match: each payment covers the latest fixed date on or before the payment date */
-    const coveredDates=new Set();
-    empPays.forEach(pay=>{
-      const nearest=[...pastDates].reverse().find(d=>d<=pay.date);
-      if(nearest)coveredDates.add(nearest);
-    });
-    const overdueDates=pastDates.filter(d=>!coveredDates.has(d));
-    const alreadyPaid=overdueDates.length===0;
-    const lastEntry=empPays.length>0?empPays[empPays.length-1]:null;
+    return dates.sort();
+  };
+
+  const getFixedSchedule=(emp)=>{
+    const today=new Date(TODAY+'T12:00:00');
+    const freq=emp.frequency||'Monthly';
+    const sal=emp.salary||0;
+    const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
+    const empPays=[...allPayroll.filter(p=>p.employeeId===emp.id)].sort((a,b)=>a.date.localeCompare(b.date));
+    const lastPay=empPays.length>0?empPays[empPays.length-1]:null;
     const DOW_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const schedLabel=freq==='Monthly'?`Fixed · ${emp.fixedDate1||emp.payDay||30}th`:
       freq==='Biweekly'?`Fixed · ${emp.fixedDate1||1}th & ${emp.fixedDate2||15}th`:
       `Fixed · every ${DOW_NAMES[emp.fixedDOW||5]}`;
+
+    /* Start generating dates from 1 period before last payment (or 1 period back if no payments).
+       This way we never dig into ancient history — everything before last payment is settled. */
+    const periodDays=freq==='Biweekly'?17:freq==='Weekly'?9:36;
+    const refDate=lastPay?lastPay.date:TODAY;
+    const lb=new Date(refDate+'T12:00:00');lb.setDate(lb.getDate()-periodDays);
+    const fromStr=fmtD(lb);
+    const toStr=fmtD(new Date(today.getFullYear(),today.getMonth()+3,0));
+    const allDates=genFixedDates(emp,fromStr,toStr);
+    const pastDates=allDates.filter(d=>d<=TODAY);
+    const futureDates=allDates.filter(d=>d>TODAY);
+
+    /* Find which fixed date the last payment covers (nearest past date ≤ payment date) */
+    let lastCoveredDate=null;
+    if(lastPay){
+      lastCoveredDate=[...pastDates].reverse().find(d=>d<=lastPay.date)||null;
+    }
+
+    /* Only check dates AFTER lastCoveredDate — everything before is considered settled */
+    const checkDates=lastCoveredDate
+      ?pastDates.filter(d=>d>lastCoveredDate)
+      :pastDates; /* no payments: show recent uncovered dates */
+
+    /* Among checkDates, see if any OTHER payments cover them */
+    const coveredAfter=new Set();
+    empPays.forEach(pay=>{
+      if(lastCoveredDate&&pay.date<=lastCoveredDate)return;
+      const t=[...checkDates].reverse().find(d=>d<=pay.date);
+      if(t)coveredAfter.add(t);
+    });
+    const overdueDates=checkDates.filter(d=>!coveredAfter.has(d));
+    const alreadyPaid=overdueDates.length===0;
+    const lastEntry=lastPay;
+
     if(alreadyPaid){
       const nextDate=futureDates[0]||fmtD(new Date(today.getFullYear(),today.getMonth()+1,1));
       const daysUntil=Math.round((new Date(nextDate+'T12:00:00')-today)/(1000*60*60*24));
       return{nextDate,daysUntil,alreadyPaid:true,amount:pc,lastEntry,label:schedLabel,missedDate:null,upcomingDate:null};
     } else {
-      /* Show oldest overdue; combine all overdue periods into total owed */
       const oldestOverdue=overdueDates[0];
       const totalOwed=overdueDates.length*pc;
       const daysUntil=Math.round((new Date(oldestOverdue+'T12:00:00')-today)/(1000*60*60*24));
