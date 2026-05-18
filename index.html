@@ -3383,6 +3383,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
   const[accountId,setAccountId]=useState('');
   const[status,setStatus]=useState('Paid');
   const[editId,setEditId]=useState(null);
+  const[filterAccId,setFilterAccId]=useState('');
 
   const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setType('VA Salary');setClientId('');setAccountId('');setStatus('Paid');};
   const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');};
@@ -3415,9 +3416,28 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
           </div>
         </div>
       </div>
-      <div className="col" style={{gap:'8px',maxHeight:'70vh',overflowY:'auto'}}>
-        {income.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No income recorded this month.</div>}
-        {[...income].reverse().map(i=>{
+      <div className="col" style={{gap:'8px'}}>
+        {/* Account filter */}
+        <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+          <span style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',whiteSpace:'nowrap'}}>Filter by account:</span>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap',flex:1}}>
+            <button onClick={()=>setFilterAccId('')}
+              style={{padding:'4px 10px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',
+                background:filterAccId===''?'#6366f1':'transparent',color:filterAccId===''?'#fff':'var(--text3)'}}>
+              All
+            </button>
+            {accounts.map(a=>(
+              <button key={a.id} onClick={()=>setFilterAccId(filterAccId===a.id?'':a.id)}
+                style={{padding:'4px 10px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',
+                  background:filterAccId===a.id?'#6366f1':'transparent',color:filterAccId===a.id?'#fff':'var(--text3)'}}>
+                {a.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{gap:'8px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column'}}>
+        {(filterAccId?income.filter(i=>i.accountId===filterAccId):income).length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>{filterAccId?'No income from this account this month.':'No income recorded this month.'}</div>}
+        {[...(filterAccId?income.filter(i=>i.accountId===filterAccId):income)].reverse().map(i=>{
           const cl=clients.find(c=>c.id===i.clientId);const ac=accounts.find(a=>a.id===i.accountId);
           const noAcct=!i.accountId;
           const isEditing=editId===i.id;
@@ -3442,6 +3462,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
@@ -3455,6 +3476,8 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   const[accountId,setAccountId]=useState('');
   const[cardId,setCardId]=useState('');
   const[editId,setEditId]=useState(null);
+  const[filterAccId,setFilterAccId]=useState('');
+  const[filterCardId,setFilterCardId]=useState('');
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
 
   const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');};
@@ -3487,8 +3510,34 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
           </div>
         </div>
       </div>
-      <div className="col" style={{gap:'8px',maxHeight:'70vh',overflowY:'auto'}}>
-        {(payroll||[]).map(p=>{const em=(employees||[]).find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);return(
+      <div className="col" style={{gap:'8px'}}>
+        {/* Account / Card filter */}
+        <div style={{display:'flex',alignItems:'flex-start',gap:'8px',flexWrap:'wrap'}}>
+          <span style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',whiteSpace:'nowrap',paddingTop:'5px'}}>Filter:</span>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap',flex:1}}>
+            <button onClick={()=>{setFilterAccId('');setFilterCardId('');}}
+              style={{padding:'4px 10px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',
+                background:!filterAccId&&!filterCardId?'#6366f1':'transparent',color:!filterAccId&&!filterCardId?'#fff':'var(--text3)'}}>
+              All
+            </button>
+            {accounts.map(a=>(
+              <button key={a.id} onClick={()=>{setFilterAccId(filterAccId===a.id?'':a.id);setFilterCardId('');}}
+                style={{padding:'4px 10px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',
+                  background:filterAccId===a.id?'#6366f1':'transparent',color:filterAccId===a.id?'#fff':'var(--text3)'}}>
+                {a.name}
+              </button>
+            ))}
+            {cards.map(c=>(
+              <button key={c.id} onClick={()=>{setFilterCardId(filterCardId===c.id?'':c.id);setFilterAccId('');}}
+                style={{padding:'4px 10px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid #f43f5e22',cursor:'pointer',
+                  background:filterCardId===c.id?'#f43f5e':'transparent',color:filterCardId===c.id?'#fff':'#f43f5e'}}>
+                💳 {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{gap:'8px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column'}}>
+        {(payroll||[]).filter(p=>!filterAccId&&!filterCardId||(filterAccId&&p.accountId===filterAccId)).map(p=>{const em=(employees||[]).find(e=>e.id===p.employeeId);const ac=accounts.find(a=>a.id===p.accountId);return(
           <div key={'pay-'+p.id} className="card row" style={{padding:'14px 18px',borderLeft:'3px solid #7c3aed',background:'#faf5ff'}}>
             <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
               <div style={{width:'34px',height:'34px',background:'#f5f3ff',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="users" s={15} c="#7c3aed" sw={1.75}/></div>
@@ -3503,9 +3552,13 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
             <span style={{fontWeight:'800',fontSize:'15px',color:'#7c3aed'}}>{P(p.amount)}</span>
           </div>
         );})}
-        {expenses.length===0&&(payroll||[]).length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No expenses recorded this month.</div>}
-        {expenses.length===0&&(payroll||[]).length>0&&<p style={{fontSize:'12px',color:'#94a3b8',textAlign:'center'}}>No manual expenses this month.</p>}
-        {[...expenses].reverse().filter(e=>e.alloc!=='transfer_out'&&e.alloc!=='transfer_in'&&e.alloc!=='allocation_in').map(e=>{
+        {(()=>{
+          const filteredExp=[...expenses].filter(e=>e.alloc!=='transfer_out'&&e.alloc!=='transfer_in'&&e.alloc!=='allocation_in'&&(!filterAccId||e.accountId===filterAccId)&&(!filterCardId||e.cardId===filterCardId));
+          const filteredPay=(payroll||[]).filter(p=>!filterAccId&&!filterCardId||(filterAccId&&p.accountId===filterAccId));
+          if(filteredExp.length===0&&filteredPay.length===0)return <div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>{filterAccId||filterCardId?'No expenses from this account this month.':'No expenses recorded this month.'}</div>;
+          return null;
+        })()}
+        {[...expenses].filter(e=>e.alloc!=='transfer_out'&&e.alloc!=='transfer_in'&&e.alloc!=='allocation_in'&&(!filterAccId||e.accountId===filterAccId)&&(!filterCardId||e.cardId===filterCardId)).reverse().map(e=>{
           const ac=accounts.find(a=>a.id===e.accountId);const cd=cards.find(c=>c.id===e.cardId);
           const noAcct=!e.accountId&&!e.cardId;
           const isEditing=editId===e.id;
@@ -3529,6 +3582,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );
