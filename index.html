@@ -7,7 +7,7 @@
 -->
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
   <title>AbsidiFinance PH</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -87,15 +87,53 @@
     @media(max-width:640px){
       .__hdr-inner{flex-wrap:wrap;gap:8px}
       .__hdr-right{gap:6px}
-      .__content{padding:16px 12px}
+      .__content{padding:16px 12px;padding-bottom:80px!important}
       .__subtitle{padding:6px 12px;font-size:11px}
       .__grid2{grid-template-columns:1fr!important}
       .__form-grid{grid-template-columns:1fr!important}
-      /* prevent number/label overflow in card rows */
       .row{flex-wrap:wrap;gap:6px}
-      /* money values never break mid-number */
       .no-wrap{white-space:nowrap!important}
+      /* bigger touch targets for inputs on mobile */
+      .fi{font-size:16px!important;padding:12px 14px!important;min-height:48px}
+      select.fi{min-height:48px}
+      .btn{min-height:48px;font-size:14px!important}
+      .btn.bp,.btn.bs{padding:13px 18px!important}
+      /* top tab bar hidden on mobile — use bottom nav */
+      .__top-tabs{display:none!important}
     }
+    /* ── Balance toast ── */
+    .bal-toast{
+      position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:#1e293b;color:#fff;border-radius:14px;padding:12px 18px;
+      box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:9999;min-width:240px;max-width:340px;
+      opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;text-align:center;
+    }
+    .bal-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    /* ── Mobile bottom nav ── */
+    .mob-nav{
+      display:none;position:fixed;bottom:0;left:0;right:0;
+      background:var(--card);border-top:1px solid var(--border);
+      z-index:1000;padding:6px 0 env(safe-area-inset-bottom,6px);
+      box-shadow:0 -4px 20px rgba(0,0,0,.08);
+    }
+    .mob-nav-inner{display:flex;justify-content:space-around;align-items:center;}
+    .mob-nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 10px;
+      background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;font-weight:700;
+      min-width:52px;border-radius:10px;transition:color .15s;}
+    .mob-nav-btn.active{color:#4f46e5;}
+    .mob-nav-btn svg{flex-shrink:0;}
+    @media(max-width:640px){.mob-nav{display:block;}}
+    /* more-tabs bottom sheet */
+    .more-sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1100;}
+    .more-sheet-overlay.open{display:block;}
+    .more-sheet{position:absolute;bottom:0;left:0;right:0;background:var(--card);border-radius:20px 20px 0 0;
+      padding:16px 0 env(safe-area-inset-bottom,20px);max-height:70vh;overflow-y:auto;}
+    .more-sheet-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 12px;}
+    .more-sheet-item{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;
+      background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;font-weight:700;
+      border-radius:12px;transition:background .15s;}
+    .more-sheet-item.active{background:#eef2ff;color:#4f46e5;}
+    .more-sheet-item:active{background:var(--card2);}
     /* universal text overflow guard */
     .ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
     /* card item row: left grows, right shrinks to buttons */
@@ -876,6 +914,15 @@ function MainApp({onLogout}){
   const[fxLoaded,setFxLoaded]=useState(false);
   const[fxUpdatedAt,setFxUpdatedAt]=useState(null);
   const[tab,setTab]=useState('home');
+  const[showMoreTabs,setShowMoreTabs]=useState(false);
+  const[balToast,setBalToast]=useState(null); /* {accName,newBal,delta,type:'income'|'expense'} */
+  const balToastTimer=React.useRef(null);
+  const showBalToast=(accId,delta,type)=>{
+    const ac=accounts.find(a=>a.id===accId);if(!ac)return;
+    clearTimeout(balToastTimer.current);
+    setBalToast({accName:ac.name,newBal:accBal(accId),delta,type});
+    balToastTimer.current=setTimeout(()=>setBalToast(null),3500);
+  };
   const[subReminder,setSubReminder]=useState(null); /* {queue:[{sub,phpAmount},...], current:0} */
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
@@ -1253,8 +1300,8 @@ function MainApp({onLogout}){
               </div>
             </div>
           </div>
-          {/* TABS */}
-          <div style={{display:'flex',gap:'2px',paddingBottom:'10px',overflowX:'auto'}}>
+          {/* TABS — hidden on mobile, replaced by bottom nav */}
+          <div className="__top-tabs" style={{display:'flex',gap:'2px',paddingBottom:'10px',overflowX:'auto'}}>
             {TABS.map(t=>(
               <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={()=>setTab(t.id)}>
                 <Ico n={t.icon} s={14} c="currentColor"/>
@@ -1294,8 +1341,8 @@ function MainApp({onLogout}){
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
-        {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts}/>}
-        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees}/>}
+        {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
+        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
@@ -1362,6 +1409,79 @@ function MainApp({onLogout}){
           </div>
         </div>
       )}
+
+      {/* ── ACCOUNT BALANCE TOAST ── */}
+      <div className={`bal-toast${balToast?' show':''}`}>
+        {balToast&&(<>
+          <div style={{fontSize:'11px',fontWeight:'700',color:'rgba(255,255,255,.55)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'4px'}}>
+            {balToast.accName}
+          </div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',marginBottom:'4px'}}>
+            <span style={{fontSize:'13px',color:balToast.type==='income'?'#34d399':'#f87171',fontWeight:'700'}}>
+              {balToast.type==='income'?'+':'-'}{P(Math.abs(balToast.delta))}
+            </span>
+            <span style={{color:'rgba(255,255,255,.4)',fontSize:'12px'}}>→</span>
+            <span style={{fontSize:'15px',fontWeight:'900',color:'#fff'}}>New bal: {P(balToast.newBal)}</span>
+          </div>
+          <div style={{fontSize:'11px',color:'rgba(255,255,255,.5)'}}>tap Accounts to view full details</div>
+        </>)}
+      </div>
+
+      {/* ── MOBILE BOTTOM NAV ── */}
+      {(()=>{
+        const BOT_TABS=[
+          {id:'home',icon:'home',label:'Home'},
+          {id:'income',icon:'expenses',label:'Income'},
+          {id:'expenses',icon:'income',label:'Expenses'},
+          {id:'budget',icon:'chart',label:'Budget'},
+          {id:'payroll',icon:'users',label:'Payroll'},
+        ];
+        const MORE_TABS=TABS.filter(t=>!BOT_TABS.find(b=>b.id===t.id));
+        const moreActive=MORE_TABS.some(t=>t.id===tab);
+        return(<>
+          {/* More sheet overlay */}
+          <div className={`more-sheet-overlay${showMoreTabs?' open':''}`} onClick={()=>setShowMoreTabs(false)}>
+            <div className="more-sheet" onClick={e=>e.stopPropagation()}>
+              <div style={{width:'36px',height:'4px',background:'var(--border)',borderRadius:'99px',margin:'0 auto 16px'}}/>
+              <p style={{fontSize:'11px',fontWeight:'700',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'.08em',textAlign:'center',marginBottom:'8px'}}>More</p>
+              <div className="more-sheet-grid">
+                {MORE_TABS.map(t=>(
+                  <button key={t.id} className={`more-sheet-item${tab===t.id?' active':''}`}
+                    onClick={()=>{setTab(t.id);setShowMoreTabs(false);}}>
+                    <Ico n={t.icon} s={22} c={tab===t.id?'#4f46e5':'var(--text3)'}/>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {/* Quick Transfer shortcut */}
+              <div style={{padding:'12px 16px',borderTop:'1px solid var(--border)',marginTop:'8px'}}>
+                <button style={{width:'100%',padding:'13px',background:'#4f46e5',color:'#fff',border:'none',borderRadius:'12px',fontWeight:'800',fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'}}
+                  onClick={()=>{setTab('accounts');setShowMoreTabs(false);}}>
+                  <Ico n="bank" s={16} c="#fff"/> Transfer Funds → Accounts
+                </button>
+              </div>
+            </div>
+          </div>
+          {/* Bottom bar */}
+          <nav className="mob-nav">
+            <div className="mob-nav-inner">
+              {BOT_TABS.map(t=>(
+                <button key={t.id} className={`mob-nav-btn${tab===t.id?' active':''}`} onClick={()=>setTab(t.id)}>
+                  <Ico n={t.icon} s={22} c={tab===t.id?'#4f46e5':'var(--text3)'}/>
+                  {t.label}
+                </button>
+              ))}
+              <button className={`mob-nav-btn${moreActive?' active':''}`} onClick={()=>setShowMoreTabs(v=>!v)}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={moreActive?'#4f46e5':'var(--text3)'} strokeWidth="2" strokeLinecap="round">
+                  <circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>
+                </svg>
+                More
+              </button>
+            </div>
+          </nav>
+        </>);
+      })()}
+
     </div>
   );
 }
@@ -3375,7 +3495,7 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedF
 }
 
 /* ════════  INCOME  ════════ */
-function IncomeTab({income,allIncome,setIncome,clients,accounts}){
+function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
   const[date,setDate]=useState(TODAY);
   const[amount,setAmount]=useState('');
   const[type,setType]=useState('VA Salary');
@@ -3389,11 +3509,13 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
   const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');};
   const save=()=>{
     if(!amount)return;
+    const amt=parseFloat(amount)||0;
     if(editId){
-      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:parseFloat(amount),type,clientId,accountId,status}:x));
+      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:amt,type,clientId,accountId,status}:x));
     }else{
-      setIncome([...allIncome,{id:uid(),date,amount:parseFloat(amount),type,clientId,accountId,status}]);
+      setIncome([...allIncome,{id:uid(),date,amount:amt,type,clientId,accountId,status}]);
     }
+    if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'income'),80);
     reset();
   };
 
@@ -3469,7 +3591,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts}){
 }
 
 /* ════════  EXPENSES  ════════ */
-function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,employees}){
+function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,employees,showBalToast}){
   const[date,setDate]=useState(TODAY);
   const[amount,setAmount]=useState('');
   const[category,setCategory]=useState('Food');
@@ -3484,11 +3606,13 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   const startEdit=(e)=>{setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');};
   const save=()=>{
     if(!amount)return;
+    const amt=parseFloat(amount)||0;
     if(editId){
-      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:parseFloat(amount),category,accountId,cardId}:x));
+      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:amt,category,accountId,cardId}:x));
     }else{
-      setExpenses([...allExpenses,{id:uid(),date,amount:parseFloat(amount),category,accountId,cardId}]);
+      setExpenses([...allExpenses,{id:uid(),date,amount:amt,category,accountId,cardId}]);
     }
+    if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'expense'),80);
     reset();
   };
 
