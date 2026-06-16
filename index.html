@@ -1151,10 +1151,11 @@ function MainApp({onLogout}){
       }
       pastDates.sort();
       /* Find last covered date — everything before it is settled */
-      const lastCov=lastPay?([...pastDates].reverse().find(d=>d<=lastPay.date)||null):null;
+      const _preWin3=empPays.filter(p=>p.date<fromStr);const _lastPre3=_preWin3.length>0?_preWin3[_preWin3.length-1]:null;
+      const lastCov=_lastPre3?([...pastDates].reverse().find(d=>d<=_lastPre3.date)||null):null;
       const checkDates=lastCov?pastDates.filter(d=>d>lastCov):pastDates;
-      const covd=new Set();
-      empPays.forEach(pay=>{if(lastCov&&pay.date<=lastCov)return;const n=[...checkDates].reverse().find(d=>d<=pay.date);if(n)covd.add(n);});
+      const covd=new Set();const _rem3=[...checkDates];
+      empPays.filter(p=>p.date>=fromStr).sort((a,b)=>a.date.localeCompare(b.date)).forEach(pay=>{const i=_rem3.findIndex(d=>d<=pay.date);if(i!==-1){covd.add(_rem3[i]);_rem3.splice(i,1);}});
       const overdue=checkDates.filter(d=>!covd.has(d)).length;
       owed=pc*(overdue+1);
     } else if(freq==='Monthly'){
@@ -2070,12 +2071,15 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
       const allDates=planGenFixedDates(emp,fromStr,toStr);
       const pastDates=allDates.filter(d=>d<=TODAY);
       const futureDates=allDates.filter(d=>d>TODAY);
-      /* Find which fixed date the last payment covers */
+      /* Find baseline from pre-window payments, then FIFO for window payments */
+      const _preWin2=empPays.filter(p=>p.date<fromStr);
+      const _lastPre2=_preWin2.length>0?_preWin2[_preWin2.length-1]:null;
       let lastCoveredDate=null;
-      if(lastPay){lastCoveredDate=[...pastDates].reverse().find(d=>d<=lastPay.date)||null;}
+      if(_lastPre2){lastCoveredDate=[...pastDates].reverse().find(d=>d<=_lastPre2.date)||null;}
       const checkDates=lastCoveredDate?pastDates.filter(d=>d>lastCoveredDate):pastDates;
       const covd=new Set();
-      empPays.forEach(pay=>{if(lastCoveredDate&&pay.date<=lastCoveredDate)return;const n=[...checkDates].reverse().find(d=>d<=pay.date);if(n)covd.add(n);});
+      const _rem2=[...checkDates];
+      empPays.filter(p=>p.date>=fromStr).sort((a,b)=>a.date.localeCompare(b.date)).forEach(pay=>{const i=_rem2.findIndex(d=>d<=pay.date);if(i!==-1){covd.add(_rem2[i]);_rem2.splice(i,1);}});
       const overdueDates=checkDates.filter(d=>!covd.has(d));
       alreadyPaid=overdueDates.length===0;
       lastEntry=lastPay;
@@ -3951,24 +3955,32 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     const pastDates=allDates.filter(d=>d<=TODAY);
     const futureDates=allDates.filter(d=>d>TODAY);
 
-    /* Find which fixed date the last payment covers (nearest past date ≤ payment date) */
+    /* Baseline: payments BEFORE the window establish what's already settled.
+       Window payments are processed separately with FIFO so partial payments
+       only credit the OLDEST uncovered period, not the most recent one. */
+    const preWindowPays=empPays.filter(p=>p.date<fromStr);
+    const lastPreWindow=preWindowPays.length>0?preWindowPays[preWindowPays.length-1]:null;
     let lastCoveredDate=null;
-    if(lastPay){
-      lastCoveredDate=[...pastDates].reverse().find(d=>d<=lastPay.date)||null;
+    if(lastPreWindow){
+      lastCoveredDate=[...pastDates].reverse().find(d=>d<=lastPreWindow.date)||null;
     }
 
     /* Only check dates AFTER lastCoveredDate — everything before is considered settled */
     const checkDates=lastCoveredDate
       ?pastDates.filter(d=>d>lastCoveredDate)
-      :pastDates; /* no payments: show recent uncovered dates */
+      :pastDates; /* no prior baseline: check all dates in window */
 
-    /* Among checkDates, see if any OTHER payments cover them */
+    /* FIFO: apply window payments oldest-first so each payment credits the
+       oldest uncovered scheduled date (not the most-recent one). This fixes
+       partial-payment attribution — e.g. paying ₱10k when ₱20k is owed clears
+       the Jun 1 slot, leaving Jun 15 still overdue. */
     const coveredAfter=new Set();
-    empPays.forEach(pay=>{
-      if(lastCoveredDate&&pay.date<=lastCoveredDate)return;
-      const t=[...checkDates].reverse().find(d=>d<=pay.date);
-      if(t)coveredAfter.add(t);
-    });
+    const _remainingCheck=[...checkDates];
+    empPays.filter(p=>p.date>=fromStr).sort((a,b)=>a.date.localeCompare(b.date))
+      .forEach(pay=>{
+        const idx=_remainingCheck.findIndex(d=>d<=pay.date);
+        if(idx!==-1){coveredAfter.add(_remainingCheck[idx]);_remainingCheck.splice(idx,1);}
+      });
     const overdueDates=checkDates.filter(d=>!coveredAfter.has(d));
     const alreadyPaid=overdueDates.length===0;
     const lastEntry=lastPay;
@@ -4128,10 +4140,12 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     if(inlinePayEmpId===rowKey){setInlinePayEmpId(null);setInlinePayAccId('');setInlinePayAmt('');return;}
     setInlinePayEmpId(rowKey);
     setInlinePayAccId('');
-    setInlinePayAmt(String(sched.amount));
+    /* For rollup rows, default to the overdue amount (not the combined total) */
+    const defaultAmt=sched.pendingOverdueAmt||sched.amount;
+    setInlinePayAmt(String(defaultAmt));
     /* Also pre-fill the main form in case user prefers that */
     setEmployeeId(emp.id);
-    setAmount(String(sched.amount));
+    setAmount(String(defaultAmt));
     setDate(sched.nextDate<=TODAY?TODAY:sched.nextDate);
     setAccountId('');
     setEditPayId(null);
@@ -4142,7 +4156,9 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
     if(!inlinePayAccId)return;
     const paidAmt=parseFloat(inlinePayAmt)||sched.amount;
     if(paidAmt<=0)return;
-    const payDate=sched.nextDate<=TODAY?TODAY:sched.nextDate;
+    /* For rollup rows (pendingOverdueAmt), always use TODAY so the payment is
+       attributed to the overdue period (not the upcoming future date) */
+    const payDate=sched.pendingOverdueAmt?TODAY:(sched.nextDate<=TODAY?TODAY:sched.nextDate);
     setPayroll(prev=>[...prev,{id:uid(),date:payDate,employeeId:emp.id,amount:paidAmt,accountId:inlinePayAccId}]);
     if(showBalToast)setTimeout(()=>showBalToast(inlinePayAccId,paidAmt,'payroll'),80);
     setInlinePayEmpId(null);
@@ -4251,30 +4267,53 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                     </div>
                     {/* Inline pay picker (expands below row) */}
                     {isInlinePay&&(
-                      <div style={{margin:'0 14px 12px',padding:'12px 14px',background:'#eef2ff',borderRadius:'10px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'flex-end'}}>
+                      <div style={{margin:'0 14px 12px',padding:'12px 14px',background:isPendingRollup?'#fffbeb':'#eef2ff',borderRadius:'10px',border:isPendingRollup?'1.5px solid #fde68a':'none',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'flex-end'}}>
+                        {/* Rollup helper text */}
+                        {isPendingRollup&&(
+                          <div style={{width:'100%',fontSize:'11px',color:'#92400e',fontWeight:'600',marginBottom:'2px',lineHeight:'1.4'}}>
+                            💡 Pay the <b>overdue amount first</b> — it records today so it clears the unpaid period. Pay the upcoming {labelDate(sched.nextDate)} portion separately when it falls due.
+                          </div>
+                        )}
                         {/* Amount field with quick-fraction chips */}
                         <div style={{flex:'1',minWidth:'130px'}}>
-                          <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Amount to pay</span>
+                          <span style={{fontSize:'10px',fontWeight:'700',color:isPendingRollup?'#d97706':'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>
+                            {isPendingRollup?'Overdue amount to pay':'Amount to pay'}
+                          </span>
                           <input type="number" value={inlinePayAmt} onChange={e=>setInlinePayAmt(e.target.value)}
-                            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none',boxSizing:'border-box'}}/>
-                          {/* Quick fraction chips */}
+                            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:`1.5px solid ${isPendingRollup?'#fbbf24':'#c7d2fe'}`,fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+                          {/* Quick chips: rollup gets overdue/both; normal gets fractions */}
                           <div style={{display:'flex',gap:'4px',marginTop:'5px',flexWrap:'wrap'}}>
-                            {[['Full',1],['½',0.5],['¼',0.25],['¾',0.75]].map(([lbl,frac])=>{
-                              const v=Math.round(sched.amount*frac);
-                              const active=parseFloat(inlinePayAmt)===v;
-                              return(
-                                <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
-                                  style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#6366f1':'#c7d2fe'}`,background:active?'#6366f1':'#fff',color:active?'#fff':'#6366f1',cursor:'pointer'}}>
-                                  {lbl} {P(v)}
-                                </button>
-                              );
-                            })}
+                            {isPendingRollup
+                              ?[
+                                  ['Overdue',sched.pendingOverdueAmt],
+                                  ['Next period',sched.amount],
+                                  ['Both',sched.amount+(sched.pendingOverdueAmt||0)],
+                                ].map(([lbl,v])=>{
+                                  const active=parseFloat(inlinePayAmt)===v;
+                                  return(
+                                    <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
+                                      style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#d97706':'#fcd34d'}`,background:active?'#d97706':'#fff',color:active?'#fff':'#92400e',cursor:'pointer',whiteSpace:'nowrap'}}>
+                                      {lbl} {P(v)}
+                                    </button>
+                                  );
+                                })
+                              :[['Full',1],['½',0.5],['¼',0.25],['¾',0.75]].map(([lbl,frac])=>{
+                                  const v=Math.round(sched.amount*frac);
+                                  const active=parseFloat(inlinePayAmt)===v;
+                                  return(
+                                    <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
+                                      style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#6366f1':'#c7d2fe'}`,background:active?'#6366f1':'#fff',color:active?'#fff':'#6366f1',cursor:'pointer'}}>
+                                      {lbl} {P(v)}
+                                    </button>
+                                  );
+                                })
+                            }
                           </div>
                         </div>
                         {/* Account selector */}
                         <div style={{flex:'1',minWidth:'140px'}}>
-                          <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Deduct from account</span>
-                          <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none'}}
+                          <span style={{fontSize:'10px',fontWeight:'700',color:isPendingRollup?'#d97706':'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Deduct from account</span>
+                          <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:`1.5px solid ${isPendingRollup?'#fbbf24':'#c7d2fe'}`,fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none'}}
                             value={inlinePayAccId} onChange={e=>setInlinePayAccId(e.target.value)}>
                             <option value="">— Select account —</option>
                             {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
@@ -4284,7 +4323,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                         <div style={{paddingBottom:'1px'}}>
                           <button onClick={()=>confirmInlinePay(emp,sched)}
                             disabled={!inlinePayAccId||!(parseFloat(inlinePayAmt)>0)}
-                            style={{padding:'7px 16px',borderRadius:'8px',background:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'#10b981':'#d1fae5',color:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'#fff':'#6ee7b7',border:'none',fontWeight:'700',fontSize:'13px',cursor:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'pointer':'not-allowed',transition:'all .15s',whiteSpace:'nowrap'}}>
+                            style={{padding:'7px 16px',borderRadius:'8px',background:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?(isPendingRollup?'#d97706':'#10b981'):(isPendingRollup?'#fef3c7':'#d1fae5'),color:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'#fff':(isPendingRollup?'#fbbf24':'#6ee7b7'),border:'none',fontWeight:'700',fontSize:'13px',cursor:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'pointer':'not-allowed',transition:'all .15s',whiteSpace:'nowrap'}}>
                             ✓ Record {P(parseFloat(inlinePayAmt)||0)}
                           </button>
                         </div>
