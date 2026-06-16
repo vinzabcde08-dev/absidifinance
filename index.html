@@ -927,11 +927,12 @@ function MainApp({onLogout}){
   const[showMoreTabs,setShowMoreTabs]=useState(false);
   const[balToast,setBalToast]=useState(null); /* {accName,newBal,delta,type:'income'|'expense'} */
   const balToastTimer=React.useRef(null);
-  const showBalToast=(accId,delta,type)=>{
-    const ac=accounts.find(a=>a.id===accId);if(!ac)return;
+  /* showBalToast — stores accId only; balance is computed at render time so it's always fresh */
+  const showBalToast=(accId,delta,type,label)=>{
+    const ac=accounts.find(a=>a.id===accId);if(!accId&&!label)return;
     clearTimeout(balToastTimer.current);
-    setBalToast({accName:ac.name,newBal:accBal(accId),delta,type});
-    balToastTimer.current=setTimeout(()=>setBalToast(null),3500);
+    setBalToast({accId,accName:label||(ac?ac.name:'Account'),delta,type});
+    balToastTimer.current=setTimeout(()=>setBalToast(null),4000);
   };
   const[subReminder,setSubReminder]=useState(null); /* {queue:[{sub,phpAmount},...], current:0} */
   const[showReset,setShowReset]=useState(false);
@@ -1378,11 +1379,11 @@ function MainApp({onLogout}){
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
-        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
+        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
-        {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate}/>}
+        {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
       </div>
 
       {/* SUBSCRIPTION REMINDER MODAL */}
@@ -1446,19 +1447,29 @@ function MainApp({onLogout}){
 
       {/* ── ACCOUNT BALANCE TOAST ── */}
       <div className={`bal-toast${balToast?' show':''}`}>
-        {balToast&&(<>
-          <div style={{fontSize:'11px',fontWeight:'700',color:'rgba(255,255,255,.55)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'4px'}}>
-            {balToast.accName}
-          </div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',marginBottom:'4px'}}>
-            <span style={{fontSize:'13px',color:balToast.type==='income'?'#34d399':'#f87171',fontWeight:'700'}}>
-              {balToast.type==='income'?'+':'-'}{P(Math.abs(balToast.delta))}
-            </span>
-            <span style={{color:'rgba(255,255,255,.4)',fontSize:'12px'}}>→</span>
-            <span style={{fontSize:'15px',fontWeight:'900',color:'#fff'}}>New bal: {P(balToast.newBal)}</span>
-          </div>
-          <div style={{fontSize:'11px',color:'rgba(255,255,255,.5)'}}>tap Accounts to view full details</div>
-        </>)}
+        {balToast&&(()=>{
+          /* Compute balance at render time — never stale */
+          const liveBal=balToast.accId?accBal(balToast.accId):null;
+          const isIncome=balToast.type==='income'||balToast.type==='transfer_in';
+          const isTransfer=balToast.type==='transfer_out'||balToast.type==='transfer_in';
+          return(<>
+            <div style={{fontSize:'11px',fontWeight:'700',color:'rgba(255,255,255,.55)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'4px'}}>
+              {isTransfer?'💸 Transfer · ':''}
+              {balToast.type==='payroll'?'👷 Payroll · ':''}
+              {balToast.accName}
+            </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',marginBottom:'4px'}}>
+              <span style={{fontSize:'13px',color:isIncome?'#34d399':'#f87171',fontWeight:'700'}}>
+                {isIncome?'+':'-'}{P(Math.abs(balToast.delta))}
+              </span>
+              {liveBal!=null&&<>
+                <span style={{color:'rgba(255,255,255,.4)',fontSize:'12px'}}>→</span>
+                <span style={{fontSize:'15px',fontWeight:'900',color:'#fff'}}>Balance: {P(liveBal)}</span>
+              </>}
+            </div>
+            <div style={{fontSize:'11px',color:'rgba(255,255,255,.5)'}}>tap Accounts to view details</div>
+          </>);
+        })()}
       </div>
 
       {/* ── MOBILE BOTTOM NAV ── */}
@@ -1556,7 +1567,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
 }
 
 /* ════════  PLANS  ════════ */
-function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,allPayroll,setPayroll,skippedPayDates,skipPayDate,unskipPayDate}){
+function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,allPayroll,setPayroll,skippedPayDates,skipPayDate,unskipPayDate,showBalToast}){
   const[expandedId,setExpandedId]=useState(null);
   const[groups,setGroups]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_plan_groups')||'[]')}catch{return[]}});
   const[dragPlanId,setDragPlanId]=useState(null);
@@ -3159,7 +3170,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   );
 }
 
-function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,expenses,setExpenses}){
+function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,expenses,setExpenses,showBalToast}){
   const[fromId,setFromId]=useState('');
   const[toId,setToId]=useState('');
   const[amount,setAmount]=useState('');
@@ -3182,6 +3193,13 @@ function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,ex
       setIncome(prev=>[...(prev||[]),{id:uid(),date,amount:amt,type:'Account Transfer',accountId:toId,alloc:'transfer_in',note:noteStr,transferId:tid}]);
     }
     setTransfers(prev=>[...(prev||[]),{id:tid,date,fromId,toId:toId||'external',amount:amt,fee:feeAmt,note:noteStr}]);
+    /* Show balance toasts for both accounts after state updates */
+    if(showBalToast){
+      setTimeout(()=>{
+        showBalToast(fromId,amt+(feeAmt||0),'transfer_out');
+        if(toId)setTimeout(()=>showBalToast(toId,amt,'transfer_in'),2500);
+      },80);
+    }
     setFromId('');setToId('');setAmount('');setFee('');setNote('');setDate(TODAY);
   };
 
@@ -3283,7 +3301,7 @@ function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,
       {/* TRANSFER FUNDS */}
       <div className="card" style={{padding:'22px'}}>
         <p className="sect">Transfer Between Accounts</p>
-        <TransferFundsPanel accounts={accounts} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses}/>
+        <TransferFundsPanel accounts={accounts} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} showBalToast={showBalToast}/>
       </div>
       <div className="col" style={{gap:'10px'}}>
         {accounts.length===0&&<div className="card" style={{padding:'40px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>No accounts yet.</div>}
@@ -3820,7 +3838,7 @@ function SubsTab({subs,allSubs,setSubs,accounts,cards,fxRates,fxLoaded,allExpens
 }
 
 /* ════════  PAYROLL  ════════ */
-function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,accBal,skippedPayDates,skipPayDate,unskipPayDate}){
+function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accounts,accBal,skippedPayDates,skipPayDate,unskipPayDate,showBalToast}){
   const[empName,setEmpName]=useState('');const[empRole,setEmpRole]=useState('');const[empSalary,setEmpSalary]=useState('');const[empFreq,setEmpFreq]=useState('Biweekly');const[empPayDay,setEmpPayDay]=useState(30);const[editEmpId,setEditEmpId]=useState(null);
   const[empBank,setEmpBank]=useState('');const[empAcctName,setEmpAcctName]=useState('');const[empAcctNum,setEmpAcctNum]=useState('');const[empPayMethod,setEmpPayMethod]=useState('Bank Transfer');
   /* Fixed schedule state */
@@ -3833,6 +3851,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   /* Inline quick-pay picker state */
   const[inlinePayEmpId,setInlinePayEmpId]=useState(null);
   const[inlinePayAccId,setInlinePayAccId]=useState('');
+  const[inlinePayAmt,setInlinePayAmt]=useState('');
 
   const FREQ_LABELS={'Weekly':'Weekly','Biweekly':'Biweekly (every 2 wks — Fri)','Monthly':'Monthly (15th or 30th)'};
   const resetEmp=()=>{setEditEmpId(null);setEmpName('');setEmpRole('');setEmpSalary('');setEmpFreq('Biweekly');setEmpPayDay(30);setEmpBank('');setEmpAcctName('');setEmpAcctNum('');setEmpPayMethod('Bank Transfer');setEmpSchedType('auto');setEmpFixDate1(1);setEmpFixDate2(15);setEmpFixDOW(5);};
@@ -3852,8 +3871,10 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   const startEditPay=(p)=>{setEditPayId(p.id);setDate(p.date);setEmployeeId(p.employeeId||'');setAmount(String(p.amount||''));setAccountId(p.accountId||'');};
   const savePay=()=>{
     if(!amount)return;
-    if(editPayId){setPayroll(allPayroll.map(x=>x.id===editPayId?{...x,date,employeeId,amount:parseFloat(amount),accountId}:x));}
-    else{setPayroll([...allPayroll,{id:uid(),date,employeeId,amount:parseFloat(amount),accountId}]);}
+    const amt=parseFloat(amount)||0;
+    if(editPayId){setPayroll(allPayroll.map(x=>x.id===editPayId?{...x,date,employeeId,amount:amt,accountId}:x));}
+    else{setPayroll([...allPayroll,{id:uid(),date,employeeId,amount:amt,accountId}]);}
+    if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'payroll'),80);
     resetPay();
   };
 
@@ -4104,9 +4125,10 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   /* Quick-record payment — opens inline picker in the banner row */
   const quickPay=(emp,sched)=>{
     const rowKey=emp.id+'|'+sched.nextDate;
-    if(inlinePayEmpId===rowKey){setInlinePayEmpId(null);setInlinePayAccId('');return;}
+    if(inlinePayEmpId===rowKey){setInlinePayEmpId(null);setInlinePayAccId('');setInlinePayAmt('');return;}
     setInlinePayEmpId(rowKey);
     setInlinePayAccId('');
+    setInlinePayAmt(String(sched.amount));
     /* Also pre-fill the main form in case user prefers that */
     setEmployeeId(emp.id);
     setAmount(String(sched.amount));
@@ -4118,10 +4140,14 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
   /* Confirm inline pay record */
   const confirmInlinePay=(emp,sched)=>{
     if(!inlinePayAccId)return;
+    const paidAmt=parseFloat(inlinePayAmt)||sched.amount;
+    if(paidAmt<=0)return;
     const payDate=sched.nextDate<=TODAY?TODAY:sched.nextDate;
-    setPayroll(prev=>[...prev,{id:uid(),date:payDate,employeeId:emp.id,amount:sched.amount,accountId:inlinePayAccId}]);
+    setPayroll(prev=>[...prev,{id:uid(),date:payDate,employeeId:emp.id,amount:paidAmt,accountId:inlinePayAccId}]);
+    if(showBalToast)setTimeout(()=>showBalToast(inlinePayAccId,paidAmt,'payroll'),80);
     setInlinePayEmpId(null);
     setInlinePayAccId('');
+    setInlinePayAmt('');
   };
 
   return(
@@ -4225,7 +4251,27 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                     </div>
                     {/* Inline pay picker (expands below row) */}
                     {isInlinePay&&(
-                      <div style={{margin:'0 14px 12px',padding:'12px 14px',background:'#eef2ff',borderRadius:'10px',display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+                      <div style={{margin:'0 14px 12px',padding:'12px 14px',background:'#eef2ff',borderRadius:'10px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'flex-end'}}>
+                        {/* Amount field with quick-fraction chips */}
+                        <div style={{flex:'1',minWidth:'130px'}}>
+                          <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Amount to pay</span>
+                          <input type="number" value={inlinePayAmt} onChange={e=>setInlinePayAmt(e.target.value)}
+                            style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none',boxSizing:'border-box'}}/>
+                          {/* Quick fraction chips */}
+                          <div style={{display:'flex',gap:'4px',marginTop:'5px',flexWrap:'wrap'}}>
+                            {[['Full',1],['½',0.5],['¼',0.25],['¾',0.75]].map(([lbl,frac])=>{
+                              const v=Math.round(sched.amount*frac);
+                              const active=parseFloat(inlinePayAmt)===v;
+                              return(
+                                <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
+                                  style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#6366f1':'#c7d2fe'}`,background:active?'#6366f1':'#fff',color:active?'#fff':'#6366f1',cursor:'pointer'}}>
+                                  {lbl} {P(v)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* Account selector */}
                         <div style={{flex:'1',minWidth:'140px'}}>
                           <span style={{fontSize:'10px',fontWeight:'700',color:'#6366f1',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:'4px'}}>Deduct from account</span>
                           <select style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'1.5px solid #c7d2fe',fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none'}}
@@ -4234,11 +4280,12 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                             {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
                           </select>
                         </div>
-                        <div style={{display:'flex',gap:'6px',alignItems:'flex-end',paddingTop:'18px'}}>
+                        {/* Confirm button */}
+                        <div style={{paddingBottom:'1px'}}>
                           <button onClick={()=>confirmInlinePay(emp,sched)}
-                            disabled={!inlinePayAccId}
-                            style={{padding:'7px 16px',borderRadius:'8px',background:inlinePayAccId?'#10b981':'#d1fae5',color:inlinePayAccId?'#fff':'#6ee7b7',border:'none',fontWeight:'700',fontSize:'13px',cursor:inlinePayAccId?'pointer':'not-allowed',transition:'all .15s'}}>
-                            ✓ Record {P(sched.amount)}
+                            disabled={!inlinePayAccId||!(parseFloat(inlinePayAmt)>0)}
+                            style={{padding:'7px 16px',borderRadius:'8px',background:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'#10b981':'#d1fae5',color:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'#fff':'#6ee7b7',border:'none',fontWeight:'700',fontSize:'13px',cursor:(inlinePayAccId&&parseFloat(inlinePayAmt)>0)?'pointer':'not-allowed',transition:'all .15s',whiteSpace:'nowrap'}}>
+                            ✓ Record {P(parseFloat(inlinePayAmt)||0)}
                           </button>
                         </div>
                       </div>
