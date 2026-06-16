@@ -1374,7 +1374,7 @@ function MainApp({onLogout}){
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
         {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
-        {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey}/>}
+        {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
@@ -3271,7 +3271,7 @@ function TransferFundsPanel({accounts,transfers,setTransfers,income,setIncome,ex
 }
 
 /* ════════  ACCOUNTS  ════════ */
-function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,setIncome,expenses,setExpenses,curMonthKey}){
+function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,setIncome,expenses,setExpenses,curMonthKey,showBalToast}){
   const[name,setName]=useState('');const[type,setType]=useState('Bank');const[bank,setBank]=useState('BDO');const[opening,setOpening]=useState('');
   const[editId,setEditId]=useState(null);
   const BANKS=['BDO','BPI','Metrobank','UnionBank','Landbank','PNB','RCBC','Security Bank','Eastwest','Other'];
@@ -4283,31 +4283,28 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
                             style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:`1.5px solid ${isPendingRollup?'#fbbf24':'#c7d2fe'}`,fontSize:'13px',color:'#1e293b',background:'#fff',outline:'none',boxSizing:'border-box'}}/>
                           {/* Quick chips: rollup gets overdue/both; normal gets fractions */}
                           <div style={{display:'flex',gap:'4px',marginTop:'5px',flexWrap:'wrap'}}>
-                            {isPendingRollup
-                              ?[
-                                  ['Overdue',sched.pendingOverdueAmt],
-                                  ['Next period',sched.amount],
-                                  ['Both',sched.amount+(sched.pendingOverdueAmt||0)],
-                                ].map(([lbl,v])=>{
-                                  const active=parseFloat(inlinePayAmt)===v;
-                                  return(
-                                    <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
-                                      style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#d97706':'#fcd34d'}`,background:active?'#d97706':'#fff',color:active?'#fff':'#92400e',cursor:'pointer',whiteSpace:'nowrap'}}>
-                                      {lbl} {P(v)}
-                                    </button>
-                                  );
-                                })
-                              :[['Full',1],['½',0.5],['¼',0.25],['¾',0.75]].map(([lbl,frac])=>{
-                                  const v=Math.round(sched.amount*frac);
-                                  const active=parseFloat(inlinePayAmt)===v;
-                                  return(
-                                    <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
-                                      style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#6366f1':'#c7d2fe'}`,background:active?'#6366f1':'#fff',color:active?'#fff':'#6366f1',cursor:'pointer'}}>
-                                      {lbl} {P(v)}
-                                    </button>
-                                  );
-                                })
-                            }
+                            {isPendingRollup ? (
+                              [['Overdue',sched.pendingOverdueAmt],['Next period',sched.amount],['Both',sched.amount+(sched.pendingOverdueAmt||0)]].map(([lbl,v])=>{
+                                const active=parseFloat(inlinePayAmt)===v;
+                                return(
+                                  <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
+                                    style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#d97706':'#fcd34d'}`,background:active?'#d97706':'#fff',color:active?'#fff':'#92400e',cursor:'pointer',whiteSpace:'nowrap'}}>
+                                    {lbl} {P(v)}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              [['Full',1],['½',0.5],['¼',0.25],['¾',0.75]].map(([lbl,frac])=>{
+                                const v=Math.round(sched.amount*frac);
+                                const active=parseFloat(inlinePayAmt)===v;
+                                return(
+                                  <button key={lbl} onClick={()=>setInlinePayAmt(String(v))}
+                                    style={{fontSize:'10px',fontWeight:'700',padding:'3px 8px',borderRadius:'6px',border:`1.5px solid ${active?'#6366f1':'#c7d2fe'}`,background:active?'#6366f1':'#fff',color:active?'#fff':'#6366f1',cursor:'pointer'}}>
+                                    {lbl} {P(v)}
+                                  </button>
+                                );
+                              })
+                            )}
                           </div>
                         </div>
                         {/* Account selector */}
