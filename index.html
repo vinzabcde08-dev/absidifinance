@@ -2386,6 +2386,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
 
   /* quick-add modal */
   const[showTitheBreakdown,setShowTitheBreakdown]=useState(false);
+  const[titheWithdrawAcct,setTitheWithdrawAcct]=useState(''); /* account to record the single tithe withdrawal from */
 
   /* ── Consolidate & Withdraw modal ── */
   const[showConsolidate,setShowConsolidate]=useState(false);
@@ -2397,6 +2398,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const[consoSavings,setConsoSavings]=useState(true);
   const[consoInvest,setConsoInvest]=useState(true);
   const titheDone=!!(titheLog.find(t=>(t.month||t.week)===curMonthKey)?.done);
+  const thisTitheEntry=titheLog.find(t=>(t.month||t.week)===curMonthKey);
   const savingsDone=!!(savingsLog.find(s=>s.month===curMonthKey)?.done);
   const investDone=!!(investLog.find(l=>l.month===curMonthKey)?.done);
   const consoTotal=(consoTithe&&!titheDone?tithe:0)+(consoSavings&&!savingsDone?savings:0)+(consoInvest&&!investDone?invest:0);
@@ -2407,10 +2409,9 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     const destAcct=accounts.find(a=>a.id===consoDest);
     /* — Tithe — */
     if(consoTithe&&!titheDone){
-      if(byAcctTithe.length>0){
-        setExpenses(prev=>[...(prev||[]),...byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe ${wk}`}))]);
-      }
-      setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase}]);
+      /* single expense from the destination account (where all funds will be consolidated) */
+      setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(tithe.toFixed(2)),category:'Tithes',accountId:consoDest,alloc:'tithe',note:`Tithe ${wk}`}]);
+      setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase,withdrawAcctId:consoDest}]);
     }
     /* — Savings — */
     if(consoSavings&&!savingsDone&&savings>0){
@@ -2548,52 +2549,65 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               </div>
             </div>
 
-            {/* Per-account dropdown toggle */}
+            {/* Per-account breakdown toggle — informational only */}
             <button
               onClick={()=>setShowTitheBreakdown(v=>!v)}
-              style={{width:'100%',background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',borderRadius:'8px',padding:'8px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: showTitheBreakdown&&byAcctTithe.length>0?'0':'10px',transition:'margin .2s'}}
+              style={{width:'100%',background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',borderRadius:'8px',padding:'8px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showTitheBreakdown&&byAcctTithe.length>0?'0':'10px',transition:'margin .2s'}}
             >
               <span style={{fontSize:'13px',fontWeight:'700',color:'#92400e'}}>
-                {byAcctTithe.length>0?`Withdraw from ${byAcctTithe.length} account${byAcctTithe.length>1?'s':''}:`:'Which account to withdraw from?'}
+                {byAcctTithe.length>0?`Breakdown by account (${byAcctTithe.length})`:'Which account to withdraw from?'}
               </span>
               <span style={{fontSize:'16px',color:'#b45309',transition:'transform .2s',display:'inline-block',transform:showTitheBreakdown?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
             </button>
 
-            {/* Dropdown content */}
+            {/* Breakdown — reference only, no deductions */}
             {showTitheBreakdown&&(
               <div style={{marginBottom:'12px',border:'1px solid rgba(245,158,11,.25)',borderTop:'none',borderRadius:'0 0 8px 8px',overflow:'hidden'}}>
                 {byAcctTithe.length>0?(
-                  byAcctTithe.map(({acct,inc,titheAmt},i)=>(
-                    <div key={acct.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',background:i%2===0?'rgba(245,158,11,.05)':'rgba(245,158,11,.1)',borderTop:i>0?'1px solid rgba(245,158,11,.15)':'none'}}>
-                      <div>
-                        <p style={{fontSize:'13px',fontWeight:'800',color:'#92400e',margin:'0 0 1px'}}>{acctLabel(acct)}</p>
-                        <p style={{fontSize:'11px',color:'#d97706',margin:0}}>Income this month: {P(inc)} ({totalMInc>0?Math.round(inc/totalMInc*100):0}% of total)</p>
-                      </div>
-                      <div style={{textAlign:'right'}}>
-                        <p style={{fontSize:'16px',fontWeight:'900',color:'#b45309',margin:0}}>{P(titheAmt)}</p>
-                        <p style={{fontSize:'10px',color:'#d97706',margin:'1px 0 0',fontWeight:'700'}}>withdraw</p>
-                      </div>
+                  <>
+                    <div style={{padding:'8px 14px',background:'rgba(245,158,11,.08)',borderBottom:'1px solid rgba(245,158,11,.15)'}}>
+                      <p style={{fontSize:'11px',color:'#b45309',margin:0,fontStyle:'italic'}}>📋 Reference only — shows how much each account contributed to total income. You'll withdraw the full amount from one account below.</p>
                     </div>
-                  ))
+                    {byAcctTithe.map(({acct,inc,titheAmt},i)=>(
+                      <div key={acct.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',background:i%2===0?'rgba(245,158,11,.05)':'rgba(245,158,11,.1)',borderTop:i>0?'1px solid rgba(245,158,11,.15)':'none'}}>
+                        <div>
+                          <p style={{fontSize:'13px',fontWeight:'800',color:'#92400e',margin:'0 0 1px'}}>{acctLabel(acct)}</p>
+                          <p style={{fontSize:'11px',color:'#d97706',margin:0}}>Income this month: {P(inc)} ({totalMInc>0?Math.round(inc/totalMInc*100):0}% of total)</p>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <p style={{fontSize:'16px',fontWeight:'900',color:'#b45309',margin:0}}>{P(titheAmt)}</p>
+                          <p style={{fontSize:'10px',color:'#d97706',margin:'1px 0 0',fontWeight:'700'}}>portion</p>
+                        </div>
+                      </div>
+                    ))}
+                  </>
                 ):(
                   <div style={{padding:'12px 14px',background:'rgba(245,158,11,.05)'}}>
-                    <p style={{fontSize:'12px',color:'#b45309',margin:0,fontStyle:'italic'}}>💡 Link your income entries to accounts in the Income tab — then we can tell you exactly which account to withdraw from.</p>
+                    <p style={{fontSize:'12px',color:'#b45309',margin:0,fontStyle:'italic'}}>💡 Link your income entries to accounts in the Income tab to see the breakdown.</p>
                   </div>
                 )}
               </div>
             )}
 
+            {/* Withdraw from one account */}
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px',padding:'10px 14px',background:'rgba(245,158,11,.06)',borderRadius:'8px',border:'1px solid rgba(245,158,11,.2)'}}>
+              <span style={{fontSize:'12px',fontWeight:'700',color:'#92400e',whiteSpace:'nowrap'}}>Withdraw {P(tithe)} from:</span>
+              <select className="fi" value={titheWithdrawAcct} onChange={e=>setTitheWithdrawAcct(e.target.value)} style={{flex:1,padding:'5px 8px',fontSize:'12px',margin:0}}>
+                <option value="">— pick account —</option>
+                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+              </select>
+            </div>
+
             {/* Action buttons */}
             <div style={{display:'flex',gap:'8px'}}>
               <button className="btn" style={{background:'#d97706',color:'#fff',flex:1,justifyContent:'center'}} onClick={()=>{
-                /* auto-log tithe expenses per account */
-                if(byAcctTithe.length>0){
-                  const newExps=byAcctTithe.map(({acct,titheAmt})=>({id:uid(),date:TODAY,amount:parseFloat(titheAmt.toFixed(2)),category:'Tithes',accountId:acct.id,alloc:'tithe',note:`Tithe ${wk}`}));
-                  setExpenses(prev=>[...(prev||[]),...newExps]);
-                }
-                setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase}]);
+                /* record ONE expense from the selected account */
+                const acctId=titheWithdrawAcct||(byAcctTithe[0]?.acct?.id||'');
+                setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(tithe.toFixed(2)),category:'Tithes',accountId:acctId,alloc:'tithe',note:`Tithe ${wk}`}]);
+                setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,done:true,amount:tithe,date:TODAY,incomeAtTime:titheBase,withdrawAcctId:acctId}]);
+                setTitheWithdrawAcct('');
               }}>
-                ✓ Done — Tithes Prepared
+                ✓ Done — Withdrawn from {titheWithdrawAcct?acctLabel(accounts.find(a=>a.id===titheWithdrawAcct)||{}):'account'}
               </button>
               <button className="btn bs" onClick={()=>setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,skipped:true,date:TODAY}])}>
                 Skip
