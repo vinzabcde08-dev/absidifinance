@@ -1384,7 +1384,7 @@ function MainApp({onLogout}){
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
@@ -4554,7 +4554,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,budgetFixed,lastMonthInc,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
+function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,budgetFixed,lastMonthInc,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
 
   /* Category budget limits state */
   const catBudgets=settings.categoryBudgets||[];
@@ -4664,18 +4664,19 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
         {!budgetFixed&&(
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'12px',marginBottom:'14px'}}>
             {[
-              {label:'Tithes %',key:'tithePct',color:'#f59e0b'},
+              {label:'Tithes %',key:'tithePct',color:'#f59e0b',amt:tithe,note:`of actual income after payroll (${P(titheBase)})`},
               {label:'Investment %',key:'investPct',color:'#6366f1'},
               {label:'Savings %',key:'savingsPct',color:'#10b981'},
               {label:'Desires %',key:'desiresPct',color:'#ec4899'},
-            ].map(({label,key,color})=>(
+            ].map(({label,key,color,amt,note})=>(
               <div key={key} style={{background:'var(--card2)',borderRadius:'10px',padding:'12px 14px',border:'1px solid var(--border)'}}>
                 <span className="fl" style={{color}}>{label}</span>
                 <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                   <input type="number" className="pct-input" style={{borderColor:color,color}} value={settings[key]||0} min="0" max="100"
                     onChange={e=>setSettings(s=>({...s,[key]:Math.min(100,Math.max(0,parseInt(e.target.value)||0))}))}/>
-                  <span style={{fontSize:'13px',color:'var(--text3)'}}>= {P((base*(settings[key]||0))/100)}</span>
+                  <span style={{fontSize:'13px',color:'var(--text3)'}}>= {P(amt!=null?amt:(base*(settings[key]||0))/100)}</span>
                 </div>
+                {note&&<span style={{fontSize:'10px',color:'#d97706',display:'block',marginTop:'3px'}}>{note}</span>}
               </div>
             ))}
           </div>
@@ -4717,7 +4718,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
         {!budgetFixed?(
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:totalFixed>100?'#fff5f5':'#f0fdf4',border:`1px solid ${totalFixed>100?'#fca5a5':'#86efac'}`}}>
             <span style={{fontSize:'13px',fontWeight:'700',color:totalFixed>100?'#ef4444':'#16a34a'}}>Total allocated: {totalFixed}%</span>
-            <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials get: {Math.max(0,100-totalFixed)}% = {P(Math.max(0,spendBudget))}</span>
+            <span style={{fontSize:'12px',color:'var(--text3)'}}>Essentials budget: {P(Math.max(0,spendBudget))} <span style={{fontWeight:'400',opacity:.7}}>({Math.max(0,100-totalFixed)}% of avg, minus payroll + actual tithe)</span></span>
           </div>
         ):(
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:'10px',background:'#f0fdf4',border:'1px solid #86efac'}}>
@@ -4824,7 +4825,7 @@ function BudgetTab({base,avg3,mInc,settings,setSettings,mExp,mSub,mPay,mPayActua
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
             <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🏠 Essentials</span>
-            <InfoIcon text={`What's left after all allocations: Income (${P(base)}) − Tithes (${P(tithe)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll (${P(mPay)}${expectedPayroll>0&&mPay===expectedPayroll&&(mPayActual||0)<expectedPayroll?` — expected from ${expectedPayroll>0?'employee salaries':'recorded entries'}, actual paid: ${P(mPayActual||0)}`:''}${expectedPayroll>0&&(mPayActual||0)>expectedPayroll?` — actual paid`:''}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc.`} title="Essentials Budget"/>
+            <InfoIcon text={`What's left after all allocations: ${settings.budgetMode==='avg'?'3-month avg base':'This month income'} (${P(base)}) − Tithes (${P(tithe)}, 10% of actual income after payroll: ${P(titheBase)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll budget (${P(mPay)}${expectedPayroll>0&&mPay===expectedPayroll&&(mPayActual||0)<expectedPayroll?` — expected from ${expectedPayroll>0?'employee salaries':'recorded entries'}, actual paid: ${P(mPayActual||0)}`:''}${expectedPayroll>0&&(mPayActual||0)>expectedPayroll?` — actual paid`:''}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc. Note: tithes are computed on this month's actual income (not the budget average) since they're non-negotiable.`} title="Essentials Budget"/>
           </div>
           <div style={{textAlign:'right'}}>
             <span style={{fontSize:'18px',fontWeight:'900',color:essentialsSpent>essentialsAllowed?'#ef4444':'var(--text)'}}>{P(essentialsAllowed)}</span>
