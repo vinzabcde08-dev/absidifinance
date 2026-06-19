@@ -2374,7 +2374,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const qNet=qTotalInc-qTotalExp;
   const Q_NAMES=['Q1 (Jan–Mar)','Q2 (Apr–Jun)','Q3 (Jul–Sep)','Q4 (Oct–Dec)'];
   /* graph */
-  const inc=income||[];
+  const inc=(income||[]).filter(x=>!x.alloc); /* exclude transfer_in / allocation_in / tithe_in etc. */
   const gPaid=inc.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+(i.amount||0),0);
   const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
   const gExpected=gPaid+gPending;
@@ -2479,7 +2479,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
 
   const STATS=[
     {label:'Monthly Income',value:P(mInc),color:'#10b981',bg:'#f0fdf4',icon:'income',
-     info:'Sum of all income entries logged this month, regardless of account. Includes paid and pending.',title:'Monthly Income'},
+     info:'Sum of real income entries this month (paid + pending). Excludes internal transfers — account transfers, tithe consolidations, and savings/investment moves are not counted here.',title:'Monthly Income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
      info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
     {label:'Total Expenses',value:P(mExpAll+mSub+mPay),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
