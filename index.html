@@ -2612,7 +2612,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               <span style={{fontSize:'12px',fontWeight:'700',color:'#92400e',whiteSpace:'nowrap'}}>Withdraw {P(remainingTithe)} from:</span>
               <select className="fi" value={titheWithdrawAcct} onChange={e=>setTitheWithdrawAcct(e.target.value)} style={{flex:1,padding:'5px 8px',fontSize:'12px',margin:0}}>
                 <option value="">— pick account —</option>
-                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
               </select>
             </div>
 
