@@ -69,6 +69,7 @@
     .fade{animation:fi .2s ease}
     @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
     @keyframes fadeInDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
     ::-webkit-scrollbar{width:5px;height:5px}
     ::-webkit-scrollbar-track{background:var(--bg)}
@@ -535,6 +536,7 @@ function Ico({n,s=16,c="currentColor",sw=1.75,style={}}){
     dollar:   [<line key="1" {...d} x1="12" y1="1" x2="12" y2="23"/>,<path key="2" {...d} d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>],
     check:    [<polyline key="1" {...d} points="20,6 9,17 4,12"/>],
     edit:     [<path key="1" {...d} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>,<path key="2" {...d} d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>],
+    send:     [<line key="1" {...d} x1="22" y1="2" x2="11" y2="13"/>,<polygon key="2" {...d} points="22,2 15,22 11,13 2,9"/>],
   };
   return(
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" style={{flexShrink:0,display:'inline-block',verticalAlign:'middle',...style}}>
@@ -5765,6 +5767,11 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
   const[renamingId,setRenamingId]=useState(null);
   const[renameDraft,setRenameDraft]=useState('');
   const[showHistory,setShowHistory]=useState(false);
+  /* ── Chat state ── */
+  const[chatMessages,setChatMessages]=useState([]);
+  const[chatInput,setChatInput]=useState('');
+  const[chatLoading,setChatLoading]=useState(false);
+  const chatEndRef=React.useRef(null);
 
   const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const monthName=MONTH_NAMES[selMonth];
@@ -6004,10 +6011,11 @@ Rules:
       setResult(parsed);
       setActiveSection('summary');
       /* ── Auto-save to history ── */
-      const newEntry={id:uid(),name:`${monthName} ${yr} Analysis`,date:TODAY,monthKey:curMonthKey,result:parsed,actionChecks:{}};
+      const newEntry={id:uid(),name:`${monthName} ${yr} Analysis`,date:TODAY,monthKey:curMonthKey,result:parsed,actionChecks:{},chatMessages:[]};
       setAiHistory(prev=>[newEntry,...prev.filter(a=>a.id!==currentAnalysisId)]);
       setCurrentAnalysisId(newEntry.id);
       setActionChecks({});
+      setChatMessages([]);
 
     }catch(e){
       earlyTimers.forEach(clearTimeout);
@@ -6026,6 +6034,7 @@ Rules:
     setResult(entry.result);
     setCurrentAnalysisId(entry.id);
     setActionChecks(entry.actionChecks||{});
+    setChatMessages(entry.chatMessages||[]);
     setActiveSection('summary');
     setShowHistory(false);
     setError('');
@@ -6044,6 +6053,76 @@ Rules:
     const next={...actionChecks,[i]:!actionChecks[i]};
     setActionChecks(next);
     if(currentAnalysisId)setAiHistory(prev=>prev.map(a=>a.id===currentAnalysisId?{...a,actionChecks:next}:a));
+  };
+
+  /* ── Chat send ── */
+  const sendChat=async(overrideMsg)=>{
+    const userText=(overrideMsg||chatInput).trim();
+    if(!userText||chatLoading||!aiApiKey)return;
+    setChatInput('');
+    const newUserMsg={role:'user',content:userText};
+    const updatedMsgs=[...chatMessages,newUserMsg];
+    setChatMessages(updatedMsgs);
+    setChatLoading(true);
+    setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:'smooth'}),50);
+    try{
+      /* Build a concise financial context to include as system prompt */
+      const ctx=`You are a personal finance assistant for a Filipino professional named ${userName}.
+They are analyzing ${monthName} ${yr}.
+Key financial snapshot:
+- Monthly income: ₱${mInc.toLocaleString('en-PH')}
+- Tithes: ₱${tithe.toLocaleString('en-PH')} | Investments: ₱${invest.toLocaleString('en-PH')} | Savings: ₱${savings.toLocaleString('en-PH')}
+- Daily spending cap: ₱${dailyCap.toLocaleString('en-PH')}
+${loans&&loans.length>0?`- Active loans: ${loans.map(l=>`${l.name} (balance ₱${(l.balance||0).toLocaleString('en-PH')}, monthly ₱${(l.monthlyPayment||0).toLocaleString('en-PH')})`).join(', ')}`:''}
+${result?`Previous AI analysis summary: Health score ${result.healthScore}/10. ${result.summary}`:''}
+Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 sentences unless more detail is needed. Use Philippine Peso (₱). No markdown formatting — plain text only.`;
+
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':aiApiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:settings.aiModel||'claude-haiku-4-5-20251001',
+          max_tokens:512,
+          stream:true,
+          system:ctx,
+          messages:updatedMsgs.map(m=>({role:m.role,content:m.content})),
+        }),
+      });
+      if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||`API error ${resp.status}`);}
+      const reader=resp.body.getReader();
+      const decoder=new TextDecoder();
+      let fullText='';
+      /* Stream response text */
+      const streamMsg={role:'assistant',content:''};
+      setChatMessages(prev=>[...prev,streamMsg]);
+      while(true){
+        const{done,value}=await reader.read();
+        if(done)break;
+        const chunk=decoder.decode(value,{stream:true});
+        for(const line of chunk.split('\n')){
+          if(!line.startsWith('data: '))continue;
+          const raw=line.slice(6).trim();
+          if(raw==='[DONE]')continue;
+          try{
+            const ev=JSON.parse(raw);
+            if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){
+              fullText+=ev.delta.text;
+              setChatMessages(prev=>[...prev.slice(0,-1),{role:'assistant',content:fullText}]);
+              chatEndRef.current?.scrollIntoView({behavior:'smooth'});
+            }
+          }catch(_){}
+        }
+      }
+      /* Save chat to history entry */
+      const finalMsgs=[...updatedMsgs,{role:'assistant',content:fullText}];
+      setChatMessages(finalMsgs);
+      if(currentAnalysisId)setAiHistory(prev=>prev.map(a=>a.id===currentAnalysisId?{...a,chatMessages:finalMsgs}:a));
+    }catch(e){
+      setChatMessages(prev=>[...prev,{role:'assistant',content:`Sorry, I couldn't process that: ${e.message}`}]);
+    }finally{
+      setChatLoading(false);
+      setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:'smooth'}),100);
+    }
   };
 
   const SCORE_COLOR=(s)=>s>=8?'#10b981':s>=6?'#f59e0b':s>=4?'#f97316':'#ef4444';
@@ -6158,6 +6237,7 @@ Rules:
     {id:'expenses',label:'Expenses'},
     {id:'actions',label:'Actions'},
     {id:'plan',label:'3-Week Plan'},
+    {id:'chat',label:'Ask AI 💬'},
   ];
 
   return(
@@ -6621,8 +6701,91 @@ Rules:
             </div>
           )}
 
+          {/* ── Ask AI Chat ── */}
+          {activeSection==='chat'&&(
+            <div style={{display:'flex',flexDirection:'column',gap:'0'}}>
+              {/* Suggested questions */}
+              {chatMessages.length===0&&(
+                <div style={{marginBottom:'14px'}}>
+                  <p style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',margin:'0 0 8px'}}>Suggested questions</p>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'8px'}}>
+                    {[
+                      "How much can I realistically spend on eating out?",
+                      "Am I overspending on desires?",
+                      "When can I finish my car loan early?",
+                      "What should I prioritize this month?",
+                      "Is my emergency fund enough?",
+                      "Should I invest more or pay off loans first?",
+                    ].map((q,i)=>(
+                      <button key={i} onClick={()=>sendChat(q)}
+                        style={{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:'99px',padding:'6px 12px',fontSize:'12px',fontWeight:'600',color:'var(--text2)',cursor:'pointer'}}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Chat bubbles */}
+              <div style={{display:'flex',flexDirection:'column',gap:'10px',marginBottom:'14px',maxHeight:'420px',overflowY:'auto',padding:'4px 0'}}>
+                {chatMessages.map((msg,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:msg.role==='user'?'flex-end':'flex-start',gap:'8px',alignItems:'flex-end'}}>
+                    {msg.role==='assistant'&&(
+                      <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginBottom:'2px'}}>
+                        <Ico n="sparkle" s={13} c="#fff"/>
+                      </div>
+                    )}
+                    <div style={{
+                      maxWidth:'80%',padding:'10px 14px',borderRadius:msg.role==='user'?'16px 16px 4px 16px':'16px 16px 16px 4px',
+                      background:msg.role==='user'?'linear-gradient(135deg,#4f46e5,#7c3aed)':'var(--card2)',
+                      border:msg.role==='assistant'?'1px solid var(--border)':'none',
+                      color:msg.role==='user'?'#fff':'var(--text)',
+                      fontSize:'13px',lineHeight:'1.55',
+                    }}>
+                      {msg.content}
+                    </div>
+                    {msg.role==='user'&&(
+                      <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'#e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginBottom:'2px',fontSize:'13px'}}>
+                        👤
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {chatLoading&&(
+                  <div style={{display:'flex',gap:'8px',alignItems:'flex-end'}}>
+                    <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Ico n="sparkle" s={13} c="#fff"/>
+                    </div>
+                    <div style={{padding:'10px 16px',background:'var(--card2)',border:'1px solid var(--border)',borderRadius:'16px 16px 16px 4px',display:'flex',gap:'4px',alignItems:'center'}}>
+                      {[0,1,2].map(d=><span key={d} style={{width:'6px',height:'6px',borderRadius:'50%',background:'#94a3b8',display:'inline-block',animation:`bounce 1.2s ${d*0.2}s infinite`}}/>)}
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef}/>
+              </div>
+
+              {/* Input */}
+              <div style={{display:'flex',gap:'8px',position:'sticky',bottom:'0',background:'var(--bg)',paddingTop:'8px'}}>
+                <input className="fi" value={chatInput} onChange={e=>setChatInput(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}}}
+                  placeholder="Ask anything about your finances..." disabled={chatLoading||!aiApiKey}
+                  style={{flex:1,margin:0,borderRadius:'99px',padding:'10px 18px'}}/>
+                <button onClick={()=>sendChat()} disabled={chatLoading||!chatInput.trim()||!aiApiKey}
+                  style={{background:'linear-gradient(135deg,#4f46e5,#7c3aed)',border:'none',borderRadius:'50%',width:'42px',height:'42px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,opacity:chatLoading||!chatInput.trim()||!aiApiKey?0.5:1}}>
+                  <Ico n="send" s={16} c="#fff"/>
+                </button>
+              </div>
+              {chatMessages.length>0&&(
+                <button onClick={()=>{setChatMessages([]);if(currentAnalysisId)setAiHistory(prev=>prev.map(a=>a.id===currentAnalysisId?{...a,chatMessages:[]}:a));}}
+                  style={{marginTop:'8px',background:'none',border:'none',color:'var(--text4)',fontSize:'11px',cursor:'pointer',textAlign:'center'}}>
+                  🗑 Clear conversation
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Refresh note */}
-          <p style={{fontSize:'11px',color:'var(--text3)',textAlign:'center',margin:'6px 0 0'}}>Analysis by {settings.aiModel||'Claude'} · <button onClick={exportAdvice} style={{border:'none',background:'none',color:'#6366f1',cursor:'pointer',fontWeight:'700',fontSize:'11px',padding:0}}>Export Report ↓</button> · Click "Re-analyze" to refresh</p>
+          {activeSection!=='chat'&&<p style={{fontSize:'11px',color:'var(--text3)',textAlign:'center',margin:'6px 0 0'}}>Analysis by {settings.aiModel||'Claude'} · <button onClick={exportAdvice} style={{border:'none',background:'none',color:'#6366f1',cursor:'pointer',fontWeight:'700',fontSize:'11px',padding:0}}>Export Report ↓</button> · Click "Re-analyze" to refresh</p>}
         </div>
       )}
 
