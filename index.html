@@ -460,7 +460,9 @@ function InfoIcon({text,title}){
 
 const mK=(s)=>(s||TODAY).substring(0,7);
 const yK=(s)=>parseInt((s||TODAY).substring(0,4));
-const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg',budgetType:'pct',titheAmt:0,investAmt:0,savingsAmt:0,desiresAmt:0,categoryBudgets:[]};
+const DEFAULT_SETTINGS={tithePct:10,investPct:20,desiresPct:10,savingsPct:15,budgetMode:'avg',budgetType:'pct',titheAmt:0,investAmt:0,savingsAmt:0,desiresAmt:0,categoryBudgets:[],
+  /* AI Advisor settings */
+  aiModel:'claude-haiku-4-5-20251001',investAggr:3,aiContext:'',aiBroker:'col'};
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const getWeekKey=()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);const mo=String(d.getMonth()+1).padStart(2,'0');return `${d.getFullYear()}-${mo}-W${String(wk).padStart(2,'0')}`;};
 
@@ -522,6 +524,7 @@ function Ico({n,s=16,c="currentColor",sw=1.75,style={}}){
     warning:  [<path key="1" {...d} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>,<line key="2" {...d} x1="12" y1="9" x2="12" y2="13"/>,<line key="3" {...d} x1="12" y1="17" x2="12.01" y2="17"/>],
     logout:   [<path key="1" {...d} d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>,<polyline key="2" {...d} points="16,17 21,12 16,7"/>,<line key="3" {...d} x1="21" y1="12" x2="9" y2="12"/>],
     settings: [<circle key="1" {...d} cx="12" cy="12" r="3"/>,<path key="2" {...d} d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>],
+    sparkle:  [<path key="1" {...d} fill={c} stroke="none" d="M12 2l1.8 5.4L19.2 9l-5.4 1.8L12 16.2l-1.8-5.4L4.8 9l5.4-1.8z"/>,<path key="2" {...d} fill={c} stroke="none" d="M19 2.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/>],
     'trend-up':[<polyline key="1" {...d} points="23,6 13.5,15.5 8.5,10.5 1,18"/>,<polyline key="2" {...d} points="17,6 23,6 23,12"/>],
     'trend-dn':[<polyline key="1" {...d} points="23,18 13.5,8.5 8.5,13.5 1,6"/>,<polyline key="2" {...d} points="17,18 23,18 23,12"/>],
     star:     [<polygon key="1" {...d} points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2"/>],
@@ -906,6 +909,7 @@ function MainApp({onLogout}){
   const[employees,setEmployees]=useState(()=>ls.get(uk('ph_emps'),[]));
   const[payroll,setPayroll]=useState(()=>ls.get(uk('ph_payroll'),[]));
   const[settings,setSettings]=useState(()=>ls.get(uk('ph_settings'),DEFAULT_SETTINGS));
+  const[aiApiKey,setAiApiKey]=useState(()=>localStorage.getItem('absidi_ai_key')||''); /* stored globally, not per-user */
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[titheLog,setTitheLog]=useState(()=>ls.get(uk('ph_tithe_log'),[]));
   const[savingsLog,setSavingsLog]=useState(()=>ls.get(uk('ph_savings_log'),[]));
@@ -1176,6 +1180,27 @@ function MainApp({onLogout}){
   /* Computed allocation values (used before tithe recalc logic) */
   const mExpReg=byMonth(expenses).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
   const mTitheActual=byMonth(expenses).filter(x=>x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
+  /* Skipped amounts for this month — stored in titheLog as a 'skips' array */
+  const mTitheSkipped=(titheLog.find(t=>(t.month||t.week)===curMonthKey)?.skips||[]).reduce((s,x)=>s+(x.amount||0),0);
+  /* Carry-over: unpaid tithe from previous months (up to 24 months back) */
+  const titheCarryover=(()=>{
+    let deficit=0;
+    for(let i=1;i<=24;i++){
+      const d=new Date(yr,selMonth-i,1);
+      if(d.getFullYear()<2020)break;
+      const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const logEntry=titheLog.find(t=>(t.month||t.week)===mk);
+      if(logEntry?.skipped)continue;
+      const mI=income.filter(x=>!x.alloc&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      if(!mI)continue;
+      const mP=payroll.filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const owed=Math.max(0,(mI-mP)*(settings.tithePct||10)/100);
+      const paid=expenses.filter(x=>x.alloc==='tithe'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const skippedAmt=(logEntry?.skips||[]).reduce((s,x)=>s+(x.amount||0),0);
+      deficit+=Math.max(0,owed-paid-skippedAmt);
+    }
+    return parseFloat(deficit.toFixed(2));
+  })();
   const mInvestActual=byMonth(expenses).filter(x=>x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
   const mSavingsActual=byMonth(expenses).filter(x=>x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
   /* Desires: count ALL expenses whose category bucket = Desires (includes custom cats like "Celebrations") */
@@ -1261,6 +1286,8 @@ function MainApp({onLogout}){
     {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
     {id:'plans',icon:'chart',label:'Plans'},
+    {id:'ai',icon:'sparkle',label:'AI'},
+    {id:'settings',icon:'settings',label:'Settings'},
   ];
 
   return(
@@ -1376,7 +1403,7 @@ function MainApp({onLogout}){
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -1388,6 +1415,8 @@ function MainApp({onLogout}){
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
+        {tab==='ai'&&<AIAdvisorTab aiApiKey={aiApiKey} settings={settings} accounts={accounts} accBal={accBal} allIncome={income} allExpenses={expenses} allSubs={subs} allPayroll={payroll} titheLog={titheLog} savingsLog={savingsLog} investLog={investLog} mInc={mInc} tithe={tithe} invest={invest} savings={savings} desires={desires} base={base} avg3={avg3} dailyCap={dailyCap} spendBudget={spendBudget} titheBase={titheBase} curMonthKey={curMonthKey} selMonth={selMonth} yr={yr} userName={getCurrentUsername()||'User'}mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mExpReg={mExpReg} titheCarryover={titheCarryover}/>}
+        {tab==='settings'&&<SettingsTab aiApiKey={aiApiKey} setAiApiKey={setAiApiKey} settings={settings} setSettings={setSettings}/>}
       </div>
 
       {/* SUBSCRIPTION REMINDER MODAL */}
@@ -2352,7 +2381,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
   const net=mInc-mExpAll-mSub-mPay;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -2389,7 +2418,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
 
   /* quick-add modal */
   const[showTitheBreakdown,setShowTitheBreakdown]=useState(false);
-  const[titheWithdrawAcct,setTitheWithdrawAcct]=useState(''); /* account to record the single tithe withdrawal from */
+  const[titheWithdrawAcct,setTitheWithdrawAcct]=useState('');
+  const[titheWithdrawAmount,setTitheWithdrawAmount]=useState(''); /* custom amount input — blank = full remaining */
+  const[titheSkipAmt,setTitheSkipAmt]=useState('');
+  const[titheSkipNote,setTitheSkipNote]=useState('');
 
   /* ── Consolidate & Withdraw modal ── */
   const[showConsolidate,setShowConsolidate]=useState(false);
@@ -2400,8 +2432,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const[consoTithe,setConsoTithe]=useState(true);
   const[consoSavings,setConsoSavings]=useState(true);
   const[consoInvest,setConsoInvest]=useState(true);
-  const titheDone=tithe>0&&mTitheActual>=tithe*0.99; /* auto-clears when 99%+ paid; reopens if new income arrives */
-  const remainingTithe=Math.max(0,parseFloat((tithe-mTitheActual).toFixed(2)));
+  const totalTitheOwed=tithe+titheCarryover; /* this month + any unpaid from previous months */
+  const totalTitheCovered=mTitheActual+mTitheSkipped; /* paid + intentionally skipped/exempted */
+  const titheDone=totalTitheOwed>0&&totalTitheCovered>=totalTitheOwed*0.99;
+  const remainingTithe=Math.max(0,parseFloat((totalTitheOwed-totalTitheCovered).toFixed(2)));
   const thisTitheEntry=titheLog.find(t=>(t.month||t.week)===curMonthKey);
   const savingsDone=!!(savingsLog.find(s=>s.month===curMonthKey)?.done);
   const investDone=!!(investLog.find(l=>l.month===curMonthKey)?.done);
@@ -2511,26 +2545,33 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
           </div>
         );
 
-        /* CLEARED — all paid. Card auto-reopens if new income arrives and remainingTithe > 0 */
+        /* CLEARED — all paid/skipped. Card auto-reopens if new income arrives */
         if(titheDone)return(
           <div className="card" style={{borderLeft:'4px solid #10b981',background:'#f0fdf4',overflow:'hidden'}}>
             <div style={{padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div>
                 <p style={{fontWeight:'800',color:'#16a34a',margin:'0 0 2px',fontSize:'14px'}}>✓ Tithes cleared for {MONTH_NAMES[selMonth]}</p>
-                <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>{P(mTitheActual)} paid of {P(tithe)} owed · New income will reopen this automatically</p>
+                <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>
+                  {P(mTitheActual)} withdrawn{mTitheSkipped>0?` · ${P(mTitheSkipped)} exempted`:''} · Total: {P(totalTitheCovered)} of {P(totalTitheOwed)} · New income reopens this automatically
+                </p>
               </div>
               <button onClick={()=>{
-                /* undo only action-card entries; manual Expenses tab entries are undone there */
                 setExpenses(prev=>(prev||[]).filter(x=>!(x.note===`Tithe ${wk}`&&x.alloc==='tithe')));
-              }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo</button>
+              }} style={{fontSize:'11px',color:'#94a3b8',background:'none',border:'1px solid var(--border)',borderRadius:'6px',padding:'4px 10px',cursor:'pointer'}}>Undo withdrawal</button>
             </div>
-            {tithePayments.length>0&&(
+            {(tithePayments.length>0||(entry?.skips||[]).length>0)&&(
               <div style={{borderTop:'1px solid #d1fae5',padding:'10px 20px'}}>
-                <p style={{fontSize:'11px',color:'#6ee7b7',margin:'0 0 5px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.5px'}}>Payments this month</p>
+                <p style={{fontSize:'11px',color:'#6ee7b7',margin:'0 0 5px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.5px'}}>Activity this month</p>
                 {tithePayments.map(x=>(
                   <div key={x.id} style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#16a34a',padding:'2px 0'}}>
-                    <span>{x.date} · {accounts.find(a=>a.id===x.accountId)?.name||'Unlinked'}{x.note&&x.note!==`Tithe ${wk}`?` · ${x.note}`:''}</span>
+                    <span>💰 {x.date} · {accounts.find(a=>a.id===x.accountId)?.name||'Unlinked'}</span>
                     <span style={{fontWeight:'700'}}>{P(x.amount)}</span>
+                  </div>
+                ))}
+                {(entry?.skips||[]).map((s,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#d97706',padding:'2px 0'}}>
+                    <span>⏭ {s.date} · Exempted{s.note?` — ${s.note}`:''}</span>
+                    <span style={{fontWeight:'700'}}>{P(s.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -2541,59 +2582,65 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
         /* PENDING — full or partial payment still needed */
         return(
           <div className="card" style={{padding:'18px 20px',border:'2px solid #f59e0b',background:'#fffbeb'}}>
+
             {/* Header row */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
               <div>
                 <p style={{fontWeight:'900',color:'#92400e',margin:'0 0 2px',fontSize:'15px'}}>🙏 {MONTH_NAMES[selMonth]} Tithes</p>
-                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of net income (after payroll{investMovedThisMonth?' + investment':''}) · Non-negotiable</p>
+                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of net income (after payroll{investMovedThisMonth?' + investment':''}) · Non-negotiable · Only the selected account is affected</p>
               </div>
               <div style={{textAlign:'right'}}>
-                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(remainingTithe)}<InfoIcon text={`Remaining tithe for ${MONTH_NAMES[selMonth]}.\n\nTotal owed: ${P(tithe)} (${settings.tithePct}% of ${P(titheBase)})\nAlready paid: ${P(mTitheActual)}\nStill to withdraw: ${P(remainingTithe)}\n\nYou can pay in multiple installments — log a "Tithes" expense in the Expenses tab or use the button below. The balance updates automatically whenever income or expenses change.${!investMovedThisMonth?'\n\n⚠ Investment not moved yet — once moved, it will reduce the tithe base':''}`} title="Tithe Balance"/></p>
-                <p style={{fontSize:'10px',color:'#d97706',margin:'2px 0 0',fontWeight:'700',textTransform:'uppercase'}}>{mTitheActual>0?'remaining':'to withdraw'}</p>
+                <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(remainingTithe)}<InfoIcon text={`Total owed: ${P(totalTitheOwed)}\n  This month: ${P(tithe)} (${settings.tithePct}% of ${P(titheBase)})${titheCarryover>0?`\n  Carried over: ${P(titheCarryover)}`:''}${!investMovedThisMonth?'\n  ⚠ Investment not moved — once moved, tithe base will reduce':''}\n\nAlready paid: ${P(mTitheActual)}${mTitheSkipped>0?`\nExempted: ${P(mTitheSkipped)}`:''}\nRemaining: ${P(remainingTithe)}\n\nPay any amount — it all counts. Log a Tithes expense in the Expenses tab and it reduces this balance too.`} title="Tithe Balance"/></p>
+                <p style={{fontSize:'10px',color:'#d97706',margin:'2px 0 0',fontWeight:'700',textTransform:'uppercase'}}>{totalTitheCovered>0?'remaining':'to withdraw'}</p>
               </div>
             </div>
 
-            {/* Partial payment progress bar */}
-            {mTitheActual>0&&(
-              <div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.3)',borderRadius:'8px',padding:'10px 14px',marginBottom:'10px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',marginBottom:'5px'}}>
-                  <span style={{color:'#16a34a',fontWeight:'700'}}>✓ Paid so far: {P(mTitheActual)}</span>
-                  <span style={{color:'#b45309',fontWeight:'700'}}>Remaining: {P(remainingTithe)}</span>
+            {/* Carryover notice */}
+            {titheCarryover>0&&(
+              <div style={{background:'rgba(245,158,11,.12)',border:'1px solid rgba(245,158,11,.4)',borderRadius:'8px',padding:'9px 14px',marginBottom:'10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <p style={{fontSize:'12px',fontWeight:'800',color:'#92400e',margin:'0 0 1px'}}>⏳ Unpaid from previous months</p>
+                  <p style={{fontSize:'11px',color:'#b45309',margin:0}}>This month: {P(tithe)} + Carryover: {P(titheCarryover)} = Total {P(totalTitheOwed)}</p>
                 </div>
-                <div style={{height:'5px',background:'#e5e7eb',borderRadius:'99px',overflow:'hidden'}}>
-                  <div style={{height:'100%',width:`${Math.min(100,mTitheActual/tithe*100)}%`,background:'#10b981',borderRadius:'99px',transition:'width .3s'}}/>
-                </div>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:'5px 0 0'}}>💡 Already logged some in the Expenses tab? It counts here automatically.</p>
+                <span style={{fontSize:'16px',fontWeight:'900',color:'#b45309',flexShrink:0}}>{P(titheCarryover)}</span>
               </div>
             )}
 
-            {/* Per-account breakdown toggle — informational only */}
-            <button
-              onClick={()=>setShowTitheBreakdown(v=>!v)}
-              style={{width:'100%',background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',borderRadius:'8px',padding:'8px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showTitheBreakdown&&byAcctTithe.length>0?'0':'10px',transition:'margin .2s'}}
-            >
-              <span style={{fontSize:'13px',fontWeight:'700',color:'#92400e'}}>
-                {byAcctTithe.length>0?`Breakdown by account (${byAcctTithe.length})`:'Which account to withdraw from?'}
-              </span>
+            {/* Progress bar — shown when partially covered */}
+            {totalTitheCovered>0&&(
+              <div style={{background:'rgba(16,185,129,.08)',border:'1px solid rgba(16,185,129,.3)',borderRadius:'8px',padding:'10px 14px',marginBottom:'10px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',marginBottom:'5px'}}>
+                  <span style={{color:'#16a34a',fontWeight:'700'}}>✓ Covered: {P(totalTitheCovered)}{mTitheSkipped>0?` (${P(mTitheSkipped)} exempted)`:''}</span>
+                  <span style={{color:'#b45309',fontWeight:'700'}}>Still owed: {P(remainingTithe)}</span>
+                </div>
+                <div style={{height:'5px',background:'#e5e7eb',borderRadius:'99px',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${Math.min(100,totalTitheCovered/totalTitheOwed*100)}%`,background:'#10b981',borderRadius:'99px',transition:'width .3s'}}/>
+                </div>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:'5px 0 0'}}>💡 Tithes expenses logged in the Expenses tab count here automatically.</p>
+              </div>
+            )}
+
+            {/* Per-account breakdown toggle */}
+            <button onClick={()=>setShowTitheBreakdown(v=>!v)} style={{width:'100%',background:'rgba(245,158,11,.1)',border:'1px solid rgba(245,158,11,.3)',borderRadius:'8px',padding:'8px 14px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showTitheBreakdown&&byAcctTithe.length>0?'0':'10px',transition:'margin .2s'}}>
+              <span style={{fontSize:'13px',fontWeight:'700',color:'#92400e'}}>{byAcctTithe.length>0?`Income breakdown by account (${byAcctTithe.length})`:'Income breakdown'}</span>
               <span style={{fontSize:'16px',color:'#b45309',transition:'transform .2s',display:'inline-block',transform:showTitheBreakdown?'rotate(180deg)':'rotate(0deg)'}}>▾</span>
             </button>
 
-            {/* Breakdown — reference only, no deductions */}
             {showTitheBreakdown&&(
               <div style={{marginBottom:'12px',border:'1px solid rgba(245,158,11,.25)',borderTop:'none',borderRadius:'0 0 8px 8px',overflow:'hidden'}}>
                 {byAcctTithe.length>0?(
                   <>
                     <div style={{padding:'8px 14px',background:'rgba(245,158,11,.08)',borderBottom:'1px solid rgba(245,158,11,.15)'}}>
-                      <p style={{fontSize:'11px',color:'#b45309',margin:0,fontStyle:'italic'}}>📋 Reference only — shows how much each account contributed to total income. You'll withdraw from one account below.</p>
+                      <p style={{fontSize:'11px',color:'#b45309',margin:0,fontStyle:'italic'}}>📋 Reference only — no automatic transfers between accounts. Withdraw from whichever account you choose below.</p>
                     </div>
                     {byAcctTithe.map(({acct,inc,titheAmt},i)=>(
                       <div key={acct.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',background:i%2===0?'rgba(245,158,11,.05)':'rgba(245,158,11,.1)',borderTop:i>0?'1px solid rgba(245,158,11,.15)':'none'}}>
                         <div>
                           <p style={{fontSize:'13px',fontWeight:'800',color:'#92400e',margin:'0 0 1px'}}>{acctLabel(acct)}</p>
-                          <p style={{fontSize:'11px',color:'#d97706',margin:0}}>Income this month: {P(inc)} ({totalMInc>0?Math.round(inc/totalMInc*100):0}% of total)</p>
+                          <p style={{fontSize:'11px',color:'#d97706',margin:0}}>Income: {P(inc)} ({totalMInc>0?Math.round(inc/totalMInc*100):0}%) · Bal: {P(accBal(acct.id))}</p>
                         </div>
                         <div style={{textAlign:'right'}}>
-                          <p style={{fontSize:'16px',fontWeight:'900',color:'#b45309',margin:0}}>{P(titheAmt)}</p>
+                          <p style={{fontSize:'14px',fontWeight:'900',color:'#b45309',margin:0}}>{P(titheAmt)}</p>
                           <p style={{fontSize:'10px',color:'#d97706',margin:'1px 0 0',fontWeight:'700'}}>portion</p>
                         </div>
                       </div>
@@ -2601,36 +2648,82 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                   </>
                 ):(
                   <div style={{padding:'12px 14px',background:'rgba(245,158,11,.05)'}}>
-                    <p style={{fontSize:'12px',color:'#b45309',margin:0,fontStyle:'italic'}}>💡 Link your income entries to accounts in the Income tab to see the breakdown.</p>
+                    <p style={{fontSize:'12px',color:'#b45309',margin:0,fontStyle:'italic'}}>💡 Link income entries to accounts in the Income tab to see the breakdown.</p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Withdraw remaining from one account */}
-            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'10px',padding:'10px 14px',background:'rgba(245,158,11,.06)',borderRadius:'8px',border:'1px solid rgba(245,158,11,.2)'}}>
-              <span style={{fontSize:'12px',fontWeight:'700',color:'#92400e',whiteSpace:'nowrap'}}>Withdraw {P(remainingTithe)} from:</span>
-              <select className="fi" value={titheWithdrawAcct} onChange={e=>setTitheWithdrawAcct(e.target.value)} style={{flex:1,padding:'5px 8px',fontSize:'12px',margin:0}}>
-                <option value="">— pick account —</option>
-                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
-              </select>
+            {/* ── WITHDRAW SECTION ── */}
+            <div style={{background:'rgba(245,158,11,.06)',borderRadius:'8px',border:'1px solid rgba(245,158,11,.2)',padding:'12px 14px',marginBottom:'10px'}}>
+              <p style={{fontSize:'11px',fontWeight:'800',color:'#92400e',margin:'0 0 8px',textTransform:'uppercase',letterSpacing:'.5px'}}>Record a withdrawal</p>
+              <div style={{display:'grid',gridTemplateColumns:'120px 1fr',gap:'8px',marginBottom:'8px',alignItems:'center'}}>
+                <div>
+                  <span className="fl" style={{color:'#92400e'}}>Amount (₱)</span>
+                  <input type="number" className="fi" min="0" step="0.01" max={remainingTithe}
+                    value={titheWithdrawAmount}
+                    onChange={e=>setTitheWithdrawAmount(e.target.value)}
+                    placeholder={remainingTithe.toFixed(2)}
+                    style={{borderColor:'#f59e0b',color:'#92400e',fontWeight:'700',fontSize:'14px'}}/>
+                </div>
+                <div>
+                  <span className="fl" style={{color:'#92400e'}}>From account</span>
+                  <select className="fi" value={titheWithdrawAcct} onChange={e=>setTitheWithdrawAcct(e.target.value)} style={{padding:'5px 8px',fontSize:'12px',margin:0}}>
+                    <option value="">— pick account —</option>
+                    {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
+                  </select>
+                </div>
+              </div>
+              <button className="btn" style={{background:'#d97706',color:'#fff',width:'100%',justifyContent:'center'}} onClick={()=>{
+                const amt=parseFloat(titheWithdrawAmount)||remainingTithe;
+                if(amt<=0||!titheWithdrawAcct)return;
+                const acctId=titheWithdrawAcct;
+                setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(amt.toFixed(2)),category:'Tithes',accountId:acctId,alloc:'tithe',note:`Tithe ${wk}`}]);
+                setTitheWithdrawAmount('');
+                setTitheWithdrawAcct('');
+              }}>
+                ✓ Record withdrawal of {P(parseFloat(titheWithdrawAmount)||remainingTithe)} from {titheWithdrawAcct?acctLabel(accounts.find(a=>a.id===titheWithdrawAcct)||{}):'selected account'}
+              </button>
             </div>
 
-            {/* Action buttons */}
-            <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn" style={{background:'#d97706',color:'#fff',flex:1,justifyContent:'center'}} onClick={()=>{
-                if(remainingTithe<=0)return;
-                const acctId=titheWithdrawAcct||(byAcctTithe[0]?.acct?.id||'');
-                setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:remainingTithe,category:'Tithes',accountId:acctId,alloc:'tithe',note:`Tithe ${wk}`}]);
-                setTitheWithdrawAcct('');
-                /* no titheLog update needed — titheDone is now driven by mTitheActual */
+            {/* ── EXEMPT / SKIP AMOUNT ── */}
+            <div style={{background:'rgba(148,163,184,.06)',borderRadius:'8px',border:'1px solid rgba(148,163,184,.2)',padding:'12px 14px',marginBottom:'10px'}}>
+              <p style={{fontSize:'11px',fontWeight:'800',color:'#64748b',margin:'0 0 8px',textTransform:'uppercase',letterSpacing:'.5px'}}>Exempt an amount from tithe</p>
+              <div style={{display:'grid',gridTemplateColumns:'120px 1fr',gap:'8px',marginBottom:'8px',alignItems:'center'}}>
+                <div>
+                  <span className="fl">Amount (₱)</span>
+                  <input type="number" className="fi" min="0" step="0.01"
+                    value={titheSkipAmt}
+                    onChange={e=>setTitheSkipAmt(e.target.value)}
+                    placeholder="0.00"/>
+                </div>
+                <div>
+                  <span className="fl">Reason (optional)</span>
+                  <input type="text" className="fi"
+                    value={titheSkipNote}
+                    onChange={e=>setTitheSkipNote(e.target.value)}
+                    placeholder="e.g. already gave directly"/>
+                </div>
+              </div>
+              <button className="btn bs" style={{width:'100%',justifyContent:'center'}} onClick={()=>{
+                const amt=parseFloat(titheSkipAmt)||0;
+                if(amt<=0)return;
+                setTitheLog(prev=>{
+                  const existing=prev.find(t=>(t.month||t.week)===wk)||{};
+                  const skips=[...(existing.skips||[]),{amount:amt,date:TODAY,note:titheSkipNote}];
+                  return [...prev.filter(t=>(t.month||t.week)!==wk),{...existing,month:wk,skips}];
+                });
+                setTitheSkipAmt('');
+                setTitheSkipNote('');
               }}>
-                ✓ Done — Withdrawn {P(remainingTithe)} from {titheWithdrawAcct?acctLabel(accounts.find(a=>a.id===titheWithdrawAcct)||{}):'account'}
-              </button>
-              <button className="btn bs" onClick={()=>setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,skipped:true,date:TODAY}])}>
-                Skip
+                ⏭ Exempt {titheSkipAmt?P(parseFloat(titheSkipAmt)||0):'amount'} from tithe obligation
               </button>
             </div>
+
+            {/* Skip entire month */}
+            <button className="btn bs" style={{width:'100%',justifyContent:'center',fontSize:'11px',opacity:.7}} onClick={()=>setTitheLog(prev=>[...prev.filter(t=>(t.month||t.week)!==wk),{month:wk,skipped:true,date:TODAY}])}>
+              Skip entire month's tithe
+            </button>
           </div>
         );
       })()}
@@ -3686,21 +3779,22 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   const[accountId,setAccountId]=useState('');
   const[cardId,setCardId]=useState('');
   const[editId,setEditId]=useState(null);
+  const[note,setNote]=useState('');
   const[filterAccId,setFilterAccId]=useState('');
   const[filterCardId,setFilterCardId]=useState('');
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
 
-  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');};
-  const startEdit=(e)=>{setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');};
+  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');setNote('');};
+  const startEdit=(e)=>{setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');setNote(e.note||'');};
   const save=()=>{
     if(!amount)return;
     const amt=parseFloat(amount)||0;
     /* Auto-tag Tithes category with alloc:'tithe' so it counts in the tithe balance tracker */
     const titheTag=category==='Tithes'?{alloc:'tithe'}:{};
     if(editId){
-      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:amt,category,accountId,cardId,...titheTag}:x));
+      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:amt,category,accountId,cardId,note,...titheTag}:x));
     }else{
-      setExpenses([...allExpenses,{id:uid(),date,amount:amt,category,accountId,cardId,...titheTag}]);
+      setExpenses([...allExpenses,{id:uid(),date,amount:amt,category,accountId,cardId,note,...titheTag}]);
     }
     if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'expense'),80);
     reset();
@@ -3716,6 +3810,10 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
           <div><span className="fl">Pay from Account</span><select className="fi" value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCardId('');}}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">or Charge to Card</span><select className="fi" value={cardId} onChange={e=>{setCardId(e.target.value);if(e.target.value)setAccountId('');}}><option value="">— Select card —</option>{cards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
+          <div>
+            <span className="fl">Description / Note <span style={{fontWeight:'400',color:'#94a3b8'}}>(for AI analysis)</span></span>
+            <input className="fi" type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. McDonald's lunch with team, SM groceries for the week..."/>
+          </div>
           <div style={{display:'flex',gap:'8px'}}>
             <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}>
               <Ico n={editId?'check':'expenses'} s={14} c="#fff"/>{editId?'Save Changes':'Add Expense'}
@@ -5235,6 +5333,714 @@ function SavingsTab({savingsLog,setSavingsLog,savingsAcctId,setSavingsAcctId,acc
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   SETTINGS TAB
+════════════════════════════════════════ */
+function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
+  const[showKey,setShowKey]=useState(false);
+  const[keyDraft,setKeyDraft]=useState(aiApiKey);
+  const[saved,setSaved]=useState(false);
+
+  const saveKey=()=>{
+    localStorage.setItem('absidi_ai_key',keyDraft);
+    setAiApiKey(keyDraft);
+    setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  };
+
+  const AGGR_LABELS=['','Ultra Conservative','Conservative','Moderate','Aggressive','Ultra Aggressive'];
+  const AGGR_DESC=[
+    '',
+    'Capital preservation first. Only government bonds, T-Bills, MP2 Pag-IBIG.',
+    'Low risk. Balanced funds, blue-chip PSE stocks (BDO, SM, JFC).',
+    'Balanced growth. Mix of growth stocks, REITs, and some speculative picks.',
+    'Growth-focused. Tech stocks, smaller caps, real-estate plays.',
+    'Maximum growth. High-volatility stocks, IPOs, leveraged positions.',
+  ];
+  const BROKERS=[
+    {id:'col',name:'COL Financial (PSE stocks)'},
+    {id:'gcash',name:'GCash GInvest (funds + stocks)'},
+    {id:'bdo',name:'BDO Nomura (stocks + UITFs)'},
+    {id:'bpi',name:'BPI Trade (stocks + UITFs)'},
+    {id:'seedbox',name:'Seedbox Securities'},
+    {id:'firstmetro',name:'First Metro Securities'},
+    {id:'abcapital',name:'AB Capital Securities'},
+    {id:'multiple',name:'Multiple brokers'},
+  ];
+  const MODELS=[
+    {id:'claude-haiku-4-5-20251001',name:'Claude Haiku (fast · cheap)'},
+    {id:'claude-sonnet-4-6',name:'Claude Sonnet (balanced · recommended)'},
+    {id:'claude-opus-4-6',name:'Claude Opus (most powerful · expensive)'},
+  ];
+
+  return(
+    <div className="fade" style={{maxWidth:'700px',margin:'0 auto',display:'flex',flexDirection:'column',gap:'20px',padding:'4px 0 40px'}}>
+
+      {/* ── CLAUDE API ── */}
+      <div className="card" style={{padding:'24px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'18px'}}>
+          <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="sparkle" s={18} c="#fff"/>
+          </div>
+          <div>
+            <p style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'16px'}}>Claude AI Connection</p>
+            <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>Connects AbsidiFinance to your Claude API key for AI-powered analysis</p>
+          </div>
+          {aiApiKey&&<span style={{marginLeft:'auto',fontSize:'11px',fontWeight:'700',color:'#10b981',background:'#d1fae5',padding:'3px 10px',borderRadius:'99px'}}>✓ Connected</span>}
+        </div>
+
+        <div className="col" style={{gap:'14px'}}>
+          <div>
+            <span className="fl">API Key <a href="https://console.anthropic.com/keys" target="_blank" style={{color:'#6366f1',textDecoration:'none',fontSize:'11px',fontWeight:'600'}}>(get one here ↗)</a></span>
+            <div style={{display:'flex',gap:'8px'}}>
+              <input className="fi" type={showKey?'text':'password'} value={keyDraft} onChange={e=>setKeyDraft(e.target.value)}
+                placeholder="sk-ant-api03-..." style={{flex:1,fontFamily:'monospace',fontSize:'13px'}}/>
+              <button className="btn bs" style={{padding:'8px 12px',flexShrink:0}} onClick={()=>setShowKey(v=>!v)}>
+                {showKey?'Hide':'Show'}
+              </button>
+            </div>
+            <p style={{fontSize:'11px',color:'var(--text3)',margin:'4px 0 0'}}>Stored locally in your browser only. Never sent anywhere except directly to Anthropic's API.</p>
+          </div>
+
+          <div>
+            <span className="fl">AI Model</span>
+            <select className="fi" value={settings.aiModel||'claude-haiku-4-5-20251001'} onChange={e=>setSettings(s=>({...s,aiModel:e.target.value}))}>
+              {MODELS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+
+          <button className="btn bp" style={{width:'fit-content'}} onClick={saveKey}>
+            <Ico n="check" s={14} c="#fff"/>{saved?'Saved!':'Save API Key'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── INVESTMENT PROFILE ── */}
+      <div className="card" style={{padding:'24px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'18px'}}>
+          <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'linear-gradient(135deg,#059669,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="trend-up" s={18} c="#fff"/>
+          </div>
+          <div>
+            <p style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'16px'}}>Investment Profile</p>
+            <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>Tells the AI how aggressive to be with stock picks and investment advice</p>
+          </div>
+        </div>
+
+        <div className="col" style={{gap:'16px'}}>
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
+              <span className="fl" style={{marginBottom:0}}>Risk Aggressiveness</span>
+              <span style={{fontSize:'13px',fontWeight:'800',color:'#4f46e5'}}>{AGGR_LABELS[settings.investAggr||3]}</span>
+            </div>
+            <input type="range" min="1" max="5" step="1" value={settings.investAggr||3}
+              onChange={e=>setSettings(s=>({...s,investAggr:parseInt(e.target.value)}))}
+              style={{width:'100%',accentColor:'#4f46e5',margin:'0 0 6px'}}/>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text3)',fontWeight:'600'}}>
+              {AGGR_LABELS.slice(1).map((l,i)=><span key={i}>{i===0?'1':i===4?'5':i+1}</span>)}
+            </div>
+            <div style={{marginTop:'10px',padding:'10px 14px',background:'rgba(99,102,241,.07)',borderRadius:'8px',border:'1px solid rgba(99,102,241,.15)'}}>
+              <p style={{fontSize:'12px',color:'#4f46e5',margin:0}}>{AGGR_DESC[settings.investAggr||3]}</p>
+            </div>
+          </div>
+
+          <div>
+            <span className="fl">Preferred Broker / Platform</span>
+            <select className="fi" value={settings.aiBroker||'col'} onChange={e=>setSettings(s=>({...s,aiBroker:e.target.value}))}>
+              {BROKERS.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PERSONAL CONTEXT ── */}
+      <div className="card" style={{padding:'24px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'18px'}}>
+          <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'linear-gradient(135deg,#d97706,#dc2626)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="user" s={18} c="#fff"/>
+          </div>
+          <div>
+            <p style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'16px'}}>Personal Context for AI</p>
+            <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>The more context you give, the better the AI's advice</p>
+          </div>
+        </div>
+        <div>
+          <span className="fl">Tell the AI about yourself and your goals</span>
+          <textarea className="fi" rows="5" value={settings.aiContext||''} onChange={e=>setSettings(s=>({...s,aiContext:e.target.value}))}
+            placeholder={"e.g. I'm a 30-year-old freelance developer from Cebu. I have 2 kids, planning to buy a house in 3-5 years, and want to build at least 6 months of emergency fund. I'm also interested in dividend-paying stocks for passive income. Currently no loans except a minor Shopee Pay credit."}
+            style={{resize:'vertical',minHeight:'100px',fontFamily:'inherit'}}/>
+          <p style={{fontSize:'11px',color:'var(--text3)',margin:'4px 0 0'}}>This is sent to Claude as context. Do not include passwords or sensitive credentials here.</p>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   AI ADVISOR TAB
+════════════════════════════════════════ */
+function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,allSubs,allPayroll,titheLog,savingsLog,investLog,mInc,tithe,invest,savings,desires,base,avg3,dailyCap,spendBudget,titheBase,curMonthKey,selMonth,yr,userName,mTitheActual,mInvestActual,mSavingsActual,mExpReg,titheCarryover}){
+  const[loading,setLoading]=useState(false);
+  const[result,setResult]=useState(null);
+  const[error,setError]=useState('');
+  const[activeSection,setActiveSection]=useState('summary');
+
+  const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const monthName=MONTH_NAMES[selMonth];
+
+  const AGGR_LABELS=['','Ultra Conservative','Conservative','Moderate','Aggressive','Ultra Aggressive'];
+  const BROKER_NAMES={col:'COL Financial',gcash:'GCash GInvest',bdo:'BDO Nomura',bpi:'BPI Trade',seedbox:'Seedbox Securities',firstmetro:'First Metro Securities',abcapital:'AB Capital',multiple:'Multiple Brokers'};
+
+  const buildPrompt=()=>{
+    /* Income this month */
+    const monthIncome=allIncome.filter(x=>!x.alloc&&(x.date||'').startsWith(curMonthKey));
+    /* Expenses this month */
+    const monthExpenses=allExpenses.filter(x=>!x.alloc&&(x.date||'').startsWith(curMonthKey));
+    /* Categorized expenses */
+    const byCategory={};
+    monthExpenses.forEach(x=>{
+      byCategory[x.category]=(byCategory[x.category]||0)+x.amount;
+    });
+    /* Account balances */
+    const acctList=accounts.map(a=>`${a.name} (${a.type||'bank'}): ${P(accBal(a.id))}`).join('\n');
+    /* Last 3 months summary */
+    const last3Summary=[0,1,2].map(i=>{
+      const d=new Date(yr,selMonth-i,1);
+      const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const inc=allIncome.filter(x=>!x.alloc&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const exp=allExpenses.filter(x=>!x.alloc&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      return `${MONTH_NAMES[parseInt(mk.split('-')[1])-1]} ${mk.split('-')[0]}: Income ${P(inc)}, Expenses ${P(exp)}, Net ${P(inc-exp)}`;
+    }).join('\n');
+
+    /* Recent expense details (last 30 entries) */
+    const recentExpDetails=[...monthExpenses].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30)
+      .map(x=>`  - ${x.date} | ${x.category}${x.note?` | "${x.note}"`:''} | ${P(x.amount)}`).join('\n');
+
+    /* Category totals */
+    const catSummary=Object.entries(byCategory).sort((a,b)=>b[1]-a[1])
+      .map(([cat,amt])=>`  ${cat}: ${P(amt)}`).join('\n');
+
+    return `You are a personal financial advisor for a Filipino professional. Today is ${TODAY}, analyzing ${monthName} ${yr}.
+
+## PERSONAL PROFILE
+- Name: ${userName}
+- Investment risk level: ${AGGR_LABELS[settings.investAggr||3]} (${settings.investAggr||3}/5)
+- Preferred broker/platform: ${BROKER_NAMES[settings.aiBroker||'col']}
+${settings.aiContext?`- Personal context: ${settings.aiContext}`:''}
+
+## BUDGET ALLOCATION (${monthName} ${yr})
+- Monthly income (actual): ${P(mInc)}
+- 3-month average base: ${P(avg3)}
+- Tithes: ${settings.tithePct||10}% → ${P(tithe)} (owed) | ${P(mTitheActual)} paid so far${titheCarryover>0?` | ${P(titheCarryover)} carried over from prev months`:''}
+- Investment target: ${settings.investPct||20}% → ${P(invest)} | ${P(mInvestActual)} moved so far
+- Savings target: ${settings.savingsPct||15}% → ${P(savings)} | ${P(mSavingsActual)} moved so far
+- Desires/lifestyle budget: ${settings.desiresPct||10}% → ${P(desires)}
+- Current daily spending cap: ${P(dailyCap)}/day
+- Essentials budget: ${P(Math.max(0,spendBudget))}
+
+## ACCOUNT BALANCES
+${acctList||'No accounts linked'}
+
+## INCOME THIS MONTH
+${monthIncome.map(x=>`  - ${x.date}: ${P(x.amount)} (${x.type||'Income'}${x.note?` | ${x.note}`:''})`).join('\n')||'No income entries'}
+
+## EXPENSES BY CATEGORY (${monthName})
+${catSummary||'No expenses'}
+
+## DETAILED EXPENSE LOG (${monthName}, most recent first)
+${recentExpDetails||'No expense details'}
+
+## 3-MONTH TREND
+${last3Summary}
+
+## RESPONSE FORMAT
+Return ONLY a valid JSON object — no markdown, no code fences, no extra text before or after. Use this exact schema:
+{
+  "summary": "2-3 sentence plain-English assessment of their financial situation this month",
+  "healthScore": <integer 1-10>,
+  "healthRationale": "one sentence explaining the score",
+  "dailySpendable": <number in PHP, realistic daily amount left to spend>,
+  "dailySpendableRationale": "how you calculated this",
+  "investmentAdvice": "2-3 sentences on overall investment strategy for this month — include whether market conditions favor lump sum or DCA right now",
+  "fundTiming": {
+    "equityFunds": "2-3 sentences: is now a good time to buy into equity funds? Consider PSEi trend, valuation, interest rates. When specifically to buy/add.",
+    "mutualFunds": "2-3 sentences: recommend specific PH mutual funds (Sun Life Prosperity, ALFM, etc.) and optimal buy-in strategy (lump sum vs DCA and how much per month).",
+    "uitf": "2-3 sentences: which UITF type (equity, balanced, bond, money market) fits their profile now, from which bank, and why.",
+    "dcaAmount": <suggested monthly DCA amount in PHP based on their investible surplus>,
+    "dcaFrequency": "weekly/semi-monthly/monthly — with rationale"
+  },
+  "stockPicks": [
+    {"ticker":"XXX","name":"Full Company Name","rationale":"1-2 sentences why including entry price guidance if possible","sector":"sector","risk":"low/moderate/high","platform":"which PH platform","timing":"buy now / wait for dip / accumulate on dips"}
+  ],
+  "fundPicks": [
+    {"name":"Fund name","type":"Equity Fund/Balanced Fund/UITF Equity/UITF Bond/Money Market/etc","rationale":"why this fits their risk + when to invest","platform":"bank or fund company","minInvestment":"min amount if known","dcaAdvice":"how much to add monthly via DCA"}
+  ],
+  "savingsAdvice": "2-3 sentences specific savings advice",
+  "expenseInsights": ["specific insight referencing actual expense data 1","insight 2","insight 3"],
+  "actionItems": ["specific action to take this week 1","action 2","action 3"],
+  "warnings": ["any red flag or concern (leave empty array if none)"],
+  "weeklyPlan": [
+    {
+      "week": "Week 1",
+      "dateRange": "${(()=>{const d=new Date(yr,selMonth,1);return d.toLocaleDateString('en-PH',{month:'short',day:'numeric'});})()}–approx",
+      "focus": "one-phrase focus theme",
+      "financialTarget": <numeric target in PHP, e.g. amount to save or not exceed this week>,
+      "targetLabel": "save / not spend more than / invest / etc",
+      "tasks": ["specific task 1","task 2","task 3"]
+    },
+    {
+      "week": "Week 2",
+      "dateRange": "...",
+      "focus": "...",
+      "financialTarget": <number>,
+      "targetLabel": "...",
+      "tasks": ["task 1","task 2","task 3"]
+    },
+    {
+      "week": "Week 3",
+      "dateRange": "...",
+      "focus": "...",
+      "financialTarget": <number>,
+      "targetLabel": "...",
+      "tasks": ["task 1","task 2","task 3"]
+    }
+  ]
+}
+
+Rules:
+- stockPicks: Give ${Math.max(2,Math.min(6,settings.investAggr||3))} PSE stock picks for ${AGGR_LABELS[settings.investAggr||3]} risk profile
+- Conservative/Ultra Conservative: BDO, BPI, MBT, TEL, GLO, REITs (MREIT, DDMPR, RCR, AREIT)
+- Moderate: add JFC, SM, ALI, AC, ICT, MONDE, MEG, DMC
+- Aggressive/Ultra Aggressive: growth names, smaller caps, property plays, commodity stocks
+- fundPicks: Give 2-4 funds — mix of equity fund (Sun Life Prosperity Equity, ALFM Growth, BPI Equity), balanced fund, and UITF
+- fundTiming.equityFunds: Reference whether PSEi is in a good accumulation zone or overvalued — be specific
+- fundTiming.dcaAmount: Must be realistic given their actual investible surplus (income minus all obligations)
+- weeklyPlan: Spread tasks across the 3 weeks logically — Week 1 = assess/act, Week 2 = monitor/adjust, Week 3 = review/prepare next month
+- All amounts in Philippine Peso
+- dailySpendable = what they can actually spend per day from today until month-end given remaining budget
+- Be specific and actionable; reference their actual spending categories and amounts
+- weeklyPlan dateRange: estimate real calendar dates for ${monthName} ${yr}`;
+  };
+
+  const analyze=async()=>{
+    if(!aiApiKey){setError('No API key set. Go to Settings and add your Claude API key.');return;}
+    setLoading(true);setError('');setResult(null);
+    try{
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key':aiApiKey,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true',
+        },
+        body:JSON.stringify({
+          model:settings.aiModel||'claude-haiku-4-5-20251001',
+          max_tokens:4096,
+          messages:[{role:'user',content:buildPrompt()}],
+        }),
+      });
+      if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||`API error ${resp.status}`);}
+      const data=await resp.json();
+      const raw=data.content?.[0]?.text||'';
+      /* Parse JSON — strip any markdown code fences if model added them */
+      const jsonStr=raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      const parsed=JSON.parse(jsonStr);
+      setResult(parsed);
+      setActiveSection('summary');
+    }catch(e){
+      setError(e.message||'Something went wrong. Check your API key and try again.');
+    }finally{setLoading(false);}
+  };
+
+  const SCORE_COLOR=(s)=>s>=8?'#10b981':s>=6?'#f59e0b':s>=4?'#f97316':'#ef4444';
+  const RISK_COLOR={low:'#10b981',moderate:'#f59e0b',high:'#ef4444'};
+
+  const exportAdvice=()=>{
+    if(!result)return;
+    const W_COLORS=['#4f46e5','#059669','#d97706'];
+    const html=`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>AbsidiFinance AI Advice — ${monthName} ${yr}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;background:#f8fafc;padding:0}
+  .page{max-width:860px;margin:0 auto;padding:40px 32px}
+  h1{font-size:26px;font-weight:900;color:#fff}
+  h2{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:12px}
+  h3{font-size:15px;font-weight:800;color:#1e293b;margin-bottom:6px}
+  .header{background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:28px 32px;border-radius:16px;margin-bottom:24px}
+  .header p{color:rgba(255,255,255,.8);font-size:13px;margin-top:6px}
+  .card{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .score{text-align:center;padding:24px}
+  .score-num{font-size:48px;font-weight:900;line-height:1}
+  .badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:700}
+  .stock{border-left:4px solid #6366f1;padding-left:14px;margin-bottom:12px}
+  .fund{background:#f8fafc;border-radius:8px;padding:12px 16px;margin-bottom:10px;border:1px solid #e2e8f0}
+  .week{border-left:4px solid ${W_COLORS[0]};padding:14px 18px;margin-bottom:12px;background:#f8fafc;border-radius:0 8px 8px 0}
+  .task{padding:4px 0;font-size:13px;color:#475569}
+  .task::before{content:"→ "}
+  .insight{background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#475569;border-left:3px solid #6366f1}
+  .action{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+  .action-num{width:24px;height:24px;border-radius:50%;background:#10b981;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .warn{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#92400e}
+  p{line-height:1.6;font-size:13px;color:#475569}
+  @media print{body{background:#fff}.page{padding:20px}}
+</style></head>
+<body><div class="page">
+  <div class="header">
+    <h1>✨ AI Financial Advice</h1>
+    <p>${monthName} ${yr} · ${AGGR_LABELS[settings.investAggr||3]} profile · ${BROKER_NAMES[settings.aiBroker||'col']} · Generated ${new Date().toLocaleDateString('en-PH',{dateStyle:'long'})}</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card score">
+      <div class="score-num" style="color:${SCORE_COLOR(result.healthScore)}">${result.healthScore}<span style="font-size:20px;color:#94a3b8">/10</span></div>
+      <h2 style="margin-top:8px">Financial Health</h2>
+      <p>${result.healthRationale}</p>
+    </div>
+    <div class="card score">
+      <div class="score-num" style="color:#4f46e5">₱${(result.dailySpendable||0).toLocaleString('en-PH',{maximumFractionDigits:0})}</div>
+      <h2 style="margin-top:8px">Daily Spendable</h2>
+      <p>${result.dailySpendableRationale}</p>
+    </div>
+  </div>
+
+  <div class="card"><h2>Monthly Summary</h2><p>${result.summary}</p></div>
+
+  ${result.warnings?.length?`<div class="card" style="border-left:4px solid #f59e0b"><h2>⚠ Warnings</h2>${result.warnings.map(w=>`<div class="warn">${w}</div>`).join('')}</div>`:''}
+
+  <div class="card"><h2>💼 Investment Strategy</h2><p>${result.investmentAdvice}</p></div>
+
+  ${result.fundTiming?`<div class="card">
+    <h2>📈 Fund Timing Advice</h2>
+    <h3 style="color:#4f46e5;margin-top:12px">Equity Funds</h3><p>${result.fundTiming.equityFunds}</p>
+    <h3 style="color:#059669;margin-top:14px">Mutual Funds</h3><p>${result.fundTiming.mutualFunds}</p>
+    <h3 style="color:#d97706;margin-top:14px">UITFs</h3><p>${result.fundTiming.uitf}</p>
+    <div style="margin-top:14px;padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
+      <strong style="color:#059669">Suggested DCA:</strong> ₱${(result.fundTiming.dcaAmount||0).toLocaleString('en-PH')} — ${result.fundTiming.dcaFrequency}
+    </div>
+  </div>`:''}
+
+  ${result.fundPicks?.length?`<div class="card"><h2>🏦 Recommended Funds</h2>${result.fundPicks.map(f=>`<div class="fund"><h3>${f.name} <span class="badge" style="background:#e0e7ff;color:#4f46e5">${f.type}</span></h3><p>${f.rationale}</p>${f.dcaAdvice?`<p style="margin-top:6px;color:#059669;font-weight:600">DCA: ${f.dcaAdvice}</p>`:''}<p style="margin-top:6px;color:#6366f1;font-weight:600">📲 ${f.platform}${f.minInvestment?` · Min: ${f.minInvestment}`:''}</p></div>`).join('')}</div>`:''}
+
+  ${result.stockPicks?.length?`<div class="card"><h2>📊 Stock Picks (PSE)</h2><p style="margin-bottom:14px;font-size:11px;color:#94a3b8">⚠ AI-generated suggestions only. Do your own research before investing.</p>${result.stockPicks.map(s=>`<div class="stock"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="font-family:monospace;font-size:18px;font-weight:900;color:#4f46e5">${s.ticker}</span><span style="font-weight:600">${s.name}</span><span class="badge" style="background:#fef3c7;color:#92400e">${s.risk}</span><span class="badge" style="background:#f1f5f9;color:#64748b">${s.sector}</span></div><p>${s.rationale}</p>${s.timing?`<p style="margin-top:4px;font-weight:600;color:#6366f1">⏰ ${s.timing}</p>`:''}<p style="margin-top:4px;font-weight:600;color:#6366f1">📲 ${s.platform}</p></div>`).join('')}</div>`:''}
+
+  <div class="card"><h2>🐷 Savings Advice</h2><p>${result.savingsAdvice}</p></div>
+
+  ${result.expenseInsights?.length?`<div class="card"><h2>🔍 Expense Insights</h2>${result.expenseInsights.map(i=>`<div class="insight">💡 ${i}</div>`).join('')}</div>`:''}
+
+  ${result.actionItems?.length?`<div class="card"><h2>✅ Action Items</h2>${result.actionItems.map((a,i)=>`<div class="action"><div class="action-num">${i+1}</div><p>${a}</p></div>`).join('')}</div>`:''}
+
+  ${result.weeklyPlan?.length?`<div class="card"><h2>📅 3-Week Plan</h2>${result.weeklyPlan.map((w,i)=>`<div class="week" style="border-left-color:${W_COLORS[i%3]}"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong style="color:${W_COLORS[i%3]}">${w.week}${w.dateRange?' ('+w.dateRange+')':''}</strong>${w.financialTarget?`<span style="font-weight:700;color:#1e293b">₱${w.financialTarget.toLocaleString('en-PH')} ${w.targetLabel||''}</span>`:''}</div><p style="font-weight:700;color:#1e293b;margin-bottom:8px">${w.focus}</p>${(w.tasks||[]).map(t=>`<div class="task">${t}</div>`).join('')}</div>`).join('')}</div>`:''}
+
+  <p style="text-align:center;color:#94a3b8;font-size:11px;margin-top:32px">Generated by AbsidiFinance AI Advisor · ${new Date().toLocaleString('en-PH')} · For personal use only</p>
+</div></body></html>`;
+    const blob=new Blob([html],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`AbsidiFinance-AI-${curMonthKey}.html`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
+  const SECTIONS=[
+    {id:'summary',label:'Overview'},
+    {id:'invest',label:'Invest'},
+    {id:'funds',label:'Funds'},
+    {id:'stocks',label:'Stocks'},
+    {id:'savings',label:'Savings'},
+    {id:'expenses',label:'Expenses'},
+    {id:'actions',label:'Actions'},
+    {id:'plan',label:'3-Week Plan'},
+  ];
+
+  return(
+    <div className="fade" style={{maxWidth:'800px',margin:'0 auto',padding:'4px 0 40px'}}>
+
+      {/* Header card */}
+      <div className="card" style={{padding:'24px',marginBottom:'16px',background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',border:'none'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px'}}>
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}}>
+              <Ico n="sparkle" s={22} c="#fff"/>
+              <p style={{fontWeight:'900',color:'#fff',margin:0,fontSize:'18px'}}>AI Financial Advisor</p>
+            </div>
+            <p style={{fontSize:'13px',color:'rgba(255,255,255,.75)',margin:0}}>
+              Analyzing {monthName} {yr} · {AGGR_LABELS[settings.investAggr||3]} profile · {BROKER_NAMES[settings.aiBroker||'col']}
+            </p>
+            {!aiApiKey&&(
+              <p style={{fontSize:'12px',color:'#fde68a',margin:'8px 0 0',fontWeight:'600'}}>⚠ No API key — go to Settings tab to add your Claude API key</p>
+            )}
+          </div>
+          <button onClick={analyze} disabled={loading||!aiApiKey}
+            style={{background:loading?'rgba(255,255,255,.2)':'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'#fff',borderRadius:'10px',padding:'10px 20px',cursor:loading||!aiApiKey?'not-allowed':'pointer',fontWeight:'700',fontSize:'13px',display:'flex',alignItems:'center',gap:'8px',opacity:!aiApiKey?0.5:1,transition:'background .2s'}}>
+            {loading?<>
+              <span style={{display:'inline-block',width:'14px',height:'14px',border:'2px solid rgba(255,255,255,.4)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+              Analyzing...
+            </>:<>
+              <Ico n="sparkle" s={14} c="#fff"/>
+              {result?'Re-analyze':'Analyze My Finances'}
+            </>}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error&&(
+        <div className="card" style={{padding:'16px 20px',marginBottom:'16px',borderLeft:'4px solid #ef4444',background:'#fef2f2'}}>
+          <p style={{color:'#dc2626',margin:0,fontSize:'13px',fontWeight:'600'}}>⚠ {error}</p>
+        </div>
+      )}
+
+      {/* Loading skeleton */}
+      {loading&&(
+        <div className="card" style={{padding:'32px',textAlign:'center'}}>
+          <div style={{width:'48px',height:'48px',border:'3px solid #e2e8f0',borderTopColor:'#4f46e5',borderRadius:'50%',animation:'spin 1s linear infinite',margin:'0 auto 16px'}}/>
+          <p style={{fontWeight:'700',color:'var(--text)',marginBottom:'6px'}}>Claude is analyzing your finances...</p>
+          <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>Reading your income, expenses, and goals · Researching Philippine stocks · Building your personalized plan</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {result&&!loading&&(
+        <div className="col" style={{gap:'14px'}}>
+
+          {/* Score + daily cap row */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px'}}>
+            <div className="card" style={{padding:'20px',textAlign:'center',borderTop:`4px solid ${SCORE_COLOR(result.healthScore)}`}}>
+              <p style={{fontSize:'42px',fontWeight:'900',color:SCORE_COLOR(result.healthScore),margin:'0 0 4px',lineHeight:1}}>{result.healthScore}<span style={{fontSize:'18px',color:'var(--text3)'}}>/10</span></p>
+              <p style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',margin:'0 0 6px',textTransform:'uppercase'}}>Financial Health</p>
+              <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>{result.healthRationale}</p>
+            </div>
+            <div className="card" style={{padding:'20px',textAlign:'center',borderTop:'4px solid #6366f1'}}>
+              <p style={{fontSize:'36px',fontWeight:'900',color:'#4f46e5',margin:'0 0 4px',lineHeight:1}}>{P(result.dailySpendable)}</p>
+              <p style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)',margin:'0 0 6px',textTransform:'uppercase'}}>AI Daily Spendable</p>
+              <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>{result.dailySpendableRationale}</p>
+            </div>
+          </div>
+
+          {/* Section nav + export */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'8px'}}>
+            <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+              {SECTIONS.map(s=>(
+                <button key={s.id} onClick={()=>setActiveSection(s.id)}
+                  style={{padding:'6px 14px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',
+                    background:activeSection===s.id?'#4f46e5':'var(--card)',color:activeSection===s.id?'#fff':'var(--text3)',transition:'all .15s'}}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={exportAdvice}
+              style={{display:'flex',alignItems:'center',gap:'6px',padding:'6px 14px',fontSize:'12px',fontWeight:'700',borderRadius:'99px',border:'1px solid var(--border)',cursor:'pointer',background:'var(--card)',color:'var(--text3)',transition:'all .15s',flexShrink:0}}>
+              <Ico n="download" s={13} c="currentColor"/>Export Report
+            </button>
+          </div>
+
+          {/* Summary */}
+          {activeSection==='summary'&&(
+            <div className="col" style={{gap:'12px'}}>
+              <div className="card" style={{padding:'20px'}}>
+                <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'10px'}}>Monthly Overview</p>
+                <p style={{color:'var(--text)',lineHeight:'1.6',margin:0}}>{result.summary}</p>
+              </div>
+              {result.warnings?.length>0&&(
+                <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #f59e0b',background:'#fffbeb'}}>
+                  <p style={{fontSize:'12px',fontWeight:'800',color:'#92400e',textTransform:'uppercase',marginBottom:'8px'}}>⚠ Warnings</p>
+                  {result.warnings.map((w,i)=><p key={i} style={{color:'#b45309',margin:'0 0 4px',fontSize:'13px'}}>• {w}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Investment */}
+          {activeSection==='invest'&&(
+            <div className="col" style={{gap:'12px'}}>
+              <div className="card" style={{padding:'20px'}}>
+                <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'10px'}}>💼 Investment Strategy</p>
+                <p style={{color:'var(--text)',lineHeight:'1.6',margin:0}}>{result.investmentAdvice}</p>
+              </div>
+              {result.fundTiming&&(
+                <div className="col" style={{gap:'10px'}}>
+                  {[
+                    {key:'equityFunds',label:'📈 Equity Funds',color:'#4f46e5',bg:'rgba(99,102,241,.06)',border:'rgba(99,102,241,.15)'},
+                    {key:'mutualFunds',label:'🏦 Mutual Funds',color:'#059669',bg:'rgba(5,150,105,.06)',border:'rgba(5,150,105,.2)'},
+                    {key:'uitf',label:'🏛 UITFs',color:'#d97706',bg:'rgba(217,119,6,.06)',border:'rgba(217,119,6,.2)'},
+                  ].map(({key,label,color,bg,border})=>(
+                    <div key={key} style={{padding:'16px 18px',background:bg,borderRadius:'10px',border:`1px solid ${border}`}}>
+                      <p style={{fontSize:'12px',fontWeight:'800',color,margin:'0 0 8px',textTransform:'uppercase',letterSpacing:'.5px'}}>{label}</p>
+                      <p style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.55',margin:0}}>{result.fundTiming[key]}</p>
+                    </div>
+                  ))}
+                  {result.fundTiming.dcaAmount>0&&(
+                    <div style={{padding:'14px 18px',background:'rgba(16,185,129,.08)',borderRadius:'10px',border:'1px solid rgba(16,185,129,.25)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div>
+                        <p style={{fontSize:'12px',fontWeight:'800',color:'#059669',margin:'0 0 3px',textTransform:'uppercase'}}>📆 Suggested DCA</p>
+                        <p style={{fontSize:'12px',color:'#064e3b',margin:0}}>{result.fundTiming.dcaFrequency}</p>
+                      </div>
+                      <span style={{fontSize:'22px',fontWeight:'900',color:'#059669'}}>{P(result.fundTiming.dcaAmount)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Funds */}
+          {activeSection==='funds'&&(
+            <div className="col" style={{gap:'10px'}}>
+              <div className="card" style={{padding:'14px 18px',borderLeft:'4px solid #6366f1'}}>
+                <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>These are AI-generated recommendations based on your <strong>{AGGR_LABELS[settings.investAggr||3]}</strong> risk profile. Min investment amounts may vary. Always check fund prospectus before investing.</p>
+              </div>
+              {result.fundPicks?.map((f,i)=>(
+                <div key={i} className="card" style={{padding:'18px 20px',borderLeft:'4px solid #6366f1'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px',flexWrap:'wrap',gap:'6px'}}>
+                    <span style={{fontWeight:'900',color:'#4f46e5',fontSize:'15px'}}>{f.name}</span>
+                    <span style={{fontSize:'11px',color:'#6366f1',fontWeight:'700',background:'rgba(99,102,241,.1)',padding:'3px 10px',borderRadius:'99px',flexShrink:0}}>{f.type}</span>
+                  </div>
+                  <p style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.55',margin:'0 0 10px'}}>{f.rationale}</p>
+                  {f.dcaAdvice&&(
+                    <div style={{padding:'8px 12px',background:'rgba(5,150,105,.08)',borderRadius:'6px',marginBottom:'8px'}}>
+                      <p style={{fontSize:'12px',color:'#059669',fontWeight:'700',margin:0}}>📆 DCA: {f.dcaAdvice}</p>
+                    </div>
+                  )}
+                  <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+                    <p style={{fontSize:'11px',color:'#6366f1',fontWeight:'700',margin:0}}>📲 {f.platform}</p>
+                    {f.minInvestment&&<p style={{fontSize:'11px',color:'var(--text3)',fontWeight:'600',margin:0}}>Min: {f.minInvestment}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Stock Picks */}
+          {activeSection==='stocks'&&(
+            <div className="col" style={{gap:'10px'}}>
+              <div className="card" style={{padding:'14px 18px'}}>
+                <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>⚠ <strong>Disclaimer:</strong> AI-generated suggestions only. Not financial advice. Always do your own research (DYOR) before investing in any stock.</p>
+              </div>
+              {result.stockPicks?.map((s,i)=>(
+                <div key={i} className="card" style={{padding:'18px 20px',borderLeft:`4px solid ${RISK_COLOR[s.risk]||'#6366f1'}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px'}}>
+                    <div>
+                      <span style={{fontSize:'22px',fontWeight:'900',color:'#4f46e5',fontFamily:'monospace'}}>{s.ticker}</span>
+                      <span style={{fontSize:'13px',color:'var(--text)',fontWeight:'600',marginLeft:'10px'}}>{s.name}</span>
+                    </div>
+                    <div style={{display:'flex',gap:'6px',flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                      <span style={{fontSize:'11px',fontWeight:'700',color:RISK_COLOR[s.risk]||'#6366f1',background:`${RISK_COLOR[s.risk]||'#6366f1'}18`,padding:'2px 8px',borderRadius:'99px'}}>{s.risk}</span>
+                      <span style={{fontSize:'11px',fontWeight:'600',color:'var(--text3)',background:'var(--card2)',padding:'2px 8px',borderRadius:'99px'}}>{s.sector}</span>
+                    </div>
+                  </div>
+                  <p style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.5',margin:'0 0 8px'}}>{s.rationale}</p>
+                  {s.timing&&<p style={{fontSize:'12px',fontWeight:'700',color:'#d97706',margin:'0 0 6px'}}>⏰ {s.timing}</p>}
+                  <p style={{fontSize:'11px',color:'#6366f1',fontWeight:'600',margin:0}}>📲 {s.platform}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Savings */}
+          {activeSection==='savings'&&(
+            <div className="card" style={{padding:'20px'}}>
+              <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'10px'}}>🐷 Savings Advice</p>
+              <p style={{color:'var(--text)',lineHeight:'1.6',margin:0}}>{result.savingsAdvice}</p>
+            </div>
+          )}
+
+          {/* Expense Insights */}
+          {activeSection==='expenses'&&(
+            <div className="card" style={{padding:'20px'}}>
+              <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'12px'}}>🔍 Expense Insights</p>
+              <div className="col" style={{gap:'10px'}}>
+                {result.expenseInsights?.map((ins,i)=>(
+                  <div key={i} style={{padding:'12px 14px',background:'var(--card2)',borderRadius:'8px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
+                    <span style={{fontSize:'16px',flexShrink:0,marginTop:'1px'}}>💡</span>
+                    <p style={{fontSize:'13px',color:'var(--text)',margin:0,lineHeight:'1.5'}}>{ins}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Action Items */}
+          {activeSection==='actions'&&(
+            <div className="col" style={{gap:'10px'}}>
+              {result.actionItems?.map((act,i)=>(
+                <div key={i} className="card" style={{padding:'16px 20px',display:'flex',gap:'14px',alignItems:'flex-start',borderLeft:'4px solid #10b981'}}>
+                  <div style={{width:'26px',height:'26px',borderRadius:'50%',background:'#10b981',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff',fontWeight:'800',fontSize:'13px'}}>{i+1}</div>
+                  <p style={{fontSize:'13px',color:'var(--text)',margin:0,lineHeight:'1.5',paddingTop:'4px'}}>{act}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 3-Week Plan */}
+          {activeSection==='plan'&&(
+            <div className="col" style={{gap:'12px'}}>
+              {(result.weeklyPlan||[]).map((w,i)=>{
+                const WC=['#4f46e5','#059669','#d97706'];
+                const wc=WC[i%3];
+                return(
+                  <div key={i} className="card" style={{padding:0,overflow:'hidden',borderLeft:`4px solid ${wc}`}}>
+                    <div style={{padding:'14px 20px',background:`${wc}0d`,borderBottom:`1px solid ${wc}22`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'8px'}}>
+                      <div>
+                        <span style={{fontWeight:'900',fontSize:'15px',color:wc}}>{w.week}</span>
+                        {w.dateRange&&<span style={{fontSize:'12px',color:'var(--text3)',marginLeft:'8px'}}>({w.dateRange})</span>}
+                        <p style={{fontSize:'13px',fontWeight:'700',color:'var(--text)',margin:'2px 0 0'}}>{w.focus}</p>
+                      </div>
+                      {w.financialTarget>0&&(
+                        <div style={{textAlign:'right',flexShrink:0}}>
+                          <p style={{fontSize:'20px',fontWeight:'900',color:wc,margin:0,lineHeight:1}}>{P(w.financialTarget)}</p>
+                          <p style={{fontSize:'11px',color:'var(--text3)',margin:'2px 0 0',fontWeight:'600',textTransform:'uppercase'}}>{w.targetLabel||'target'}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{padding:'14px 20px'}}>
+                      {(w.tasks||[]).map((t,j)=>(
+                        <div key={j} style={{display:'flex',gap:'10px',alignItems:'flex-start',padding:'6px 0',borderBottom:j<w.tasks.length-1?'1px solid var(--border)':'none'}}>
+                          <div style={{width:'20px',height:'20px',borderRadius:'50%',border:`2px solid ${wc}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:'1px'}}>
+                            <div style={{width:'8px',height:'8px',borderRadius:'50%',background:'transparent'}}/>
+                          </div>
+                          <p style={{fontSize:'13px',color:'var(--text)',margin:0,lineHeight:'1.5'}}>{t}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Refresh note */}
+          <p style={{fontSize:'11px',color:'var(--text3)',textAlign:'center',margin:'6px 0 0'}}>Analysis by {settings.aiModel||'Claude'} · <button onClick={exportAdvice} style={{border:'none',background:'none',color:'#6366f1',cursor:'pointer',fontWeight:'700',fontSize:'11px',padding:0}}>Export Report ↓</button> · Click "Re-analyze" to refresh</p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!result&&!loading&&!error&&(
+        <div className="card" style={{padding:'48px 24px',textAlign:'center'}}>
+          <Ico n="sparkle" s={40} c="#6366f1"/>
+          <p style={{fontWeight:'800',fontSize:'16px',color:'var(--text)',margin:'16px 0 8px'}}>Ready to analyze your finances</p>
+          <p style={{fontSize:'13px',color:'var(--text3)',margin:'0 0 24px',maxWidth:'400px',marginLeft:'auto',marginRight:'auto'}}>
+            Claude will review your income, expenses, and goals to give you personalized advice — including Philippine stock picks for your risk profile.
+          </p>
+          {!aiApiKey?(
+            <p style={{fontSize:'13px',color:'#f59e0b',fontWeight:'600'}}>⚠ Add your API key in the Settings tab first</p>
+          ):(
+            <button onClick={analyze} className="btn bp" style={{margin:'0 auto'}}>
+              <Ico n="sparkle" s={14} c="#fff"/>Analyze My {monthName} Finances
+            </button>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
