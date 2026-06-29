@@ -5957,7 +5957,7 @@ Rules:
         },
         body:JSON.stringify({
           model:settings.aiModel||'claude-haiku-4-5-20251001',
-          max_tokens:4096,
+          max_tokens:8192,
           stream:true, /* streaming keeps connection alive and gives real progress */
           messages:[{role:'user',content:buildPrompt()}],
         }),
@@ -5973,7 +5973,7 @@ Rules:
       const reader=resp.body.getReader();
       const decoder=new TextDecoder();
       let fullText='';
-      const EXPECTED=3800; /* approx chars in a full response */
+      const EXPECTED=11000; /* approx chars in a full response (expanded schema) */
 
       setProgress(15);
       setProgressLabel('Analyzing your income & expenses…');
@@ -6006,7 +6006,19 @@ Rules:
 
       setProgress(96);setProgressLabel('Parsing results…');
       const jsonStr=fullText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-      const parsed=JSON.parse(jsonStr);
+      let parsed;
+      try{
+        parsed=JSON.parse(jsonStr);
+      }catch(parseErr){
+        /* Response was cut off — try salvaging by closing the JSON */
+        try{
+          const salvage=jsonStr.replace(/,\s*$|,\s*"[^"]*":\s*$/,'')+'}}';
+          parsed=JSON.parse(salvage);
+          parsed._truncated=true;
+        }catch(_){
+          throw new Error(`The AI response was too long and got cut off. Try switching to Claude Sonnet (more powerful) in Settings, or try again. (${parseErr.message})`);
+        }
+      }
       setProgress(100);
       setResult(parsed);
       setActiveSection('summary');
@@ -6406,6 +6418,11 @@ Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 
           {/* Summary */}
           {activeSection==='summary'&&(
             <div className="col" style={{gap:'12px'}}>
+              {result._truncated&&(
+                <div style={{padding:'10px 14px',background:'#fffbeb',borderRadius:'8px',border:'1px solid #fcd34d',fontSize:'12px',color:'#92400e'}}>
+                  ⚠ The response was partially cut off. Some sections may be incomplete. Try <strong>Claude Sonnet</strong> in Settings for longer responses.
+                </div>
+              )}
               <div className="card" style={{padding:'20px'}}>
                 <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'10px'}}>Monthly Overview</p>
                 <p style={{color:'var(--text)',lineHeight:'1.6',margin:0}}>{result.summary}</p>
