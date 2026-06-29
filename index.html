@@ -474,7 +474,7 @@ const ls={
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));if(db)db.collection('absidifinance').doc(k).set({v:JSON.stringify(v)}).catch(()=>{})}catch{}},
   del:(k)=>{try{localStorage.removeItem(k);}catch{}},
   clearUser:(id)=>{
-    ['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts'].forEach(k=>{
+    ['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_loans','ph_ai_history'].forEach(k=>{
       localStorage.removeItem(k+'_'+id);
       if(db)db.collection('absidifinance').doc(k+'_'+id).delete().catch(()=>{});
     });
@@ -833,7 +833,7 @@ function LoginScreen({onLogin}){
 /* pulls all user data FROM Firestore into localStorage so new devices get existing data */
 const syncFromFirebase=async(userId)=>{
   if(!db)return;
-  const keys=['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_plans'];
+  const keys=['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_plans','ph_loans','ph_ai_history'];
   await Promise.all(keys.map(async k=>{
     const docKey=k+'_'+userId;
     try{
@@ -926,6 +926,8 @@ function MainApp({onLogout}){
   const[investLog,setInvestLog]=useState(()=>ls.get(uk('ph_invest_log'),[]));
   const[transfers,setTransfers]=useState(()=>ls.get(uk('ph_transfers'),[]));
   const[plans,setPlans]=useState(()=>ls.get(uk('ph_plans'),[]));
+  const[loans,setLoans]=useState(()=>ls.get(uk('ph_loans'),[]));
+  const[aiHistory,setAiHistory]=useState(()=>ls.get(uk('ph_ai_history'),[]));
   const[skippedPayDates,setSkippedPayDates]=useState(()=>{try{return JSON.parse(localStorage.getItem('absidi_skip_pay')||'[]')}catch{return[]}});
   const skipPayDate=(empId,date)=>setSkippedPayDates(prev=>[...prev.filter(s=>!(s.empId===empId&&s.date===date)),{empId,date}]);
   const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
@@ -998,6 +1000,8 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_invest_log'),investLog);},[investLog]);
   useEffect(()=>{ls.set(uk('ph_transfers'),transfers);},[transfers]);
   useEffect(()=>{ls.set(uk('ph_plans'),plans);},[plans]);
+  useEffect(()=>{ls.set(uk('ph_loans'),loans);},[loans]);
+  useEffect(()=>{ls.set(uk('ph_ai_history'),aiHistory);},[aiHistory]);
   useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
@@ -1019,6 +1023,8 @@ function MainApp({onLogout}){
       {k:'ph_payroll',set:setPayroll,def:[]},
       {k:'ph_settings',set:setSettings,def:DEFAULT_SETTINGS},
       {k:'ph_debts',set:setDebts,def:[]},
+      {k:'ph_loans',set:setLoans,def:[]},
+      {k:'ph_ai_history',set:setAiHistory,def:[]},
       {k:'ph_tithe_log',set:setTitheLog,def:[]},
       {k:'ph_savings_log',set:setSavingsLog,def:[]},
       {k:'ph_invest_log',set:setInvestLog,def:[]},
@@ -1295,6 +1301,7 @@ function MainApp({onLogout}){
     {id:'budget',icon:'chart',label:'Budget'},
     {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
+    {id:'loans',icon:'credit-card',label:'Loans'},
     {id:'plans',icon:'chart',label:'Plans'},
     {id:'ai',icon:'sparkle',label:'AI'},
     {id:'settings',icon:'settings',label:'Settings'},
@@ -1424,8 +1431,9 @@ function MainApp({onLogout}){
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
+        {tab==='loans'&&<LoansTab loans={loans} setLoans={setLoans}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
-        {tab==='ai'&&<AIAdvisorTab aiApiKey={aiApiKey} settings={settings} accounts={accounts} accBal={accBal} allIncome={income} allExpenses={expenses} allSubs={subs} allPayroll={payroll} titheLog={titheLog} savingsLog={savingsLog} investLog={investLog} mInc={mInc} tithe={tithe} invest={invest} savings={savings} desires={desires} base={base} avg3={avg3} dailyCap={dailyCap} spendBudget={spendBudget} titheBase={titheBase} curMonthKey={curMonthKey} selMonth={selMonth} yr={yr} userName={getCurrentUsername()||'User'} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mExpReg={mExpReg} titheCarryover={titheCarryover}/>}
+        {tab==='ai'&&<AIAdvisorTab aiApiKey={aiApiKey} settings={settings} accounts={accounts} accBal={accBal} allIncome={income} allExpenses={expenses} allSubs={subs} allPayroll={payroll} titheLog={titheLog} savingsLog={savingsLog} investLog={investLog} mInc={mInc} tithe={tithe} invest={invest} savings={savings} desires={desires} base={base} avg3={avg3} dailyCap={dailyCap} spendBudget={spendBudget} titheBase={titheBase} curMonthKey={curMonthKey} selMonth={selMonth} yr={yr} userName={getCurrentUsername()||'User'} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mExpReg={mExpReg} titheCarryover={titheCarryover} loans={loans} aiHistory={aiHistory} setAiHistory={setAiHistory}/>}
         {tab==='settings'&&<SettingsTab aiApiKey={aiApiKey} setAiApiKey={setAiApiKey} settings={settings} setSettings={setSettings}/>}
       </div>
 
@@ -5350,6 +5358,201 @@ function SavingsTab({savingsLog,setSavingsLog,savingsAcctId,setSavingsAcctId,acc
 /* ════════════════════════════════════════
    SETTINGS TAB
 ════════════════════════════════════════ */
+/* ════════════════════════════════════════
+   LOANS TAB
+════════════════════════════════════════ */
+const LOAN_TYPES=[
+  {id:'housing',label:'Housing / Mortgage',icon:'🏠'},
+  {id:'car',label:'Car Loan',icon:'🚗'},
+  {id:'personal',label:'Personal Loan',icon:'💰'},
+  {id:'credit_card',label:'Credit Card',icon:'💳'},
+  {id:'business',label:'Business Loan',icon:'🏢'},
+  {id:'others',label:'Others',icon:'📋'},
+];
+const LOAN_COLORS={housing:'#4f46e5',car:'#059669',personal:'#f59e0b',credit_card:'#ef4444',business:'#0891b2',others:'#64748b'};
+const LOAN_BG={housing:'#f5f3ff',car:'#f0fdf4',personal:'#fffbeb',credit_card:'#fff5f5',business:'#f0f9ff',others:'#f8fafc'};
+const LOAN_DEF={name:'',type:'car',lender:'',originalAmount:'',balance:'',monthlyPayment:'',interestRate:'',startDate:'',endDate:'',notes:''};
+
+function LoansTab({loans,setLoans}){
+  const[showForm,setShowForm]=useState(false);
+  const[editId,setEditId]=useState(null);
+  const[form,setForm]=useState({...LOAN_DEF});
+  const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+
+  const totalBalance=loans.reduce((s,l)=>s+(l.balance||0),0);
+  const totalMonthly=loans.reduce((s,l)=>s+(l.monthlyPayment||0),0);
+
+  const resetForm=()=>{setForm({...LOAN_DEF});setShowForm(false);setEditId(null);};
+  const startEdit=(l)=>{
+    setForm({name:l.name,type:l.type,lender:l.lender||'',originalAmount:String(l.originalAmount||''),balance:String(l.balance||''),monthlyPayment:String(l.monthlyPayment||''),interestRate:String(l.interestRate||''),startDate:l.startDate||'',endDate:l.endDate||'',notes:l.notes||''});
+    setEditId(l.id);setShowForm(true);
+  };
+  const save=()=>{
+    if(!form.name.trim()||!form.balance)return;
+    const entry={name:form.name.trim(),type:form.type,lender:form.lender.trim(),originalAmount:parseFloat(form.originalAmount)||0,balance:parseFloat(form.balance)||0,monthlyPayment:parseFloat(form.monthlyPayment)||0,interestRate:parseFloat(form.interestRate)||0,startDate:form.startDate,endDate:form.endDate,notes:form.notes.trim()};
+    if(editId){setLoans(prev=>prev.map(l=>l.id===editId?{...l,...entry}:l));}
+    else{setLoans(prev=>[...prev,{...entry,id:uid(),dateAdded:TODAY}]);}
+    resetForm();
+  };
+
+  const del=(id)=>{if(confirm('Delete this loan?'))setLoans(prev=>prev.filter(l=>l.id!==id));};
+
+  const LoanCard=({l})=>{
+    const color=LOAN_COLORS[l.type]||'#64748b';
+    const bg=LOAN_BG[l.type]||'#f8fafc';
+    const typeInfo=LOAN_TYPES.find(t=>t.id===l.type)||{label:l.type,icon:'📋'};
+    const paidOff=l.originalAmount>0?Math.min(100,Math.round(((l.originalAmount-l.balance)/l.originalAmount)*100)):0;
+    const remMonths=l.monthlyPayment>0?Math.ceil(l.balance/l.monthlyPayment):null;
+    return(
+      <div className="card" style={{padding:'18px 20px',borderLeft:`4px solid ${color}`}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'12px',marginBottom:'12px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span style={{fontSize:'22px'}}>{typeInfo.icon}</span>
+            <div>
+              <p style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'15px'}}>{l.name}</p>
+              <p style={{fontSize:'11px',color:'var(--text4)',margin:0}}>{typeInfo.label}{l.lender?` · ${l.lender}`:''}{l.interestRate?` · ${l.interestRate}% p.a.`:''}</p>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+            <button className="ib" onClick={()=>startEdit(l)}><Ico n="edit" s={14}/></button>
+            <button className="ib" onClick={()=>del(l.id)}><Ico n="trash" s={14}/></button>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:'8px',marginBottom:'12px'}}>
+          <div style={{background:'var(--card2)',borderRadius:'8px',padding:'10px'}}>
+            <p style={{fontSize:'10px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Balance</p>
+            <p style={{fontSize:'15px',fontWeight:'800',color:'#ef4444',margin:0}}>{P(l.balance)}</p>
+          </div>
+          <div style={{background:'var(--card2)',borderRadius:'8px',padding:'10px'}}>
+            <p style={{fontSize:'10px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Monthly</p>
+            <p style={{fontSize:'15px',fontWeight:'800',color:color,margin:0}}>{P(l.monthlyPayment)}</p>
+          </div>
+          {l.originalAmount>0&&<div style={{background:'var(--card2)',borderRadius:'8px',padding:'10px'}}>
+            <p style={{fontSize:'10px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Original</p>
+            <p style={{fontSize:'15px',fontWeight:'800',color:'var(--text2)',margin:0}}>{P(l.originalAmount)}</p>
+          </div>}
+          {remMonths!==null&&<div style={{background:'var(--card2)',borderRadius:'8px',padding:'10px'}}>
+            <p style={{fontSize:'10px',color:'var(--text4)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 2px'}}>Est. Remaining</p>
+            <p style={{fontSize:'15px',fontWeight:'800',color:'var(--text2)',margin:0}}>{remMonths} mos</p>
+          </div>}
+        </div>
+        {l.originalAmount>0&&(
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:'11px',color:'var(--text4)',marginBottom:'4px'}}>
+              <span>Paid off</span><span style={{fontWeight:'700',color:color}}>{paidOff}%</span>
+            </div>
+            <div style={{background:'#e2e8f0',borderRadius:'99px',height:'6px'}}>
+              <div style={{background:color,height:'6px',borderRadius:'99px',width:`${paidOff}%`,transition:'width .5s'}}/>
+            </div>
+          </div>
+        )}
+        {l.notes&&<p style={{fontSize:'12px',color:'var(--text3)',margin:'10px 0 0',fontStyle:'italic'}}>{l.notes}</p>}
+        {l.endDate&&<p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0'}}>Target end: {l.endDate}</p>}
+      </div>
+    );
+  };
+
+  return(
+    <div className="fade" style={{maxWidth:'800px',margin:'0 auto',padding:'4px 0 40px'}}>
+
+      {/* Summary */}
+      {loans.length>0&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'20px'}}>
+          <div className="card" style={{padding:'18px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',border:'none'}}>
+            <p style={{fontSize:'11px',color:'rgba(255,255,255,.75)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>Total Outstanding</p>
+            <p style={{fontSize:'24px',fontWeight:'900',color:'#fff',margin:0}}>{P(totalBalance)}</p>
+          </div>
+          <div className="card" style={{padding:'18px',background:'linear-gradient(135deg,#ef4444,#f97316)',border:'none'}}>
+            <p style={{fontSize:'11px',color:'rgba(255,255,255,.75)',fontWeight:'700',textTransform:'uppercase',margin:'0 0 4px'}}>Total Monthly Payments</p>
+            <p style={{fontSize:'24px',fontWeight:'900',color:'#fff',margin:0}}>{P(totalMonthly)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Loan list */}
+      <div style={{display:'flex',flexDirection:'column',gap:'12px',marginBottom:'20px'}}>
+        {loans.map(l=><LoanCard key={l.id} l={l}/>)}
+        {loans.length===0&&!showForm&&(
+          <div className="card" style={{padding:'40px',textAlign:'center'}}>
+            <p style={{fontSize:'32px',margin:'0 0 8px'}}>🏦</p>
+            <p style={{fontWeight:'800',fontSize:'16px',color:'var(--text)',margin:'0 0 6px'}}>No loans recorded yet</p>
+            <p style={{fontSize:'13px',color:'var(--text3)',margin:'0 0 16px'}}>Add your car loan, housing loan, or any other installment so the AI advisor can factor them in</p>
+            <button className="btn bp" onClick={()=>setShowForm(true)}>+ Add Loan</button>
+          </div>
+        )}
+      </div>
+
+      {/* Add button */}
+      {loans.length>0&&!showForm&&(
+        <button className="btn bp" style={{marginBottom:'20px'}} onClick={()=>setShowForm(true)}>+ Add Loan</button>
+      )}
+
+      {/* Form */}
+      {showForm&&(
+        <div className="card" style={{padding:'24px',border:'2px solid #6366f1'}}>
+          <p style={{fontWeight:'800',fontSize:'16px',color:'var(--text)',margin:'0 0 18px'}}>{editId?'Edit Loan':'Add New Loan'}</p>
+          <div className="col" style={{gap:'14px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+              <div>
+                <span className="fl">Loan Name *</span>
+                <input className="fi" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="e.g. BPI Car Loan"/>
+              </div>
+              <div>
+                <span className="fl">Type *</span>
+                <select className="fi" value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
+                  {LOAN_TYPES.map(t=><option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+              <div>
+                <span className="fl">Lender / Bank</span>
+                <input className="fi" value={form.lender} onChange={e=>setForm(f=>({...f,lender:e.target.value}))} placeholder="e.g. BPI, BDO, Pag-IBIG"/>
+              </div>
+              <div>
+                <span className="fl">Interest Rate (% per year)</span>
+                <input className="fi" type="number" min="0" step="0.01" value={form.interestRate} onChange={e=>setForm(f=>({...f,interestRate:e.target.value}))} placeholder="e.g. 5.5"/>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'12px'}}>
+              <div>
+                <span className="fl">Original Amount (₱)</span>
+                <input className="fi" type="number" min="0" value={form.originalAmount} onChange={e=>setForm(f=>({...f,originalAmount:e.target.value}))} placeholder="0.00"/>
+              </div>
+              <div>
+                <span className="fl">Current Balance (₱) *</span>
+                <input className="fi" type="number" min="0" value={form.balance} onChange={e=>setForm(f=>({...f,balance:e.target.value}))} placeholder="0.00"/>
+              </div>
+              <div>
+                <span className="fl">Monthly Payment (₱)</span>
+                <input className="fi" type="number" min="0" value={form.monthlyPayment} onChange={e=>setForm(f=>({...f,monthlyPayment:e.target.value}))} placeholder="0.00"/>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+              <div>
+                <span className="fl">Start Date</span>
+                <input className="fi" type="date" value={form.startDate} onChange={e=>setForm(f=>({...f,startDate:e.target.value}))}/>
+              </div>
+              <div>
+                <span className="fl">Target End Date</span>
+                <input className="fi" type="date" value={form.endDate} onChange={e=>setForm(f=>({...f,endDate:e.target.value}))}/>
+              </div>
+            </div>
+            <div>
+              <span className="fl">Notes</span>
+              <input className="fi" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. refinanced Apr 2025, balloon payment on last month..."/>
+            </div>
+            <div style={{display:'flex',gap:'10px'}}>
+              <button className="btn bp" onClick={save}><Ico n="check" s={14} c="#fff"/>{editId?'Save Changes':'Add Loan'}</button>
+              <button className="btn bs" onClick={resetForm}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
   const[showKey,setShowKey]=useState(false);
   const[keyDraft,setKeyDraft]=useState(aiApiKey);
@@ -5493,13 +5696,19 @@ function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
 /* ════════════════════════════════════════
    AI ADVISOR TAB
 ════════════════════════════════════════ */
-function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,allSubs,allPayroll,titheLog,savingsLog,investLog,mInc,tithe,invest,savings,desires,base,avg3,dailyCap,spendBudget,titheBase,curMonthKey,selMonth,yr,userName,mTitheActual,mInvestActual,mSavingsActual,mExpReg,titheCarryover}){
+function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,allSubs,allPayroll,titheLog,savingsLog,investLog,mInc,tithe,invest,savings,desires,base,avg3,dailyCap,spendBudget,titheBase,curMonthKey,selMonth,yr,userName,mTitheActual,mInvestActual,mSavingsActual,mExpReg,titheCarryover,loans,aiHistory,setAiHistory}){
   const[loading,setLoading]=useState(false);
   const[result,setResult]=useState(null);
   const[error,setError]=useState('');
   const[activeSection,setActiveSection]=useState('summary');
   const[progress,setProgress]=useState(0);
   const[progressLabel,setProgressLabel]=useState('');
+  /* ── History management ── */
+  const[currentAnalysisId,setCurrentAnalysisId]=useState(null);
+  const[actionChecks,setActionChecks]=useState({});
+  const[renamingId,setRenamingId]=useState(null);
+  const[renameDraft,setRenameDraft]=useState('');
+  const[showHistory,setShowHistory]=useState(false);
 
   const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const monthName=MONTH_NAMES[selMonth];
@@ -5568,6 +5777,11 @@ ${recentExpDetails||'No expense details'}
 
 ## 3-MONTH TREND
 ${last3Summary}
+
+## ACTIVE LOANS / INSTALLMENT OBLIGATIONS
+${(loans&&loans.length>0)?loans.map(l=>`- ${l.name} (${LOAN_TYPES.find(t=>t.id===l.type)?.label||l.type}): Outstanding ₱${(l.balance||0).toLocaleString('en-PH')}, Monthly payment ₱${(l.monthlyPayment||0).toLocaleString('en-PH')}${l.interestRate?`, ${l.interestRate}% p.a.`:''}${l.lender?`, Lender: ${l.lender}`:''}${l.endDate?`, target end: ${l.endDate}`:''}`).join('\n'):'No loans recorded'}
+- Total outstanding loan balance: ₱${((loans||[]).reduce((s,l)=>s+(l.balance||0),0)).toLocaleString('en-PH')}
+- Total monthly loan amortization: ₱${((loans||[]).reduce((s,l)=>s+(l.monthlyPayment||0),0)).toLocaleString('en-PH')}
 
 ## RESPONSE FORMAT
 Return ONLY a valid JSON object — no markdown, no code fences, no extra text before or after. Use this exact schema:
@@ -5712,6 +5926,11 @@ Rules:
       setProgress(100);
       setResult(parsed);
       setActiveSection('summary');
+      /* ── Auto-save to history ── */
+      const newEntry={id:uid(),name:`${monthName} ${yr} Analysis`,date:TODAY,monthKey:curMonthKey,result:parsed,actionChecks:{}};
+      setAiHistory(prev=>[newEntry,...prev.filter(a=>a.id!==currentAnalysisId)]);
+      setCurrentAnalysisId(newEntry.id);
+      setActionChecks({});
 
     }catch(e){
       earlyTimers.forEach(clearTimeout);
@@ -5723,6 +5942,31 @@ Rules:
     }finally{
       setLoading(false);
     }
+  };
+
+  /* ── History helpers ── */
+  const loadAnalysis=(entry)=>{
+    setResult(entry.result);
+    setCurrentAnalysisId(entry.id);
+    setActionChecks(entry.actionChecks||{});
+    setActiveSection('summary');
+    setShowHistory(false);
+    setError('');
+  };
+  const deleteAnalysis=(id)=>{
+    if(!confirm('Delete this saved analysis?'))return;
+    setAiHistory(prev=>prev.filter(a=>a.id!==id));
+    if(currentAnalysisId===id){setResult(null);setCurrentAnalysisId(null);setActionChecks({});}
+  };
+  const startRename=(entry)=>{setRenamingId(entry.id);setRenameDraft(entry.name);};
+  const commitRename=()=>{
+    if(renameDraft.trim())setAiHistory(prev=>prev.map(a=>a.id===renamingId?{...a,name:renameDraft.trim()}:a));
+    setRenamingId(null);
+  };
+  const toggleActionCheck=(i)=>{
+    const next={...actionChecks,[i]:!actionChecks[i]};
+    setActionChecks(next);
+    if(currentAnalysisId)setAiHistory(prev=>prev.map(a=>a.id===currentAnalysisId?{...a,actionChecks:next}:a));
   };
 
   const SCORE_COLOR=(s)=>s>=8?'#10b981':s>=6?'#f59e0b':s>=4?'#f97316':'#ef4444';
@@ -5835,30 +6079,83 @@ Rules:
       {/* Header card */}
       <div className="card" style={{padding:'24px',marginBottom:'16px',background:'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',border:'none'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'12px'}}>
-          <div>
+          <div style={{flex:1,minWidth:0}}>
             <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}}>
               <Ico n="sparkle" s={22} c="#fff"/>
               <p style={{fontWeight:'900',color:'#fff',margin:0,fontSize:'18px'}}>AI Financial Advisor</p>
             </div>
+            {currentAnalysisId&&aiHistory.find(a=>a.id===currentAnalysisId)&&(
+              <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
+                {renamingId===currentAnalysisId?(
+                  <input value={renameDraft} onChange={e=>setRenameDraft(e.target.value)} onBlur={commitRename}
+                    onKeyDown={e=>{if(e.key==='Enter')commitRename();if(e.key==='Escape')setRenamingId(null);}}
+                    autoFocus style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.4)',borderRadius:'6px',color:'#fff',padding:'3px 8px',fontSize:'13px',fontWeight:'700',width:'220px'}}/>
+                ):(
+                  <button onClick={()=>startRename(aiHistory.find(a=>a.id===currentAnalysisId))}
+                    style={{background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.25)',borderRadius:'6px',color:'#fff',padding:'3px 10px',fontSize:'12px',fontWeight:'700',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px'}}>
+                    ✏ {aiHistory.find(a=>a.id===currentAnalysisId)?.name||'Unnamed'}
+                  </button>
+                )}
+              </div>
+            )}
             <p style={{fontSize:'13px',color:'rgba(255,255,255,.75)',margin:0}}>
-              Analyzing {monthName} {yr} · {AGGR_LABELS[settings.investAggr||3]} profile · {BROKER_NAMES[settings.aiBroker||'col']}
+              {monthName} {yr} · {AGGR_LABELS[settings.investAggr||3]} profile · {BROKER_NAMES[settings.aiBroker||'col']}
             </p>
             {!aiApiKey&&(
               <p style={{fontSize:'12px',color:'#fde68a',margin:'8px 0 0',fontWeight:'600'}}>⚠ No API key — go to Settings tab to add your Claude API key</p>
             )}
           </div>
-          <button onClick={analyze} disabled={loading||!aiApiKey}
-            style={{background:loading?'rgba(255,255,255,.2)':'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'#fff',borderRadius:'10px',padding:'10px 20px',cursor:loading||!aiApiKey?'not-allowed':'pointer',fontWeight:'700',fontSize:'13px',display:'flex',alignItems:'center',gap:'8px',opacity:!aiApiKey?0.5:1,transition:'background .2s'}}>
-            {loading?<>
-              <span style={{display:'inline-block',width:'14px',height:'14px',border:'2px solid rgba(255,255,255,.4)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
-              Analyzing...
-            </>:<>
-              <Ico n="sparkle" s={14} c="#fff"/>
-              {result?'Re-analyze':'Analyze My Finances'}
-            </>}
-          </button>
+          <div style={{display:'flex',flexDirection:'column',gap:'8px',alignItems:'flex-end'}}>
+            <button onClick={analyze} disabled={loading||!aiApiKey}
+              style={{background:loading?'rgba(255,255,255,.2)':'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'#fff',borderRadius:'10px',padding:'10px 20px',cursor:loading||!aiApiKey?'not-allowed':'pointer',fontWeight:'700',fontSize:'13px',display:'flex',alignItems:'center',gap:'8px',opacity:!aiApiKey?0.5:1,transition:'background .2s'}}>
+              {loading?<>
+                <span style={{display:'inline-block',width:'14px',height:'14px',border:'2px solid rgba(255,255,255,.4)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+                Analyzing...
+              </>:<>
+                <Ico n="sparkle" s={14} c="#fff"/>
+                {result?'Re-analyze':'Analyze My Finances'}
+              </>}
+            </button>
+            {aiHistory.length>0&&(
+              <button onClick={()=>setShowHistory(v=>!v)}
+                style={{background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',color:'rgba(255,255,255,.85)',borderRadius:'8px',padding:'6px 14px',cursor:'pointer',fontWeight:'600',fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                📋 Saved ({aiHistory.length}) {showHistory?'▲':'▼'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* ── Saved Analyses Panel ── */}
+      {showHistory&&(
+        <div className="card" style={{padding:'20px',marginBottom:'16px',border:'2px solid #6366f1'}}>
+          <p style={{fontWeight:'800',fontSize:'14px',color:'var(--text)',margin:'0 0 14px'}}>📋 Saved Analyses</p>
+          <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+            {aiHistory.map(entry=>(
+              <div key={entry.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderRadius:'10px',background:currentAnalysisId===entry.id?'#eef2ff':'var(--card2)',border:currentAnalysisId===entry.id?'2px solid #6366f1':'2px solid transparent',cursor:'pointer'}}
+                onClick={()=>loadAnalysis(entry)}>
+                <div style={{flex:1,minWidth:0}}>
+                  {renamingId===entry.id?(
+                    <input value={renameDraft} onChange={e=>setRenameDraft(e.target.value)}
+                      onBlur={commitRename} onKeyDown={e=>{if(e.key==='Enter')commitRename();if(e.key==='Escape')setRenamingId(null);}}
+                      autoFocus onClick={e=>e.stopPropagation()}
+                      style={{width:'100%',border:'1px solid #6366f1',borderRadius:'6px',padding:'3px 8px',fontSize:'13px',fontWeight:'700'}}/>
+                  ):(
+                    <p style={{fontWeight:'700',color:'var(--text)',margin:0,fontSize:'13px'}}>{entry.name}</p>
+                  )}
+                  <p style={{fontSize:'11px',color:'var(--text4)',margin:0}}>{entry.date} · Health {entry.result?.healthScore||'?'}/10 · {Object.values(entry.actionChecks||{}).filter(Boolean).length}/{(entry.result?.actionItems||[]).length} actions done</p>
+                </div>
+                <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+                  <button onClick={e=>{e.stopPropagation();startRename(entry);}} title="Rename"
+                    style={{background:'#eef2ff',border:'none',borderRadius:'6px',padding:'5px 8px',cursor:'pointer',fontSize:'12px'}}>✏</button>
+                  <button onClick={e=>{e.stopPropagation();deleteAnalysis(entry.id);}} title="Delete"
+                    style={{background:'#fef2f2',border:'none',borderRadius:'6px',padding:'5px 8px',cursor:'pointer',fontSize:'12px'}}>🗑</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error&&(
@@ -6064,15 +6361,36 @@ Rules:
             </div>
           )}
 
-          {/* Action Items */}
+          {/* Action Items — persistent checklist */}
           {activeSection==='actions'&&(
             <div className="col" style={{gap:'10px'}}>
+              {(()=>{
+                const done=Object.values(actionChecks).filter(Boolean).length;
+                const total=(result.actionItems||[]).length;
+                return total>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'4px'}}>
+                    <div style={{flex:1,background:'#e2e8f0',borderRadius:'99px',height:'8px'}}>
+                      <div style={{background:'#10b981',height:'8px',borderRadius:'99px',width:`${Math.round(done/total*100)}%`,transition:'width .4s'}}/>
+                    </div>
+                    <span style={{fontSize:'13px',fontWeight:'800',color:'#10b981',whiteSpace:'nowrap'}}>{done}/{total} done</span>
+                  </div>
+                );
+              })()}
               {result.actionItems?.map((act,i)=>(
-                <div key={i} className="card" style={{padding:'16px 20px',display:'flex',gap:'14px',alignItems:'flex-start',borderLeft:'4px solid #10b981'}}>
-                  <div style={{width:'26px',height:'26px',borderRadius:'50%',background:'#10b981',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff',fontWeight:'800',fontSize:'13px'}}>{i+1}</div>
-                  <p style={{fontSize:'13px',color:'var(--text)',margin:0,lineHeight:'1.5',paddingTop:'4px'}}>{act}</p>
+                <div key={i} onClick={()=>toggleActionCheck(i)} className="card"
+                  style={{padding:'14px 18px',display:'flex',gap:'14px',alignItems:'flex-start',borderLeft:`4px solid ${actionChecks[i]?'#10b981':'#d1d5db'}`,cursor:'pointer',opacity:actionChecks[i]?0.65:1,transition:'all .2s'}}>
+                  <div style={{width:'26px',height:'26px',borderRadius:'50%',background:actionChecks[i]?'#10b981':'#e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:actionChecks[i]?'#fff':'#94a3b8',fontWeight:'800',fontSize:'13px',transition:'all .2s',marginTop:'1px'}}>
+                    {actionChecks[i]?'✓':i+1}
+                  </div>
+                  <p style={{fontSize:'13px',color:'var(--text)',margin:0,lineHeight:'1.5',paddingTop:'4px',textDecoration:actionChecks[i]?'line-through':''}}>{act}</p>
                 </div>
               ))}
+              {result.actionItems?.length>0&&Object.values(actionChecks).filter(Boolean).length===result.actionItems.length&&(
+                <div style={{textAlign:'center',padding:'12px',background:'#f0fdf4',borderRadius:'10px',border:'2px solid #bbf7d0'}}>
+                  <p style={{fontWeight:'800',color:'#059669',margin:0,fontSize:'14px'}}>🎉 All actions completed!</p>
+                  <p style={{fontSize:'12px',color:'#6ee7b7',margin:'4px 0 0'}}>Re-analyze to get fresh recommendations</p>
+                </div>
+              )}
             </div>
           )}
 
