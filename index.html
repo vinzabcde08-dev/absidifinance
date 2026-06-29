@@ -909,7 +909,17 @@ function MainApp({onLogout}){
   const[employees,setEmployees]=useState(()=>ls.get(uk('ph_emps'),[]));
   const[payroll,setPayroll]=useState(()=>ls.get(uk('ph_payroll'),[]));
   const[settings,setSettings]=useState(()=>ls.get(uk('ph_settings'),DEFAULT_SETTINGS));
-  const[aiApiKey,setAiApiKey]=useState(()=>localStorage.getItem('absidi_ai_key')||''); /* stored globally, not per-user */
+  /* API key lives inside settings so it syncs with the user account across devices */
+  const aiApiKey=settings.aiApiKey||'';
+  const setAiApiKey=(key)=>setSettings(s=>({...s,aiApiKey:key}));
+  /* One-time migration: if key was saved in the old device-local slot, move it into synced settings */
+  useEffect(()=>{
+    const legacy=localStorage.getItem('absidi_ai_key');
+    if(legacy&&!settings.aiApiKey){
+      setSettings(s=>({...s,aiApiKey:legacy}));
+      localStorage.removeItem('absidi_ai_key');
+    }
+  },[]);
   const[debts,setDebts]=useState(()=>ls.get(uk('ph_debts'),[]));
   const[titheLog,setTitheLog]=useState(()=>ls.get(uk('ph_tithe_log'),[]));
   const[savingsLog,setSavingsLog]=useState(()=>ls.get(uk('ph_savings_log'),[]));
@@ -5346,8 +5356,7 @@ function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
   const[saved,setSaved]=useState(false);
 
   const saveKey=()=>{
-    localStorage.setItem('absidi_ai_key',keyDraft);
-    setAiApiKey(keyDraft);
+    setAiApiKey(keyDraft); /* syncs through settings → persists across devices */
     setSaved(true);
     setTimeout(()=>setSaved(false),2000);
   };
@@ -5489,6 +5498,8 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
   const[result,setResult]=useState(null);
   const[error,setError]=useState('');
   const[activeSection,setActiveSection]=useState('summary');
+  const[progress,setProgress]=useState(0);
+  const[progressLabel,setProgressLabel]=useState('');
 
   const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const monthName=MONTH_NAMES[selMonth];
@@ -5628,8 +5639,15 @@ Rules:
   };
 
   const analyze=async()=>{
-    if(!aiApiKey){setError('No API key set. Go to Settings and add your Claude API key.');return;}
-    setLoading(true);setError('');setResult(null);
+    if(!aiApiKey){setError('No API key set. Go to the Settings tab (⚙) and add your Claude API key.');return;}
+    setLoading(true);setError('');setResult(null);setProgress(0);setProgressLabel('Connecting to Claude…');
+
+    /* Simulated early-stage labels while waiting for the connection */
+    const earlyTimers=[
+      setTimeout(()=>setProgressLabel('Sending your financial data…'),600),
+      setTimeout(()=>setProgressLabel('Reading income & expenses…'),2000),
+    ];
+
     try{
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
@@ -5642,20 +5660,69 @@ Rules:
         body:JSON.stringify({
           model:settings.aiModel||'claude-haiku-4-5-20251001',
           max_tokens:4096,
+          stream:true, /* streaming keeps connection alive and gives real progress */
           messages:[{role:'user',content:buildPrompt()}],
         }),
       });
-      if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||`API error ${resp.status}`);}
-      const data=await resp.json();
-      const raw=data.content?.[0]?.text||'';
-      /* Parse JSON — strip any markdown code fences if model added them */
-      const jsonStr=raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      earlyTimers.forEach(clearTimeout);
+
+      if(!resp.ok){
+        const e=await resp.json();
+        throw new Error(e.error?.message||`API error ${resp.status}`);
+      }
+
+      /* ── Stream the response and track real progress ── */
+      const reader=resp.body.getReader();
+      const decoder=new TextDecoder();
+      let fullText='';
+      const EXPECTED=3800; /* approx chars in a full response */
+
+      setProgress(15);
+      setProgressLabel('Analyzing your income & expenses…');
+
+      while(true){
+        const{done,value}=await reader.read();
+        if(done)break;
+        const chunk=decoder.decode(value,{stream:true});
+        for(const line of chunk.split('\n')){
+          if(!line.startsWith('data: '))continue;
+          const raw=line.slice(6).trim();
+          if(raw==='[DONE]')continue;
+          try{
+            const ev=JSON.parse(raw);
+            if(ev.type==='content_block_delta'&&ev.delta?.type==='text_delta'){
+              fullText+=ev.delta.text;
+              const pct=15+Math.min(78,(fullText.length/EXPECTED)*78);
+              setProgress(Math.round(pct));
+              /* Stage labels based on how much text has streamed in */
+              if(fullText.length<300)setProgressLabel('Analyzing your income & expenses…');
+              else if(fullText.length<700)setProgressLabel('Researching Philippine stocks…');
+              else if(fullText.length<1300)setProgressLabel('Building fund recommendations…');
+              else if(fullText.length<2000)setProgressLabel('Generating investment strategy…');
+              else if(fullText.length<2700)setProgressLabel('Creating your 3-week plan…');
+              else setProgressLabel('Finalizing your report…');
+            }
+          }catch(_){}
+        }
+      }
+
+      setProgress(96);setProgressLabel('Parsing results…');
+      const jsonStr=fullText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
       const parsed=JSON.parse(jsonStr);
+      setProgress(100);
       setResult(parsed);
       setActiveSection('summary');
+
     }catch(e){
-      setError(e.message||'Something went wrong. Check your API key and try again.');
-    }finally{setLoading(false);}
+      earlyTimers.forEach(clearTimeout);
+      if(e.message==='Failed to fetch'){
+        setError('Could not reach Anthropic's API. Common causes:\n1. No internet connection\n2. The app is opened from a file:// URL — try serving it from a local HTTP server instead\n3. A browser extension or firewall is blocking the request\n\nTip: Open Chrome DevTools → Console for the exact error.');
+      }else{
+        setError(e.message||'Something went wrong. Check your API key and try again.');
+      }
+    }finally{
+      setLoading(false);
+    }
   };
 
   const SCORE_COLOR=(s)=>s>=8?'#10b981':s>=6?'#f59e0b':s>=4?'#f97316':'#ef4444';
@@ -5796,16 +5863,44 @@ Rules:
       {/* Error */}
       {error&&(
         <div className="card" style={{padding:'16px 20px',marginBottom:'16px',borderLeft:'4px solid #ef4444',background:'#fef2f2'}}>
-          <p style={{color:'#dc2626',margin:0,fontSize:'13px',fontWeight:'600'}}>⚠ {error}</p>
+          <p style={{color:'#dc2626',margin:'0 0 6px',fontSize:'13px',fontWeight:'700'}}>⚠ Request failed</p>
+          {error.split('\n').map((line,i)=><p key={i} style={{color:'#b91c1c',margin:'2px 0',fontSize:'12px'}}>{line}</p>)}
         </div>
       )}
 
-      {/* Loading skeleton */}
+      {/* Loading — real progress bar driven by streaming */}
       {loading&&(
-        <div className="card" style={{padding:'32px',textAlign:'center'}}>
-          <div style={{width:'48px',height:'48px',border:'3px solid #e2e8f0',borderTopColor:'#4f46e5',borderRadius:'50%',animation:'spin 1s linear infinite',margin:'0 auto 16px'}}/>
-          <p style={{fontWeight:'700',color:'var(--text)',marginBottom:'6px'}}>Claude is analyzing your finances...</p>
-          <p style={{fontSize:'12px',color:'var(--text3)',margin:0}}>Reading your income, expenses, and goals · Researching Philippine stocks · Building your personalized plan</p>
+        <div className="card" style={{padding:'28px 28px 24px'}}>
+          {/* Stage label + percentage */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+            <span style={{fontSize:'13px',fontWeight:'700',color:'var(--text)',display:'flex',alignItems:'center',gap:'8px'}}>
+              <span style={{display:'inline-block',width:'12px',height:'12px',border:'2px solid #c7d2fe',borderTopColor:'#4f46e5',borderRadius:'50%',animation:'spin .8s linear infinite',flexShrink:0}}/>
+              {progressLabel||'Connecting…'}
+            </span>
+            <span style={{fontSize:'13px',fontWeight:'800',color:'#4f46e5'}}>{progress}%</span>
+          </div>
+          {/* Progress track */}
+          <div style={{height:'10px',background:'#e0e7ff',borderRadius:'99px',overflow:'hidden',marginBottom:'16px'}}>
+            <div style={{height:'100%',width:`${progress}%`,background:'linear-gradient(90deg,#4f46e5,#7c3aed)',borderRadius:'99px',transition:'width .6s ease'}}/>
+          </div>
+          {/* Stage dots */}
+          {(()=>{
+            const stages=['Connect','Income & Expenses','Stocks','Funds','Strategy','3-Week Plan','Done'];
+            const stageAt=progress<15?0:progress<30?1:progress<45?2:progress<58?3:progress<70?4:progress<88?5:6;
+            return(
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px'}}>
+                {stages.map((s,i)=>(
+                  <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',flex:1}}>
+                    <div style={{width:'8px',height:'8px',borderRadius:'50%',background:i<=stageAt?'#4f46e5':'#e0e7ff',transition:'background .3s'}}/>
+                    <span style={{fontSize:'9px',fontWeight:'600',color:i<=stageAt?'#4f46e5':'#94a3b8',textAlign:'center',lineHeight:'1.2',display:i===0||i===stages.length-1||i===stageAt?'block':'none'}}>{s}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <p style={{fontSize:'11px',color:'var(--text3)',textAlign:'center',margin:0}}>
+            Streaming response from {settings.aiModel==='claude-haiku-4-5-20251001'?'Haiku (fast)':settings.aiModel==='claude-sonnet-4-6'?'Sonnet (~15–20s)':'Opus (may take 30s+)'} · Do not close this tab
+          </p>
         </div>
       )}
 
