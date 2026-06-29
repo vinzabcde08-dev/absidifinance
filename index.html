@@ -1301,7 +1301,7 @@ function MainApp({onLogout}){
     {id:'budget',icon:'chart',label:'Budget'},
     {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
-    {id:'loans',icon:'credit-card',label:'Loans'},
+    {id:'loans',icon:'card',label:'Loans'},
     {id:'plans',icon:'chart',label:'Plans'},
     {id:'ai',icon:'sparkle',label:'AI'},
     {id:'settings',icon:'settings',label:'Settings'},
@@ -5865,6 +5865,26 @@ Return ONLY a valid JSON object — no markdown, no code fences, no extra text b
   "expenseInsights": ["specific insight referencing actual expense data 1","insight 2","insight 3"],
   "actionItems": ["specific action to take this week 1","action 2","action 3"],
   "warnings": ["any red flag or concern (leave empty array if none)"],
+  "budgetBreakdown": {
+    "estimatedIncome": <projected next-month income in PHP based on trend>,
+    "fixedObligations": [
+      {"name":"e.g. Housing Loan (Pag-IBIG)","amount":<number>,"category":"loan","note":"optional short note"},
+      {"name":"e.g. Car Loan (BDO)","amount":<number>,"category":"loan","note":""},
+      {"name":"Tithes","amount":<number>,"category":"tithe","note":""},
+      {"name":"Investments","amount":<number>,"category":"investment","note":""},
+      {"name":"Savings","amount":<number>,"category":"savings","note":""}
+    ],
+    "spendingBudget": [
+      {"name":"Food & Groceries","amount":<number>,"pct":<integer 0-100>,"emoji":"🛒","tip":"practical tip e.g. buy in bulk at S&R"},
+      {"name":"Utilities (Electric, Water, Internet)","amount":<number>,"pct":<integer>,"emoji":"💡","tip":""},
+      {"name":"Transport / Fuel","amount":<number>,"pct":<integer>,"emoji":"🚌","tip":""},
+      {"name":"Dining Out / Eating Out","amount":<number>,"pct":<integer>,"emoji":"🍽","tip":"how many times per week is sustainable"},
+      {"name":"Desires / Personal Wants","amount":<number>,"pct":<integer>,"emoji":"🛍","tip":"what can reasonably be spent on wants"},
+      {"name":"Emergency Buffer","amount":<number>,"pct":<integer>,"emoji":"🛡","tip":"keep in savings/cash"}
+    ],
+    "leftover": <remaining unallocated amount — should be 0 or small positive number>,
+    "advice": "2-3 sentences explaining the budget logic, why desires is separate from loans, and key priority for next month"
+  },
   "weeklyPlan": [
     {
       "week": "Week 1",
@@ -5905,7 +5925,8 @@ Rules:
 - All amounts in Philippine Peso
 - dailySpendable = what they can actually spend per day from today until month-end given remaining budget
 - Be specific and actionable; reference their actual spending categories and amounts
-- weeklyPlan dateRange: estimate real calendar dates for ${monthName} ${yr}`;
+- weeklyPlan dateRange: estimate real calendar dates for ${monthName} ${yr}
+- budgetBreakdown: CRITICAL — loan payments (car, housing) are FIXED OBLIGATIONS, never count as "desires". List each active loan separately in fixedObligations. Desires = genuine lifestyle wants (eating out, shopping, hobbies). The spendingBudget amounts must be realistic for a Filipino family. estimatedIncome = use 3-month average or recent trend. All amounts must add up: fixedObligations total + spendingBudget total + leftover = estimatedIncome. The pct values in spendingBudget are percentage of estimatedIncome.`;
   };
 
   const analyze=async()=>{
@@ -6099,6 +6120,15 @@ Rules:
 
   ${result.stockPicks?.length?`<div class="card"><h2>📊 Stock Picks (PSE)</h2><p style="margin-bottom:14px;font-size:11px;color:#94a3b8">⚠ AI-generated suggestions only. Do your own research before investing.</p>${result.stockPicks.map(s=>`<div class="stock"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="font-family:monospace;font-size:18px;font-weight:900;color:#4f46e5">${s.ticker}</span><span style="font-weight:600">${s.name}</span><span class="badge" style="background:#fef3c7;color:#92400e">${s.risk}</span><span class="badge" style="background:#f1f5f9;color:#64748b">${s.sector}</span></div><p>${s.rationale}</p>${s.timing?`<p style="margin-top:4px;font-weight:600;color:#6366f1">⏰ ${s.timing}</p>`:''}<p style="margin-top:4px;font-weight:600;color:#6366f1">📲 ${s.platform}</p></div>`).join('')}</div>`:''}
 
+  ${result.budgetBreakdown?`<div class="card"><h2>📅 Next Month Budget Plan</h2>
+    <p style="margin-bottom:14px"><strong>Projected Income:</strong> ₱${(result.budgetBreakdown.estimatedIncome||0).toLocaleString('en-PH',{maximumFractionDigits:0})}</p>
+    <h3 style="color:#ef4444;margin-bottom:10px">🔒 Fixed Obligations</h3>
+    ${(result.budgetBreakdown.fixedObligations||[]).map(ob=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${ob.name}</span><strong>₱${(ob.amount||0).toLocaleString('en-PH',{maximumFractionDigits:0})}</strong></div>`).join('')}
+    <h3 style="color:#4f46e5;margin:14px 0 10px">💸 Recommended Spending</h3>
+    ${(result.budgetBreakdown.spendingBudget||[]).map(item=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${item.emoji||''} ${item.name}</span><strong>₱${(item.amount||0).toLocaleString('en-PH',{maximumFractionDigits:0})} (${item.pct||0}%)</strong></div>${item.tip?`<p style="font-size:11px;color:#94a3b8;margin:2px 0 6px">💡 ${item.tip}</p>`:''}`).join('')}
+    ${result.budgetBreakdown.advice?`<p style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;border-left:3px solid #4f46e5">${result.budgetBreakdown.advice}</p>`:''}
+  </div>`:''}
+
   <div class="card"><h2>🐷 Savings Advice</h2><p>${result.savingsAdvice}</p></div>
 
   ${result.expenseInsights?.length?`<div class="card"><h2>🔍 Expense Insights</h2>${result.expenseInsights.map(i=>`<div class="insight">💡 ${i}</div>`).join('')}</div>`:''}
@@ -6120,6 +6150,7 @@ Rules:
 
   const SECTIONS=[
     {id:'summary',label:'Overview'},
+    {id:'budget',label:'Next Month Budget'},
     {id:'invest',label:'Invest'},
     {id:'funds',label:'Funds'},
     {id:'stocks',label:'Stocks'},
@@ -6303,6 +6334,109 @@ Rules:
                 <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #f59e0b',background:'#fffbeb'}}>
                   <p style={{fontSize:'12px',fontWeight:'800',color:'#92400e',textTransform:'uppercase',marginBottom:'8px'}}>⚠ Warnings</p>
                   {result.warnings.map((w,i)=><p key={i} style={{color:'#b45309',margin:'0 0 4px',fontSize:'13px'}}>• {w}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Next Month Budget */}
+          {activeSection==='budget'&&(
+            <div className="col" style={{gap:'14px'}}>
+              {result.budgetBreakdown?(()=>{
+                const bd=result.budgetBreakdown;
+                const totalFixed=(bd.fixedObligations||[]).reduce((s,x)=>s+(x.amount||0),0);
+                const totalSpend=(bd.spendingBudget||[]).reduce((s,x)=>s+(x.amount||0),0);
+                const inc=bd.estimatedIncome||1;
+                const CAT_COLOR={loan:'#ef4444',tithe:'#f59e0b',investment:'#4f46e5',savings:'#059669'};
+                const CAT_BG={loan:'#fef2f2',tithe:'#fffbeb',investment:'#f5f3ff',savings:'#f0fdf4'};
+                return(<>
+                  {/* Income bar */}
+                  <div className="card" style={{padding:'20px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',border:'none'}}>
+                    <p style={{fontSize:'11px',fontWeight:'700',color:'rgba(255,255,255,.7)',textTransform:'uppercase',margin:'0 0 4px'}}>Projected Next Month Income</p>
+                    <p style={{fontSize:'28px',fontWeight:'900',color:'#fff',margin:'0 0 12px'}}>₱{inc.toLocaleString('en-PH',{maximumFractionDigits:0})}</p>
+                    <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                      <span style={{background:'rgba(255,255,255,.15)',borderRadius:'99px',padding:'3px 10px',fontSize:'11px',color:'#fff',fontWeight:'600'}}>Fixed: ₱{totalFixed.toLocaleString('en-PH',{maximumFractionDigits:0})} ({Math.round(totalFixed/inc*100)}%)</span>
+                      <span style={{background:'rgba(255,255,255,.15)',borderRadius:'99px',padding:'3px 10px',fontSize:'11px',color:'#fff',fontWeight:'600'}}>Spending: ₱{totalSpend.toLocaleString('en-PH',{maximumFractionDigits:0})} ({Math.round(totalSpend/inc*100)}%)</span>
+                      {bd.leftover>0&&<span style={{background:'rgba(16,185,129,.3)',borderRadius:'99px',padding:'3px 10px',fontSize:'11px',color:'#fff',fontWeight:'600'}}>Leftover: ₱{bd.leftover.toLocaleString('en-PH',{maximumFractionDigits:0})}</span>}
+                    </div>
+                  </div>
+
+                  {/* Fixed obligations */}
+                  <div className="card" style={{padding:'20px'}}>
+                    <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',margin:'0 0 14px'}}>🔒 Fixed Obligations — Pay These First</p>
+                    <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                      {(bd.fixedObligations||[]).map((ob,i)=>{
+                        const pct=Math.round((ob.amount||0)/inc*100);
+                        const col=CAT_COLOR[ob.category]||'#64748b';
+                        const bg=CAT_BG[ob.category]||'#f8fafc';
+                        return(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                            <div style={{flex:1}}>
+                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                                <span style={{fontSize:'13px',fontWeight:'700',color:'var(--text)'}}>{ob.name}</span>
+                                <span style={{fontSize:'13px',fontWeight:'800',color:col}}>₱{(ob.amount||0).toLocaleString('en-PH',{maximumFractionDigits:0})} <span style={{fontSize:'11px',color:'var(--text4)',fontWeight:'600'}}>({pct}%)</span></span>
+                              </div>
+                              <div style={{background:'#e2e8f0',borderRadius:'99px',height:'6px'}}>
+                                <div style={{background:col,height:'6px',borderRadius:'99px',width:`${Math.min(100,pct)}%`}}/>
+                              </div>
+                              {ob.note&&<p style={{fontSize:'11px',color:'var(--text4)',margin:'3px 0 0',fontStyle:'italic'}}>{ob.note}</p>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between'}}>
+                      <span style={{fontSize:'12px',fontWeight:'700',color:'var(--text3)'}}>Total Fixed</span>
+                      <span style={{fontSize:'14px',fontWeight:'900',color:'#ef4444'}}>₱{totalFixed.toLocaleString('en-PH',{maximumFractionDigits:0})} ({Math.round(totalFixed/inc*100)}%)</span>
+                    </div>
+                  </div>
+
+                  {/* Spending budget */}
+                  <div className="card" style={{padding:'20px'}}>
+                    <p style={{fontSize:'12px',fontWeight:'800',color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.5px',margin:'0 0 6px'}}>💸 Recommended Spending Budget</p>
+                    <p style={{fontSize:'12px',color:'var(--text3)',margin:'0 0 14px'}}>After all fixed obligations — what you can spend on daily life</p>
+                    <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+                      {(bd.spendingBudget||[]).map((item,i)=>{
+                        const pct=item.pct||Math.round((item.amount||0)/inc*100);
+                        const isDesires=item.name.toLowerCase().includes('desire')||item.name.toLowerCase().includes('want');
+                        const isDining=item.name.toLowerCase().includes('dining')||item.name.toLowerCase().includes('eating');
+                        const accentColor=isDesires?'#f59e0b':isDining?'#f97316':'#4f46e5';
+                        return(
+                          <div key={i} style={{padding:'12px 14px',background:'var(--card2)',borderRadius:'10px',borderLeft:`3px solid ${accentColor}`}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                              <span style={{fontSize:'14px',fontWeight:'700',color:'var(--text)'}}>{item.emoji||'•'} {item.name}</span>
+                              <div style={{textAlign:'right'}}>
+                                <span style={{fontSize:'16px',fontWeight:'900',color:accentColor}}>₱{(item.amount||0).toLocaleString('en-PH',{maximumFractionDigits:0})}</span>
+                                <span style={{fontSize:'11px',color:'var(--text4)',marginLeft:'6px'}}>({pct}%)</span>
+                              </div>
+                            </div>
+                            <div style={{background:'#e2e8f0',borderRadius:'99px',height:'5px',marginBottom:'6px'}}>
+                              <div style={{background:accentColor,height:'5px',borderRadius:'99px',width:`${Math.min(100,pct)}%`}}/>
+                            </div>
+                            {item.tip&&<p style={{fontSize:'11px',color:'var(--text3)',margin:0,fontStyle:'italic'}}>💡 {item.tip}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {bd.leftover>0&&(
+                      <div style={{marginTop:'12px',padding:'10px 14px',background:'#f0fdf4',borderRadius:'8px',border:'1px solid #bbf7d0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:'13px',fontWeight:'700',color:'#059669'}}>🎉 Leftover / Buffer</span>
+                        <span style={{fontSize:'15px',fontWeight:'900',color:'#059669'}}>₱{bd.leftover.toLocaleString('en-PH',{maximumFractionDigits:0})}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Advice */}
+                  {bd.advice&&(
+                    <div className="card" style={{padding:'16px 20px',borderLeft:'4px solid #4f46e5'}}>
+                      <p style={{fontSize:'12px',fontWeight:'800',color:'#4f46e5',textTransform:'uppercase',margin:'0 0 6px'}}>📋 Budget Rationale</p>
+                      <p style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.6',margin:0}}>{bd.advice}</p>
+                    </div>
+                  )}
+                </>);
+              })():(
+                <div className="card" style={{padding:'24px',textAlign:'center'}}>
+                  <p style={{color:'var(--text3)',fontSize:'13px'}}>Run an analysis first to see the recommended budget breakdown.</p>
                 </div>
               )}
             </div>
