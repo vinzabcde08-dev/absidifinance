@@ -1431,7 +1431,7 @@ function MainApp({onLogout}){
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
-        {tab==='loans'&&<LoansTab loans={loans} setLoans={setLoans}/>}
+        {tab==='loans'&&<LoansTab loans={loans} setLoans={setLoans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} showBalToast={showBalToast}/>}
         {tab==='plans'&&<PlansTab plans={plans} setPlans={setPlans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} employees={employees} payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
         {tab==='ai'&&<AIAdvisorTab aiApiKey={aiApiKey} settings={settings} accounts={accounts} accBal={accBal} allIncome={income} allExpenses={expenses} allSubs={subs} allPayroll={payroll} titheLog={titheLog} savingsLog={savingsLog} investLog={investLog} mInc={mInc} tithe={tithe} invest={invest} savings={savings} desires={desires} base={base} avg3={avg3} dailyCap={dailyCap} spendBudget={spendBudget} titheBase={titheBase} curMonthKey={curMonthKey} selMonth={selMonth} yr={yr} userName={getCurrentUsername()||'User'} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mExpReg={mExpReg} titheCarryover={titheCarryover} loans={loans} aiHistory={aiHistory} setAiHistory={setAiHistory}/>}
         {tab==='settings'&&<SettingsTab aiApiKey={aiApiKey} setAiApiKey={setAiApiKey} settings={settings} setSettings={setSettings}/>}
@@ -5373,10 +5373,14 @@ const LOAN_COLORS={housing:'#4f46e5',car:'#059669',personal:'#f59e0b',credit_car
 const LOAN_BG={housing:'#f5f3ff',car:'#f0fdf4',personal:'#fffbeb',credit_card:'#fff5f5',business:'#f0f9ff',others:'#f8fafc'};
 const LOAN_DEF={name:'',type:'car',lender:'',originalAmount:'',balance:'',monthlyPayment:'',interestRate:'',startDate:'',endDate:'',notes:''};
 
-function LoansTab({loans,setLoans}){
+function LoansTab({loans,setLoans,accounts,accBal,setExpenses,showBalToast}){
   const[showForm,setShowForm]=useState(false);
   const[editId,setEditId]=useState(null);
   const[form,setForm]=useState({...LOAN_DEF});
+  const[payingId,setPayingId]=useState(null);
+  const[payAmt,setPayAmt]=useState('');
+  const[payAcct,setPayAcct]=useState('');
+  const[payNote,setPayNote]=useState('');
   const P=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   const totalBalance=loans.reduce((s,l)=>s+(l.balance||0),0);
@@ -5396,6 +5400,22 @@ function LoansTab({loans,setLoans}){
   };
 
   const del=(id)=>{if(confirm('Delete this loan?'))setLoans(prev=>prev.filter(l=>l.id!==id));};
+
+  const openPay=(l)=>{setPayingId(l.id);setPayAmt(String(l.monthlyPayment||''));setPayAcct('');setPayNote('');};
+  const closePay=()=>{setPayingId(null);setPayAmt('');setPayAcct('');setPayNote('');};
+  const recordPayment=(l)=>{
+    const amt=parseFloat(payAmt);
+    if(!amt||amt<=0)return;
+    /* 1. Deduct from loan balance */
+    const newBal=Math.max(0,parseFloat(((l.balance||0)-amt).toFixed(2)));
+    setLoans(prev=>prev.map(x=>x.id===l.id?{...x,balance:newBal}:x));
+    /* 2. Log as expense so it appears in Expenses tab + affects account balance */
+    const acctId=payAcct||(accounts[0]?.id||'');
+    const typeInfo=LOAN_TYPES.find(t=>t.id===l.type)||{label:'Loan'};
+    setExpenses(prev=>[...prev,{id:uid(),date:TODAY,amount:amt,category:'Loan Payment',accountId:acctId,note:payNote||`${l.name} payment`,alloc:'loan_payment'}]);
+    if(acctId&&showBalToast)showBalToast(acctId,-amt,'expense',`${l.name}`);
+    closePay();
+  };
 
   const LoanCard=({l})=>{
     const color=LOAN_COLORS[l.type]||'#64748b';
@@ -5448,6 +5468,42 @@ function LoansTab({loans,setLoans}){
         )}
         {l.notes&&<p style={{fontSize:'12px',color:'var(--text3)',margin:'10px 0 0',fontStyle:'italic'}}>{l.notes}</p>}
         {l.endDate&&<p style={{fontSize:'11px',color:'var(--text4)',margin:'6px 0 0'}}>Target end: {l.endDate}</p>}
+
+        {/* ── Record Payment inline form ── */}
+        {payingId===l.id?(
+          <div style={{marginTop:'14px',padding:'14px 16px',background:'rgba(99,102,241,.06)',borderRadius:'10px',border:'1px solid rgba(99,102,241,.2)'}}>
+            <p style={{fontWeight:'700',fontSize:'13px',color:'#4f46e5',margin:'0 0 10px'}}>💳 Record Payment</p>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <div>
+                <span style={{fontSize:'11px',fontWeight:'700',color:'var(--text4)',display:'block',marginBottom:'4px'}}>Amount (₱)</span>
+                <input className="fi" type="number" min="0" step="0.01" value={payAmt} onChange={e=>setPayAmt(e.target.value)}
+                  style={{margin:0,fontSize:'14px',fontWeight:'700'}} placeholder={String(l.monthlyPayment||'')}/>
+              </div>
+              <div>
+                <span style={{fontSize:'11px',fontWeight:'700',color:'var(--text4)',display:'block',marginBottom:'4px'}}>Deduct from Account</span>
+                <select className="fi" value={payAcct} onChange={e=>setPayAcct(e.target.value)} style={{margin:0}}>
+                  <option value="">-- select --</option>
+                  {(accounts||[]).map(a=><option key={a.id} value={a.id}>{a.name} · {P(accBal(a.id))}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{marginBottom:'10px'}}>
+              <span style={{fontSize:'11px',fontWeight:'700',color:'var(--text4)',display:'block',marginBottom:'4px'}}>Note (optional)</span>
+              <input className="fi" value={payNote} onChange={e=>setPayNote(e.target.value)} style={{margin:0}} placeholder={`${l.name} payment`}/>
+            </div>
+            <div style={{display:'flex',gap:'8px'}}>
+              <button className="btn bp" style={{flex:1}} onClick={()=>recordPayment(l)}>✓ Record & Update Balance</button>
+              <button className="btn bs" onClick={closePay}>Cancel</button>
+            </div>
+          </div>
+        ):(
+          <div style={{marginTop:'12px'}}>
+            <button onClick={()=>openPay(l)}
+              style={{background:'#eef2ff',border:'1px solid #c7d2fe',color:'#4f46e5',borderRadius:'8px',padding:'7px 16px',cursor:'pointer',fontWeight:'700',fontSize:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+              💳 Record Payment {l.monthlyPayment?`(${P(l.monthlyPayment)} due)`:''}
+            </button>
+          </div>
+        )}
       </div>
     );
   };
