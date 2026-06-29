@@ -5716,7 +5716,7 @@ Rules:
     }catch(e){
       earlyTimers.forEach(clearTimeout);
       if(e.message==='Failed to fetch'){
-        setError('Could not reach Anthropic's API. Common causes:\n1. No internet connection\n2. The app is opened from a file:// URL — try serving it from a local HTTP server instead\n3. A browser extension or firewall is blocking the request\n\nTip: Open Chrome DevTools → Console for the exact error.');
+        setError("Could not reach Anthropic's API. Common causes:\n1. No internet connection\n2. The app is opened from a file:// URL — try serving it from a local HTTP server instead\n3. A browser extension or firewall is blocking the request\n\nTip: Open Chrome DevTools → Console for the exact error.");
       }else{
         setError(e.message||'Something went wrong. Check your API key and try again.');
       }
