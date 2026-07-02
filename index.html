@@ -2402,7 +2402,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 
 /* ════════  HOME  ════════ */
 function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
-  const net=mInc-mExp-mSub-mPay;
+  const net=mInc-mExp-mSub-mPayActual;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
 
@@ -2430,7 +2430,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const gPaid=inc.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+(i.amount||0),0);
   const gPending=inc.filter(i=>i.status==='Pending').reduce((s,i)=>s+(i.amount||0),0);
   const gExpected=gPaid+gPending;
-  const gExp=mExp+mSub+mPay;
+  const gExp=mExp+mSub+mPayActual;
   const gMax=Math.max(gExpected,gExp,expectedFromClients||0,1);
   const gPct=(v)=>Math.min(100,Math.round((v/gMax)*100));
   const gNet=mInc-gExp; /* matches Net This Month — uses total income, not paid-only */
@@ -2539,10 +2539,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
      info:'Sum of real income entries this month (paid + pending). Excludes internal transfers — account transfers, tithe consolidations, and savings/investment moves are not counted here.',title:'Monthly Income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
      info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
-    {label:'Total Expenses',value:P(mExp+mSub+mPay),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
-     info:`Actual spending this month:\n• Day-to-day expenses: ${P(mExp)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPay)}\nTotal: ${P(mExp+mSub+mPay)}\n\nNote: Tithe withdrawals, loan amortizations, investment & savings transfers are NOT counted here — those are tracked separately in their own sections.`,title:'Total Expenses'},
+    {label:'Total Expenses',value:P(mExp+mSub+mPayActual),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
+     info:`Actual spending this month (paid only):\n• Day-to-day expenses: ${P(mExp)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPayActual)}\nTotal: ${P(mExp+mSub+mPayActual)}\n\nNote: Pending/unpaid payroll, tithe, loan amortizations, and investment & savings transfers are NOT counted here.`,title:'Total Expenses'},
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
-     info:`Monthly Income (${P(mInc)}) minus actual spending (${P(mExp+mSub+mPay)}) = ${P(net)}.\n\nThis does NOT deduct tithe, loans, or allocation transfers — those are shown separately in the Monthly Allocations section.\n\nPositive = you earned more than you spent. Negative = overspent.`,title:'Net This Month'},
+     info:`Monthly Income (${P(mInc)}) minus actual spending (${P(mExp+mSub+mPayActual)}) = ${P(net)}.\n\nOnly counts what has actually been paid out. Pending payroll (${P(mPay-mPayActual)} unpaid) is shown in the Payroll tab.\n\nPositive = you earned more than you spent.`,title:'Net This Month'},
     {label:'Daily Spend Est.',value:'~'+P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
      info:`A suggestion only — not a hard limit.\n\nBased on last month's income as a stable reference (${P(lastMonthInc||avg3)}) so this number doesn't jump around as income arrives this month.\n\nFormula: (Last month income − allocations − subs − payroll − expenses so far) ÷ ${daysLeft} days left.`,title:'Daily Spend Estimate'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
