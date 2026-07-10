@@ -24,6 +24,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     /* ── CSS VARIABLES (light default) ── */
     :root{
@@ -849,6 +850,281 @@ const syncFromFirebase=async(userId)=>{
   }));
 };
 
+/* ════════════════════════════════════════════════
+   SEED DATA  — historical records Apr–Jul 2026
+   Fires ONCE on first login if Firebase is empty
+════════════════════════════════════════════════ */
+const _su=()=>(Date.now()+Math.random()*1e5|0).toString(36)+Math.random().toString(36).slice(2,7);
+const _sacc=n=>{if(!n)return'';if(n.startsWith('BDO'))return'mnytpeh84a5z5';if(n.startsWith('UB'))return'mnytow2xpcddo';if(n.startsWith('Gcash'))return'mnytq0x2t2dv4';if(n.startsWith('PayPal')||n.includes('vinzabcde08'))return'mnytqnm65dnxu';if(n.startsWith('MariBank'))return'mp8xjesbg2ms8';return'';};
+const _SEED_INC=[
+['2026-04-06','VA Salary','Brandit.net','BDO',16553.67,'paid'],
+['2026-04-06','Other','','BDO',29960.8,'paid'],
+['2026-04-10','VA Salary','Brandit.net','BDO',16476.52,'paid'],
+['2026-04-13','Business Income','','Gcash',1018,'paid'],
+['2026-04-14','Account Transfer','','Gcash',3000,''],
+['2026-04-14','Account Transfer','','UB',8504.09,''],
+['2026-04-14','Account Transfer','','Gcash',1129.92,''],
+['2026-04-15','VA Salary','','PayPal',17508.22,'paid'],
+['2026-04-15','VA Salary','Roger Aguinaldo - ABMS','UB',15064.19,'paid'],
+['2026-04-16','Account Transfer','','Gcash',5500,''],
+['2026-04-17','VA Salary','Corey Muldrow - MGR','BDO',29998.5,'paid'],
+['2026-04-17','VA Salary','Brandit.net','BDO',16506.07,'paid'],
+['2026-04-19','Account Transfer','','Gcash',10000,''],
+['2026-04-24','VA Salary','Brandit.net','BDO',16703.24,'paid'],
+['2026-04-30','VA Salary','Roger Aguinaldo - ABMS','UB',15064.19,'paid'],
+['2026-04-30','Account Transfer','','Gcash',3000,''],
+['2026-04-30','Commission','','Gcash',620,'paid'],
+['2026-05-04','VA Salary','Corey Muldrow - MGR','BDO',30660.25,'paid'],
+['2026-05-04','VA Salary','Brandit.net','BDO',16884.1,'paid'],
+['2026-05-01','Other','','BDO',2.48,'paid'],
+['2026-05-04','Account Transfer','','Gcash',22510,''],
+['2026-05-07','Refund','','Gcash',1950,'paid'],
+['2026-05-07','VA Salary','','PayPal',31395.36,'paid'],
+['2026-05-08','VA Salary','Brandit.net','BDO',16653.22,'paid'],
+['2026-05-15','Account Transfer','','BDO',20000,''],
+['2026-05-15','VA Salary','Brandit.net','BDO',16957.01,'paid'],
+['2026-05-16','VA Salary','Corey Muldrow - MGR','MariBank',30843.82,'paid'],
+['2026-05-16','VA Salary','','UB',15064.19,'paid'],
+['2026-05-17','Account Transfer','','MariBank',49500,''],
+['2026-05-17','Other','','MariBank',4.38,'paid'],
+['2026-05-19','Bonus','','MariBank',5,'paid'],
+['2026-05-19','Bonus','','MariBank',4.96,'paid'],
+['2026-05-20','Account Transfer','','Gcash',1000,''],
+['2026-05-22','VA Salary','','MariBank',29671.85,'paid'],
+['2026-05-22','VA Salary','','PayPal',2399.04,'paid'],
+['2026-05-22','VA Salary','Brandit.net','BDO',16928.7,'paid'],
+['2026-05-25','Account Transfer','','Gcash',1000,''],
+['2026-05-28','Account Transfer','','Gcash',1000,''],
+['2026-05-29','VA Salary','Brandit.net','BDO',920.27,'paid'],
+['2026-06-02','VA Salary','Corey Muldrow - MGR','BDO',30902.32,'paid'],
+['2026-06-02','VA Salary','','BDO',0.27,'paid'],
+['2026-06-02','VA Salary','Roger Aguinaldo - ABMS','UB',12727.59,'paid'],
+['2026-06-02','Other','','MariBank',56.88,'paid'],
+['2026-06-05','Account Transfer','','Gcash',1000,''],
+['2026-06-07','Bonus','','MariBank',5.87,'paid'],
+['2026-06-07','Bonus','','',1.78,'paid'],
+['2026-06-05','VA Salary','Brandit.net','BDO',16910.58,'paid'],
+['2026-06-07','VA Salary','','PayPal',17114.18,'paid'],
+['2026-06-08','Account Transfer','','Gcash',10000,''],
+['2026-06-12','VA Salary','Brandit.net','BDO',16707.31,'paid'],
+['2026-06-16','Bonus','','MariBank',2.17,'paid'],
+['2026-06-17','VA Salary','Corey Muldrow - MGR','BDO',30144,'paid'],
+['2026-06-17','VA Salary','','PayPal',26449.58,'paid'],
+['2026-06-17','VA Salary','Roger Aguinaldo - ABMS','UB',15064.19,'paid'],
+['2026-06-17','Account Transfer','','Gcash',1000,''],
+['2026-06-17','Account Transfer','','MariBank',100,''],
+['2026-06-17','Account Transfer','','MariBank',30000,''],
+['2026-06-17','Account Transfer','','MariBank',39600,''],
+['2026-06-19','VA Salary','Brandit.net','BDO',16694.17,'paid'],
+['2026-06-22','Account Transfer','','BDO',15000,''],
+['2026-06-22','Bonus','','MariBank',30.34,'paid'],
+['2026-06-26','VA Salary','Brandit.net','BDO',16848.4,'paid'],
+['2026-06-28','VA Salary','','PayPal',26939.44,'paid'],
+['2026-06-28','Account Transfer','','MariBank',29700,''],
+['2026-06-30','Bonus','','Gcash',86,'paid'],
+['2026-06-30','VA Salary','Corey Muldrow - MGR','BDO',18272.69,'paid'],
+['2026-06-30','VA Salary','Roger Aguinaldo - ABMS','UB',14305.57,'paid'],
+['2026-07-01','VA Salary','Corey Muldrow - MGR','BDO',30817.8,'paid'],
+];
+const _SEED_EXP=[
+['2026-04-06','Account Transfer','BDO','',16000],
+['2026-04-06','Transfer Fee','BDO','',10],
+['2026-04-01','Other','UB','',5018],
+['2026-04-04','Groceries','UB','',4807.4],
+['2026-04-05','Utilities','UB','',2678],
+['2026-04-06','Subscriptions','UB','',360],
+['2026-04-07','Other','UB','',5018],
+['2026-04-07','Subscriptions','UB','',693.71],
+['2026-04-07','Subscriptions','UB','',693.71],
+['2026-04-09','Utilities','UB','',2786],
+['2026-04-09','Subscriptions','UB','',695.38],
+['2026-04-12','Subscriptions','UB','',345.71],
+['2026-04-02','Other','Gcash','',3000],
+['2026-04-05','Utilities','Gcash','',152],
+['2026-04-05','Subscriptions','Gcash','',252.4],
+['2026-04-05','Food','Gcash','',1000],
+['2026-04-06','Utilities','Gcash','',452],
+['2026-04-08','Subscriptions','Gcash','',520],
+['2026-04-09','Food','Gcash','',169],
+['2026-04-09','Subscriptions','Gcash','',279],
+['2026-04-06','Utilities','BDO','',2786],
+['2026-04-14','Credit Card Payment','BDO','',6500.79],
+['2026-04-14','Subscriptions','','card',1394.69],
+['2026-04-03','Food','','card',695.06],
+['2026-04-14','Food','','card',1042.58],
+['2026-04-08','Food','','card',1218],
+['2026-04-06','Subscriptions','','card',4350.33],
+['2026-04-14','Subscriptions','Gcash','',403],
+['2026-04-14','Food','UB','',13869.27],
+['2026-04-14','Account Transfer','BDO','',3000],
+['2026-04-14','Transfer Fee','BDO','',10],
+['2026-04-14','Account Transfer','BDO','',8504.09],
+['2026-04-14','Account Transfer','BDO','',1129.92],
+['2026-04-14','Subscriptions','UB','',347.18],
+['2026-04-16','Utilities','Gcash','',532.7],
+['2026-04-16','Account Transfer','UB','',5500],
+['2026-04-16','Transfer Fee','UB','',10],
+['2026-04-16','Payroll','Gcash','',3000],
+['2026-04-16','Payroll','Gcash','',2500],
+['2026-04-16','Other','UB','',5018],
+['2026-04-17','Subscriptions','Gcash','',615],
+['2026-04-19','Account Transfer','BDO','',10000],
+['2026-04-19','Transfer Fee','BDO','',10],
+['2026-04-17','Utilities','Gcash','',1306],
+['2026-04-19','Subscriptions','UB','',687.56],
+['2026-04-19','Operational','UB','',192.64],
+['2026-04-19','Operational','UB','',192.64],
+['2026-04-19','Operational','UB','',238.56],
+['2026-04-19','Operational','Gcash','',997],
+['2026-04-19','Utilities','Gcash','',1000],
+['2026-04-21','Operational','UB','',655.69],
+['2026-04-21','Operational','Gcash','',7150],
+['2026-04-24','Operational','UB','',1964.34],
+['2026-04-24','Food','BDO','',5000],
+['2026-04-25','Operational','BDO','',3810],
+['2026-04-27','Desires','BDO','',6500],
+['2026-04-27','Desires','BDO','',8000],
+['2026-04-27','Desires','BDO','',1500],
+['2026-04-27','Desires','BDO','',320],
+['2026-04-27','Utilities','BDO','',4306.9],
+['2026-04-27','Utilities','BDO','',299.82],
+['2026-04-24','Operational','UB','',348.77],
+['2026-04-30','Account Transfer','UB','',3000],
+['2026-04-30','Transfer Fee','UB','',10],
+['2026-04-30','Food','Gcash','',1629],
+['2026-04-30','Food','Gcash','',2311],
+['2026-05-02','Operational','UB','',1415.69],
+['2026-05-02','Groceries','UB','',4939.3],
+['2026-05-02','Groceries','UB','',3000],
+['2026-05-03','Groceries','UB','',18],
+['2026-05-03','Operational','BDO','',7110],
+['2026-05-04','Account Transfer','BDO','',22510],
+['2026-05-04','Operational','Gcash','',1800],
+['2026-05-04','Subscriptions','UB','',706.57],
+['2026-05-04','Operational','UB','',1765.65],
+['2026-05-07','Subscriptions','UB','',708.68],
+['2026-05-04','Food','BDO','',8500],
+['2026-05-05','Food','BDO','',1619],
+['2026-05-04','Utilities','Gcash','',1400],
+['2026-05-07','Utilities','Gcash','',452],
+['2026-05-07','Credit Card Payment','BDO','',14809.57],
+['2026-05-07','Credit Card Payment','BDO','',18300],
+['2026-05-07','Shopping','BDO','',14280],
+['2026-05-08','Utilities','BDO','',3000],
+['2026-05-10','Shopping','BDO','',5000],
+['2026-05-10','Utilities','BDO','',3000],
+['2026-05-10','Operational','BDO','',16010],
+['2026-05-10','Operational','BDO','',1946.48],
+['2026-05-15','Account Transfer','PayPal','',20000],
+['2026-05-15','Shopping','BDO','',2338],
+['2026-05-15','Shopping','BDO','',3000],
+['2026-05-15','Shopping','BDO','',1167],
+['2026-05-16','Food','UB','',3010],
+['2026-05-17','Operational','MariBank','',12153.28],
+['2026-05-17','Account Transfer','PayPal','',49500],
+['2026-05-17','Transfer Fee','PayPal','',500],
+['2026-05-17','Entertainment','MariBank','',1200],
+['2026-05-17','Other','MariBank','',18919.32],
+['2026-05-19','Subscriptions','MariBank','',1299],
+['2026-05-19','Baby Supplies','MariBank','',434],
+['2026-05-20','Account Transfer','MariBank','',1000],
+['2026-05-20','Food','Gcash','',529],
+['2026-05-22','Operational','BDO','',2000],
+['2026-05-22','Operational','UB','',136.8],
+['2026-05-24','Food','Gcash','',2615.97],
+['2026-05-25','Food','MariBank','',30045],
+['2026-05-25','Account Transfer','BDO','',1000],
+['2026-05-25','Transfer Fee','BDO','',10],
+['2026-05-25','Food','Gcash','',-89],
+['2026-05-25','Food','Gcash','',975.5],
+['2026-05-28','Utilities','MariBank','',300],
+['2026-05-28','Utilities','MariBank','',300],
+['2026-05-25','Utilities','MariBank','',1000],
+['2026-05-28','Account Transfer','MariBank','',1000],
+['2026-05-28','Food','Gcash','',264],
+['2026-05-28','Food','Gcash','',178],
+['2026-05-29','Utilities','MariBank','',4174.81],
+['2026-05-29','Utilities','BDO','',5000],
+['2026-06-02','Operational','UB','',1417.82],
+['2026-06-02','Operational','UB','',1421.01],
+['2026-06-02','Food','Gcash','',681],
+['2026-06-02','Credit Card Payment','BDO','',10044.3],
+['2026-06-02','Credit Card Payment','BDO','',11229.45],
+['2026-06-02','Shopping','MariBank','',4403],
+['2026-06-02','Operational','MariBank','',1500],
+['2026-06-02','Food','MariBank','',740],
+['2026-06-02','Shopping','MariBank','',753],
+['2026-06-05','Account Transfer','MariBank','',1000],
+['2026-06-05','Utilities','Gcash','',452],
+['2026-06-05','Utilities','Gcash','',77],
+['2026-06-07','Entertainment','MariBank','',1258],
+['2026-06-07','Shopping','MariBank','',2801],
+['2026-06-07','Utilities','BDO','',3000],
+['2026-06-07','Subscriptions','Gcash','',249],
+['2026-06-07','Utilities','Gcash','',25],
+['2026-06-08','Groceries','BDO','',6000],
+['2026-06-08','Account Transfer','BDO','',10000],
+['2026-06-08','Transfer Fee','BDO','',10],
+['2026-06-08','Baby Supplies','BDO','',4500],
+['2026-06-10','House','BDO','',25000],
+['2026-06-15','Groceries','BDO','',5000],
+['2026-06-16','Utilities','Gcash','',271],
+['2026-06-16','Operational','MariBank','',967],
+['2026-06-16','Payroll','Gcash','',10000],
+['2026-06-17','Credit Card Payment','BDO','',850],
+['2026-06-17','Account Transfer','UB','',1000],
+['2026-06-17','Transfer Fee','UB','',10],
+['2026-06-17','Account Transfer','UB','',100],
+['2026-06-17','Transfer Fee','UB','',10],
+['2026-06-17','Account Transfer','UB','',30000],
+['2026-06-17','Transfer Fee','UB','',10],
+['2026-06-17','Account Transfer','PayPal','',39600],
+['2026-06-17','Transfer Fee','PayPal','',400],
+['2026-06-17','Food','Gcash','',177],
+['2026-06-19','Utilities','MariBank','',1299],
+['2026-06-19','Subscriptions','Gcash','',279],
+['2026-06-19','Subscriptions','Gcash','',558],
+['2026-06-19','Payroll','Gcash','',10000],
+['2026-06-19','Payroll','Gcash','',5000],
+['2026-06-22','Credit Card Payment','BDO','',15000],
+['2026-06-22','Credit Card Payment','BDO','',15157.89],
+['2026-06-22','Credit Card Payment','MariBank','',4750],
+['2026-06-22','Account Transfer','MariBank','',15000],
+['2026-06-22','Food','BDO','',5000],
+['2026-06-23','Operational','MariBank','',400],
+['2026-06-24','Food','BDO','',5000],
+['2026-06-26','Other','MariBank','',6500],
+['2026-06-26','Food','MariBank','',100],
+['2026-06-26','Shopping','MariBank','',3057.94],
+['2026-06-27','Shopping','MariBank','',825.39],
+['2026-06-27','Shopping','MariBank','',334],
+['2026-06-28','Account Transfer','PayPal','',29700],
+['2026-06-28','Transfer Fee','PayPal','',300],
+['2026-06-29','Groceries','BDO','',5000],
+['2026-06-29','Food','MariBank','',289],
+['2026-06-29','Food','MariBank','',942],
+['2026-06-29','Other','MariBank','',898.62],
+['2026-07-01','Operational','UB','',1409.61],
+];
+const _buildSeedInc=(clients=[])=>_SEED_INC.map(([date,type,cn,an,amount,status])=>({
+  id:_su(),date,type,
+  clientId:clients.find(c=>c.name===cn)?.id||'',
+  accountId:_sacc(an),amount,
+  status:status||'',
+  alloc:type==='Account Transfer'?'transfer_in':type==='Allocation Transfer In'?'allocation_in':'',
+  note:''
+}));
+const _buildSeedExp=()=>{
+  const r=[];let tid=null,tacc=null;
+  for(const [date,cat,an,,amount] of _SEED_EXP){
+    const acc=_sacc(an);
+    if(cat==='Account Transfer'){tid=_su();tacc=acc;r.push({id:_su(),date,amount,category:cat,accountId:acc,cardId:'',note:`Transfer ${date}`,alloc:'transfer_out',transferId:tid});}
+    else if(cat==='Transfer Fee'&&tid&&tacc===acc){r.push({id:_su(),date,amount,category:cat,accountId:acc,cardId:'',note:`Transfer ${date}`,alloc:'transfer_fee',transferId:tid});tid=null;tacc=null;}
+    else{tid=null;tacc=null;r.push({id:_su(),date,amount,category:cat,accountId:acc,cardId:'',note:'',alloc:''});}
+  }
+  return r;
+};
+
 /* ════════════════
    APP ROOT
 ════════════════ */
@@ -960,6 +1236,8 @@ function MainApp({onLogout}){
   const[showReset,setShowReset]=useState(false);
   const[resetVal,setResetVal]=useState('');
   const[showSettings,setShowSettings]=useState(false);
+  const[importData,setImportData]=useState(null);
+  const importInputRef=useRef(null);
   const[isOnline,setIsOnline]=useState(navigator.onLine);
   const[syncingToast,setSyncingToast]=useState(false);
   const syncTimerRef=useRef(null);
@@ -1045,6 +1323,13 @@ function MainApp({onLogout}){
         /* skip writes that originated from THIS device to avoid loops */
         if(doc.metadata.hasPendingWrites)return;
         if(doc.exists){const d=doc.data();if(d&&d.v!==undefined){try{const v=JSON.parse(d.v);localStorage.setItem(docKey,d.v);set(v);}catch(e){}}}
+        else{
+          /* Firebase doc doesn't exist → seed historical data if available */
+          let seedV=null;
+          if(k==='ph_income'){const cl=JSON.parse(localStorage.getItem('ph_clients_'+userId)||'[]');seedV=_buildSeedInc(cl);}
+          else if(k==='ph_exp'){seedV=_buildSeedExp();}
+          if(seedV){ls.set(docKey,seedV);set(seedV);}
+        }
       });
     });
     return()=>unsubs.forEach(u=>u());
@@ -1284,17 +1569,369 @@ function MainApp({onLogout}){
 
   const exportCSV=()=>{
     let csv=`AbsidiFinance Export — Year ${yr}\n\n`;
-    csv+=`INCOME\nDate,Type,Client,Account,Amount,Status\n`;
-    byYear(income).forEach(x=>{const cl=clients.find(c=>c.id===x.clientId);const ac=accounts.find(a=>a.id===x.accountId);csv+=`${x.date},${x.type},${cl?.name||''},${ac?.name||''},${x.amount},${x.status||''}\n`;});
-    csv+=`\nEXPENSES\nDate,Category,Account,Card,Amount\n`;
-    byYear(expenses).forEach(x=>{const ac=accounts.find(a=>a.id===x.accountId);const cd=cards.find(c=>c.id===x.cardId);csv+=`${x.date},${x.category},${ac?.name||''},${cd?.name||''},${x.amount}\n`;});
+    csv+=`INCOME\nDate,Type,Client,Account,Amount,Status,Alloc,Note\n`;
+    byYear(income).forEach(x=>{
+      const cl=clients.find(c=>c.id===x.clientId);
+      const ac=accounts.find(a=>a.id===x.accountId);
+      const note=(x.note||'').replace(/"/g,'""');
+      const cln=(cl?.name||'').replace(/"/g,'""');
+      csv+=`${x.date},${x.type},"${cln}","${ac?.name||''}",${x.amount},${x.status||''},${x.alloc||''},"${note}"\n`;
+    });
+    csv+=`\nEXPENSES\nDate,Category,Account,Card,Amount,Alloc,TransferID,Note\n`;
+    byYear(expenses).forEach(x=>{
+      const ac=accounts.find(a=>a.id===x.accountId);
+      const cd=cards.find(c=>c.id===x.cardId);
+      const note=(x.note||'').replace(/"/g,'""');
+      csv+=`${x.date},${x.category},"${ac?.name||''}","${cd?.name||''}",${x.amount},${x.alloc||''},${x.transferId||''},"${note}"\n`;
+    });
     csv+=`\nSUBSCRIPTIONS\nName,Amount,Date,Account,Card\n`;
-    byYear(subs).forEach(x=>{const ac=accounts.find(a=>a.id===x.accountId);const cd=cards.find(c=>c.id===x.cardId);csv+=`${x.name},${x.amount},${x.date},${ac?.name||''},${cd?.name||''}\n`;});
+    subs.forEach(x=>{const ac=accounts.find(a=>a.id===x.accountId);const cd=cards.find(c=>c.id===x.cardId);csv+=`"${(x.name||'').replace(/"/g,'""')}",${x.amount},${x.date},"${ac?.name||''}","${cd?.name||''}"\n`;});
     csv+=`\nPAYROLL\nDate,Employee,Account,Amount\n`;
-    byYear(payroll).forEach(x=>{const em=employees.find(e=>e.id===x.employeeId);const ac=accounts.find(a=>a.id===x.accountId);csv+=`${x.date},${em?.name||''},${ac?.name||''},${x.amount}\n`;});
+    byYear(payroll).forEach(x=>{const em=employees.find(e=>e.id===x.employeeId);const ac=accounts.find(a=>a.id===x.accountId);csv+=`${x.date},"${(em?.name||'').replace(/"/g,'""')}","${ac?.name||''}",${x.amount}\n`;});
     const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
-    const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`AbsidiFinance_${yr}.csv`;link.style.display='none';
+    const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`AbsidiFinance_${yr}_Backup.csv`;link.style.display='none';
     document.body.appendChild(link);setTimeout(()=>{link.click();setTimeout(()=>{document.body.removeChild(link);URL.revokeObjectURL(link.href);},200);},100);
+    setShowSettings(false);
+  };
+
+  /* ── CSV Import ── */
+  const _csvLine=(line)=>{
+    const r=[];let cur='',inQ=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+      else if(c===','&&!inQ){r.push(cur);cur='';}
+      else cur+=c;
+    }
+    r.push(cur);return r;
+  };
+  const _parseImportCSV=(text)=>{
+    const lines=text.replace(/\r/g,'').split('\n');
+    const sec={};let cur=null,hdrs=null;
+    const SECS=['INCOME','EXPENSES','SUBSCRIPTIONS','PAYROLL'];
+    for(const raw of lines){
+      const line=raw.trim();
+      if(SECS.includes(line)){cur=line;sec[cur]=[];hdrs=null;continue;}
+      if(cur&&!hdrs&&(line.startsWith('Date,')||line.startsWith('Name,'))){hdrs=_csvLine(line);continue;}
+      if(cur&&hdrs&&line){
+        const vals=_csvLine(line);
+        if(vals.length>=2){const obj={};hdrs.forEach((h,i)=>obj[h]=(vals[i]||'').trim());sec[cur].push(obj);}
+      }
+    }
+    return sec;
+  };
+  const _buildImport=(sec)=>{
+    const iKey=new Set(),eKey=new Set(),pKey=new Set();
+    const newIncome=[];
+    (sec.INCOME||[]).forEach(row=>{
+      const date=row.Date||'';const type=row.Type||'';const cln=row.Client||'';const acn=row.Account||'';
+      const amount=parseFloat(row.Amount)||0;
+      const key=`${date}|${type}|${cln}|${acn}|${amount}`;
+      if(iKey.has(key))return;iKey.add(key);
+      const clientId=clients.find(c=>c.name===cln)?.id||'';
+      const accountId=accounts.find(a=>a.name===acn)?.id||'';
+      const alloc=row.Alloc!==undefined?(row.Alloc||''):(type==='Account Transfer'?'transfer_in':type==='Allocation Transfer In'?'allocation_in':'');
+      newIncome.push({id:uid(),date,type,clientId,accountId,amount,status:row.Status||'',alloc,note:row.Note||'',transferId:row.TransferID||''});
+    });
+    const newExpenses=[];
+    const _tidMap={};
+    (sec.EXPENSES||[]).forEach(row=>{
+      const date=row.Date||'';const cat=row.Category||'';const acn=row.Account||'';const cdn=row.Card||'';
+      const amount=parseFloat(row.Amount)||0;
+      const key=`${date}|${cat}|${acn}|${cdn}|${amount}`;
+      if(eKey.has(key))return;eKey.add(key);
+      const accountId=accounts.find(a=>a.name===acn)?.id||'';
+      const cardId=cards.find(c=>c.name===cdn)?.id||'';
+      let alloc=row.Alloc!==undefined?(row.Alloc||''):(cat==='Account Transfer'?'transfer_out':cat==='Transfer Fee'?'transfer_fee':'');
+      let tid=row.TransferID||'';
+      if(!tid&&alloc==='transfer_out'){const tk=`${date}|${acn}`;tid=uid();_tidMap[tk]=tid;}
+      if(!tid&&alloc==='transfer_fee'){const tk=`${date}|${acn}`;tid=_tidMap[tk]||uid();}
+      newExpenses.push({id:uid(),date,category:cat,accountId,cardId,amount,alloc,transferId:tid,note:row.Note||''});
+    });
+    const newPayroll=[];
+    (sec.PAYROLL||[]).forEach(row=>{
+      const date=row.Date||'';const en=row.Employee||'';const acn=row.Account||'';
+      const amount=parseFloat(row.Amount)||0;
+      const key=`${date}|${en}|${amount}`;
+      if(pKey.has(key))return;pKey.add(key);
+      const employeeId=employees.find(e=>e.name===en)?.id||'';
+      const accountId=accounts.find(a=>a.name===acn)?.id||'';
+      newPayroll.push({id:uid(),date,employeeId,accountId,amount});
+    });
+    const newSubs=[];
+    (sec.SUBSCRIPTIONS||[]).forEach(row=>{
+      const name=row.Name||'';const amount=parseFloat(row.Amount)||0;const date=row.Date||'';
+      const acn=row.Account||'';const cdn=row.Card||'';
+      const accountId=accounts.find(a=>a.name===acn)?.id||'';
+      const cardId=cards.find(c=>c.name===cdn)?.id||'';
+      newSubs.push({id:uid(),name,amount,date,accountId,cardId});
+    });
+    return{newIncome,newExpenses,newPayroll,newSubs};
+  };
+  const handleImportFile=(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    e.target.value='';
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const sec=_parseImportCSV(ev.target.result);
+      const parsed=_buildImport(sec);
+      setImportData(parsed);
+    };
+    reader.readAsText(file);
+  };
+  const doImport=(parsed)=>{
+    const{newIncome,newExpenses,newPayroll,newSubs}=parsed;
+    ls.set(uk('ph_income'),newIncome);
+    ls.set(uk('ph_exp'),newExpenses);
+    ls.set(uk('ph_payroll'),newPayroll);
+    ls.set(uk('ph_subs'),newSubs);
+    setIncome(newIncome);setExpenses(newExpenses);setPayroll(newPayroll);setSubs(newSubs);
+    setImportData(null);
+    setTimeout(()=>alert('\u2705 Import complete!\nIncome: '+newIncome.length+' entries\nExpenses: '+newExpenses.length+' entries\nPayroll: '+newPayroll.length+' entries\nSubscriptions: '+newSubs.length+' entries'),100);
+  };
+
+  /* ── Excel export (SheetJS) ── */
+  const exportXLSX=()=>{
+    if(!window.XLSX){alert('XLSX library not loaded. Try refreshing.');return;}
+    const X=window.XLSX;
+    const wb=X.utils.book_new();
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const pfx=yr+'-';
+    const byMo=(arr,m)=>arr.filter(x=>x.date&&x.date.startsWith(pfx+(m+1).toString().padStart(2,'0')));
+    const fmt=n=>Math.round(n*100)/100;
+
+    /* Sheet 1 — Annual Summary */
+    const sumRows=[['Month','Billed Income','Actual Received','Regular Expenses','Payroll','Net (Received − Exp − Pay)']];
+    MN.forEach((mn,i)=>{
+      const mInc=byMo(income,i).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
+      const mRec=byMo(income,i).filter(x=>!x.alloc&&x.status==='paid').reduce((s,x)=>s+(x.amount||0),0);
+      const mExp=byMo(expenses,i).filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
+      const mPay=byMo(payroll,i).reduce((s,x)=>s+(x.amount||0),0);
+      sumRows.push([`${mn} ${yr}`,fmt(mInc),fmt(mRec),fmt(mExp),fmt(mPay),fmt(mRec-mExp-mPay)]);
+    });
+    const totals=['TOTAL',...[1,2,3,4,5].map(ci=>fmt(sumRows.slice(1).reduce((s,r)=>s+(r[ci]||0),0)))];
+    sumRows.push(totals);
+    const ws1=X.utils.aoa_to_sheet(sumRows);
+    ws1['!cols']=[{wch:14},{wch:18},{wch:18},{wch:20},{wch:14},{wch:26}];
+    X.utils.book_append_sheet(wb,ws1,'Summary');
+
+    /* Sheet 2 — Income (all year) */
+    const incRows=[['Date','Type','Client','Account','Amount','Status','Note','Alloc']];
+    byYear(income).forEach(x=>{
+      const cl=clients.find(c=>c.id===x.clientId);
+      const ac=accounts.find(a=>a.id===x.accountId);
+      incRows.push([x.date,x.type,cl?.name||'',ac?.name||'',fmt(x.amount||0),x.status||'',x.note||'',x.alloc||'']);
+    });
+    const ws2=X.utils.aoa_to_sheet(incRows);
+    ws2['!cols']=[{wch:12},{wch:20},{wch:22},{wch:28},{wch:12},{wch:10},{wch:20},{wch:14}];
+    X.utils.book_append_sheet(wb,ws2,'Income');
+
+    /* Sheet 3 — Expenses (all year) */
+    const expRows=[['Date','Category','Account','Card','Amount','Type','Transfer ID']];
+    byYear(expenses).forEach(x=>{
+      const ac=accounts.find(a=>a.id===x.accountId);
+      const cd=cards.find(c=>c.id===x.cardId);
+      expRows.push([x.date,x.category,ac?.name||'',cd?.name||'',fmt(x.amount||0),x.alloc||'regular',x.transferId||'']);
+    });
+    const ws3=X.utils.aoa_to_sheet(expRows);
+    ws3['!cols']=[{wch:12},{wch:22},{wch:28},{wch:24},{wch:12},{wch:14},{wch:16}];
+    X.utils.book_append_sheet(wb,ws3,'Expenses');
+
+    /* Sheet 4 — Payroll */
+    const payRows=[['Date','Employee','Role','Account','Amount']];
+    byYear(payroll).forEach(x=>{
+      const em=employees.find(e=>e.id===x.employeeId);
+      const ac=accounts.find(a=>a.id===x.accountId);
+      payRows.push([x.date,em?.name||'',em?.role||'',ac?.name||'',fmt(x.amount||0)]);
+    });
+    const ws4=X.utils.aoa_to_sheet(payRows);
+    ws4['!cols']=[{wch:12},{wch:22},{wch:18},{wch:28},{wch:12}];
+    X.utils.book_append_sheet(wb,ws4,'Payroll');
+
+    /* Sheet 5 — Subscriptions */
+    const subRows=[['Name','Monthly Amount','Billing Day','Account','Card','Annual Cost']];
+    subs.forEach(x=>{
+      const ac=accounts.find(a=>a.id===x.accountId);
+      const cd=cards.find(c=>c.id===x.cardId);
+      subRows.push([x.name,fmt(x.amount||0),x.date||'',ac?.name||'',cd?.name||'',fmt((x.amount||0)*12)]);
+    });
+    const ws5=X.utils.aoa_to_sheet(subRows);
+    ws5['!cols']=[{wch:22},{wch:16},{wch:14},{wch:28},{wch:24},{wch:14}];
+    X.utils.book_append_sheet(wb,ws5,'Subscriptions');
+
+    /* Sheet 6 — Account Balances */
+    const accRows=[['Account','Calculated Balance (₱)']];
+    accounts.forEach(a=>accRows.push([a.name,fmt(accBal(a.id))]));
+    const totalBal=fmt(accounts.reduce((s,a)=>s+accBal(a.id),0));
+    accRows.push(['TOTAL',totalBal]);
+    const ws6=X.utils.aoa_to_sheet(accRows);
+    ws6['!cols']=[{wch:30},{wch:22}];
+    X.utils.book_append_sheet(wb,ws6,'Accounts');
+
+    /* Sheet 7 — Clients */
+    const clRows=[['Name','Email','Notes']];
+    clients.forEach(c=>clRows.push([c.name,c.email||'',c.notes||'']));
+    const ws7=X.utils.aoa_to_sheet(clRows);
+    ws7['!cols']=[{wch:26},{wch:28},{wch:40}];
+    X.utils.book_append_sheet(wb,ws7,'Clients');
+
+    /* Sheet 8 — Employees */
+    const empRows=[['Name','Role','Salary Rate','Frequency']];
+    employees.forEach(e=>empRows.push([e.name,e.role||'',fmt(e.salary||0),e.freq||'']));
+    const ws8=X.utils.aoa_to_sheet(empRows);
+    ws8['!cols']=[{wch:26},{wch:22},{wch:14},{wch:14}];
+    X.utils.book_append_sheet(wb,ws8,'Employees');
+
+    /* Sheet 9 — AI History */
+    if(aiHistory&&aiHistory.length>0){
+      const aiRows=[['Name','Date','Month','Score','Risk','Summary']];
+      aiHistory.forEach(h=>{
+        const r=h.result||{};
+        aiRows.push([h.name||'',h.date||'',h.monthKey||'',(r.score||{}).overall||'',(r.score||{}).risk||'',
+          (r.summary||'').slice(0,500)]);
+      });
+      const ws9=X.utils.aoa_to_sheet(aiRows);
+      ws9['!cols']=[{wch:30},{wch:14},{wch:10},{wch:8},{wch:12},{wch:60}];
+      X.utils.book_append_sheet(wb,ws9,'AI History');
+    }
+
+    X.writeFile(wb,`AbsidiFinance_${yr}_Full.xlsx`);
+    setShowSettings(false);
+  };
+
+  /* ── PDF financial report (print-to-PDF) ── */
+  const exportPDF=()=>{
+    const _sc='</scr'+'ipt>';/* avoid HTML-parser eating the outer <script> tag */
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const pfx=yr+'-';
+    const byMo=(arr,m)=>arr.filter(x=>x.date&&x.date.startsWith(pfx+(m+1).toString().padStart(2,'0')));
+    const fmt=n=>'₱'+Math.abs(n).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const totalInc=income.filter(x=>!x.alloc&&x.status==='paid').reduce((s,x)=>s+(x.amount||0),0);
+    const totalExp=expenses.filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
+    const totalPay=payroll.reduce((s,x)=>s+(x.amount||0),0);
+    const totalNet=totalInc-totalExp-totalPay;
+    const totalSubs=subs.reduce((s,x)=>s+(x.amount||0),0);
+
+    const monthRows=MN.map((mn,i)=>{
+      const mInc=byMo(income,i).filter(x=>!x.alloc&&x.status==='paid').reduce((s,x)=>s+(x.amount||0),0);
+      const mExp=byMo(expenses,i).filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
+      const mPay=byMo(payroll,i).reduce((s,x)=>s+(x.amount||0),0);
+      const mNet=mInc-mExp-mPay;
+      if(!mInc&&!mExp&&!mPay)return'';
+      return`<tr><td>${mn}</td><td class="num">${fmt(mInc)}</td><td class="num exp">${fmt(mExp)}</td><td class="num">${fmt(mPay)}</td><td class="num ${mNet>=0?'pos':'neg'}">${mNet>=0?'+':'−'}${fmt(Math.abs(mNet))}</td></tr>`;
+    }).filter(Boolean).join('');
+
+    /* Category breakdown */
+    const catTotals={};
+    byYear(expenses).filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').forEach(x=>{catTotals[x.category]=(catTotals[x.category]||0)+(x.amount||0);});
+    const catRows=Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${c}</td><td class="num exp">${fmt(v)}</td><td>${((v/totalExp)*100).toFixed(1)}%</td></tr>`).join('');
+
+    /* Client income breakdown */
+    const clTotals={};
+    byYear(income).filter(x=>!x.alloc&&x.status==='paid').forEach(x=>{const cl=clients.find(c=>c.id===x.clientId);const n=cl?.name||'(No client)';clTotals[n]=(clTotals[n]||0)+(x.amount||0);});
+    const clRows=Object.entries(clTotals).sort((a,b)=>b[1]-a[1]).map(([n,v])=>`<tr><td>${n}</td><td class="num">${fmt(v)}</td><td>${((v/totalInc)*100).toFixed(1)}%</td></tr>`).join('');
+
+    /* AI history highlights */
+    const aiHighlights=(aiHistory||[]).slice(0,5).map(h=>{
+      const r=h.result||{};
+      return`<div class="ai-entry"><div class="ai-title">${h.name||''} <span class="ai-score">${(r.score||{}).overall||'?'}/10</span></div><p>${(r.summary||'No summary available.').slice(0,400)}${(r.summary||'').length>400?'…':''}</p></div>`;
+    }).join('');
+
+    const html=`<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>AbsidiFinance Financial Report ${yr}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;color:#1e293b;background:#fff;font-size:13px;line-height:1.5}
+.page{max-width:900px;margin:0 auto;padding:32px 28px}
+.header{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:#fff;padding:28px 32px;border-radius:14px;margin-bottom:24px}
+.header h1{font-size:26px;font-weight:900;letter-spacing:-0.5px}
+.header p{color:rgba(255,255,255,.75);font-size:13px;margin-top:4px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px}
+.kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:4px}
+.kpi-val{font-size:20px;font-weight:900;color:#1e293b}
+.kpi-val.green{color:#059669}.kpi-val.red{color:#dc2626}.kpi-val.purple{color:#7c3aed}
+.section{margin-bottom:24px}
+h2{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:#f1f5f9;text-align:left;padding:7px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#475569}
+td{padding:6px 10px;border-bottom:1px solid #f1f5f9}
+tr:last-child td{border-bottom:none}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.exp{color:#dc2626}.pos{color:#059669}.neg{color:#dc2626}
+.tfoot td{font-weight:800;background:#f8fafc;font-size:13px}
+.ai-entry{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:10px}
+.ai-title{font-weight:800;color:#4f46e5;margin-bottom:4px}
+.ai-score{background:#4f46e5;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;margin-left:6px}
+.subs-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sub-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
+.footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:0}}
+</style>
+</head>
+<body><div class="page">
+<div class="header">
+  <h1>AbsidiFinance PH — Financial Report</h1>
+  <p>Year ${yr} · Generated ${new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})} · ${getCurrentUsername()||'Absidi'}</p>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">Total Received</div><div class="kpi-val green">${fmt(totalInc)}</div></div>
+  <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-val red">${fmt(totalExp)}</div></div>
+  <div class="kpi"><div class="kpi-label">Total Payroll</div><div class="kpi-val purple">${fmt(totalPay)}</div></div>
+  <div class="kpi"><div class="kpi-label">Net Savings</div><div class="kpi-val ${totalNet>=0?'green':'red'}">${totalNet>=0?'+':'−'}${fmt(Math.abs(totalNet))}</div></div>
+</div>
+
+<div class="section">
+  <h2>Monthly Breakdown</h2>
+  <table>
+    <thead><tr><th>Month</th><th style="text-align:right">Received</th><th style="text-align:right">Expenses</th><th style="text-align:right">Payroll</th><th style="text-align:right">Net</th></tr></thead>
+    <tbody>${monthRows}</tbody>
+    <tfoot><tr class="tfoot"><td>TOTAL</td><td class="num">${fmt(totalInc)}</td><td class="num exp">${fmt(totalExp)}</td><td class="num">${fmt(totalPay)}</td><td class="num ${totalNet>=0?'pos':'neg'}">${totalNet>=0?'+':'−'}${fmt(Math.abs(totalNet))}</td></tr></tfoot>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Expense Categories</h2>
+  <table>
+    <thead><tr><th>Category</th><th style="text-align:right">Total</th><th>% of Expenses</th></tr></thead>
+    <tbody>${catRows}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Income by Client</h2>
+  <table>
+    <thead><tr><th>Client</th><th style="text-align:right">Total Received</th><th>% of Income</th></tr></thead>
+    <tbody>${clRows}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Subscriptions (${subs.length} active · ${fmt(totalSubs)}/mo · ${fmt(totalSubs*12)}/yr)</h2>
+  <div class="subs-grid">
+    ${subs.map(x=>`<div class="sub-item"><span>${x.name}</span><strong>${fmt(x.amount||0)}/mo</strong></div>`).join('')}
+  </div>
+</div>
+
+<div class="section">
+  <h2>Account Balances</h2>
+  <table>
+    <thead><tr><th>Account</th><th style="text-align:right">Balance</th></tr></thead>
+    <tbody>${accounts.map(a=>`<tr><td>${a.name}</td><td class="num">${fmt(accBal(a.id))}</td></tr>`).join('')}</tbody>
+    <tfoot><tr class="tfoot"><td>TOTAL</td><td class="num">${fmt(accounts.reduce((s,a)=>s+accBal(a.id),0))}</td></tr></tfoot>
+  </table>
+</div>
+
+${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysis History (${aiHistory.length} saved)</h2>${aiHighlights}</div>`:''}
+
+<div class="footer">AbsidiFinance PH · ${yr} Annual Report · Confidential</div>
+</div>
+<script>window.onload=()=>window.print();${_sc}
+</body></html>`;
+
+    const w=window.open('','_blank','width=950,height=700');
+    w.document.write(html);w.document.close();
     setShowSettings(false);
   };
 
@@ -1368,8 +2005,17 @@ function MainApp({onLogout}){
                     <button className="dmi-btn" onClick={()=>setDarkMode(v=>!v)}>
                       <span style={{fontSize:'15px'}}>{darkMode?'☀️':'🌙'}</span>{darkMode?'Light Mode':'Dark Mode'}
                     </button>
-                    <button className="dmi-btn" onClick={exportCSV} style={{color:'#4f46e5',borderTop:'1px solid var(--border)'}}
-                    ><Ico n="download" s={15} c="#4f46e5"/>Export CSV ({yr})</button>
+                    <div style={{borderTop:'1px solid var(--border)',padding:'6px 8px 4px'}}>
+                      <p style={{fontSize:'10px',fontWeight:'700',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'4px',paddingLeft:'8px'}}>Export {yr}</p>
+                      <button className="dmi-btn" onClick={exportCSV} style={{color:'#4f46e5'}}><Ico n="download" s={15} c="#4f46e5"/>Export CSV — Full Backup</button>
+                      <button className="dmi-btn" onClick={exportXLSX} style={{color:'#059669'}}><Ico n="download" s={15} c="#059669"/>Export Excel — all sheets</button>
+                      <button className="dmi-btn" onClick={exportPDF} style={{color:'#7c3aed'}}><Ico n="download" s={15} c="#7c3aed"/>Export PDF Report</button>
+                    </div>
+                    <div style={{borderTop:'1px solid var(--border)',padding:'6px 8px 4px'}}>
+                      <p style={{fontSize:'10px',fontWeight:'700',color:'var(--text4)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'4px',paddingLeft:'8px'}}>Import</p>
+                      <input type="file" ref={importInputRef} accept=".csv" style={{display:'none'}} onChange={handleImportFile}/>
+                      <button className="dmi-btn" onClick={()=>{setShowSettings(false);importInputRef.current?.click();}} style={{color:'#0ea5e9'}}><Ico n="income" s={15} c="#0ea5e9"/>Clear &amp; Import CSV</button>
+                    </div>
                     <button className="dmi-btn" onClick={()=>{setShowSettings(false);setShowReset(true);}} style={{color:'#ef4444',borderTop:'1px solid var(--border)'}}
                     ><Ico n="warning" s={15} c="#ef4444"/>Reset All Data</button>
                     <button className="dmi-btn" onClick={onLogout} style={{color:'#64748b',borderTop:'1px solid var(--border)'}}
@@ -1437,7 +2083,7 @@ function MainApp({onLogout}){
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
+        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} exportXLSX={exportXLSX} exportPDF={exportPDF} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='loans'&&<LoansTab loans={loans} setLoans={setLoans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} showBalToast={showBalToast}/>}
@@ -1485,7 +2131,32 @@ function MainApp({onLogout}){
       })()}
 
       {/* RESET MODAL */}
-      {showReset&&(
+      {importData&&(
+        <div className="modal-overlay" onClick={()=>setImportData(null)}>
+          <div className="card fade" style={{width:'100%',maxWidth:'400px',padding:'28px'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+              <div style={{background:'#e0f2fe',borderRadius:'10px',padding:'8px',display:'flex'}}><Ico n="income" s={20} c="#0ea5e9"/></div>
+              <h2 style={{color:'#0ea5e9',fontWeight:'800',margin:0,fontSize:'18px'}}>Import Preview</h2>
+            </div>
+            <p style={{color:'var(--text2)',fontSize:'13px',margin:'0 0 14px'}}>The following data was found in the file. Duplicates were automatically removed.</p>
+            <div style={{background:'var(--bg2)',borderRadius:'10px',padding:'12px 16px',marginBottom:'16px',fontSize:'13px',lineHeight:'1.8'}}>
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'var(--text3)'}}>Income entries</span><strong style={{color:'var(--text)'}}>{importData.newIncome.length}</strong></div>
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'var(--text3)'}}>Expense entries</span><strong style={{color:'var(--text)'}}>{importData.newExpenses.length}</strong></div>
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'var(--text3)'}}>Payroll entries</span><strong style={{color:'var(--text)'}}>{importData.newPayroll.length}</strong></div>
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'var(--text3)'}}>Subscriptions</span><strong style={{color:'var(--text)'}}>{importData.newSubs.length}</strong></div>
+            </div>
+            <div style={{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:'8px',padding:'10px 14px',marginBottom:'18px',fontSize:'12px',color:'#92400e'}}>
+              ⚠️ This will <strong>replace</strong> all current income, expenses, payroll, and subscriptions. Your accounts, clients, employees, and settings will remain. This cannot be undone.
+            </div>
+            <div style={{display:'flex',gap:'10px'}}>
+              <button className="btn bs" style={{flex:1,justifyContent:'center'}} onClick={()=>setImportData(null)}>Cancel</button>
+              <button className="btn" style={{flex:1,justifyContent:'center',background:'#0ea5e9',color:'#fff'}} onClick={()=>doImport(importData)}>Import &amp; Replace</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+            {showReset&&(
         <div className="modal-overlay">
           <div className="card fade" style={{width:'100%',maxWidth:'380px',padding:'28px'}}>
             <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
@@ -4696,7 +5367,7 @@ function PayrollTab({payroll,allPayroll,setPayroll,employees,setEmployees,accoun
 }
 
 /* ════════  BUDGET  ════════ */
-function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,budgetFixed,lastMonthInc,exportCSV,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
+function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay,mPayActual,expectedPayroll,spendBudget,dailyCap,daysLeft,tithe,invest,desires,savings,totalFixed,budgetFixed,lastMonthInc,exportCSV,exportXLSX,exportPDF,mTitheActual,mInvestActual,mSavingsActual,mDesiresActual,desiresCarryPenalty,investMovedThisMonth,accounts,accBal,emergencyAcctId,setEmergencyAcctId,emergencyMonths,setEmergencyMonths,expenses}){
 
   /* Category budget limits state */
   const catBudgets=settings.categoryBudgets||[];
@@ -5120,9 +5791,17 @@ function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay
       </div>
 
       {/* EXPORT */}
-      <button className="btn bp" onClick={exportCSV} style={{justifyContent:'center'}}>
-        <Ico n="download" s={14} c="#fff"/>Export CSV
-      </button>
+      <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+        <button className="btn bp" onClick={exportCSV} style={{justifyContent:'center',flex:1}}>
+          <Ico n="download" s={14} c="#fff"/>CSV
+        </button>
+        <button className="btn" onClick={exportXLSX} style={{justifyContent:'center',flex:1,background:'#059669',color:'#fff'}}>
+          <Ico n="download" s={14} c="#fff"/>Excel
+        </button>
+        <button className="btn" onClick={exportPDF} style={{justifyContent:'center',flex:1,background:'#7c3aed',color:'#fff'}}>
+          <Ico n="download" s={14} c="#fff"/>PDF
+        </button>
+      </div>
 
     </div>
   );
