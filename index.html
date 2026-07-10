@@ -475,9 +475,27 @@ const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifi
    This prevents the race condition where a new device initialises state as [] from empty
    localStorage and immediately overwrites Firebase with empty data before the snapshot fires. ── */
 const _fbReady={};
+const _GUARDED_KEYS=['ph_income','ph_exp','ph_subs','ph_payroll','ph_clients','ph_accts','ph_cards','ph_emps'];
 const ls={
   get:(k,def)=>{try{return JSON.parse(localStorage.getItem(k))??def}catch{return def}},
-  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));if(db&&_fbReady[k])db.collection('absidifinance').doc(k).set({v:JSON.stringify(v)}).catch(()=>{})}catch{}},
+  set:(k,v)=>{
+    try{
+      /* Safety guard: never overwrite Firebase with an empty collection when we
+         know the key previously held data (protects against race-condition wipes) */
+      const baseK=k.replace(/_[A-Za-z0-9]+$/,'');
+      if(db&&_fbReady[k]&&Array.isArray(v)&&v.length===0&&_GUARDED_KEYS.includes(baseK)){
+        const prev=localStorage.getItem(k);
+        let prevArr=null;try{prevArr=prev?JSON.parse(prev):null;}catch{}
+        if(Array.isArray(prevArr)&&prevArr.length>0){
+          console.warn('AbsidiFinance: blocked empty-array write to Firebase for',k,'(had',prevArr.length,'entries)');
+          localStorage.setItem(k,JSON.stringify(v));/* update local only */
+          return;
+        }
+      }
+      localStorage.setItem(k,JSON.stringify(v));
+      if(db&&_fbReady[k])db.collection('absidifinance').doc(k).set({v:JSON.stringify(v)}).catch(()=>{});
+    }catch{}
+  },
   del:(k)=>{try{localStorage.removeItem(k);}catch{}},
   clearUser:(id)=>{
     ['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_loans','ph_ai_history'].forEach(k=>{
@@ -1324,11 +1342,22 @@ function MainApp({onLogout}){
         if(doc.metadata.hasPendingWrites)return;
         if(doc.exists){const d=doc.data();if(d&&d.v!==undefined){try{const v=JSON.parse(d.v);localStorage.setItem(docKey,d.v);set(v);}catch(e){}}}
         else{
-          /* Firebase doc doesn't exist → seed historical data if available */
-          let seedV=null;
-          if(k==='ph_income'){const cl=JSON.parse(localStorage.getItem('ph_clients_'+userId)||'[]');seedV=_buildSeedInc(cl);}
-          else if(k==='ph_exp'){seedV=_buildSeedExp();}
-          if(seedV){ls.set(docKey,seedV);set(seedV);}
+          /* Firebase doc doesn't exist.
+             If this device's localStorage still has data, push it back up to Firebase
+             (auto-restore after an accidental wipe). Never seed hardcoded data —
+             use the Clear & Import CSV feature if a full restore is needed. */
+          const _lsRaw=localStorage.getItem(docKey);
+          if(_lsRaw&&_lsRaw!=='null'&&_lsRaw!=='[]'&&_lsRaw!=='{}'){
+            try{
+              const _lsVal=JSON.parse(_lsRaw);
+              const _hasData=Array.isArray(_lsVal)?_lsVal.length>0:(_lsVal!=null);
+              if(_hasData){
+                /* Restore this device's localStorage data back to Firebase */
+                db.collection('absidifinance').doc(docKey).set({v:_lsRaw}).catch(()=>{});
+                console.info('AbsidiFinance: restored',docKey,'from localStorage → Firebase');
+              }
+            }catch(_e){}
+          }
         }
       });
     });
