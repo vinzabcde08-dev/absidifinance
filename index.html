@@ -591,6 +591,7 @@ function LoginScreen({onLogin}){
   const[err,setErr]=useState('');
   const[busy,setBusy]=useState(false);
   const[showReset,setShowReset]=useState(false);
+  const[showForgotPw,setShowForgotPw]=useState(false);
 
   const signInWithGoogle=async()=>{
     if(!auth){setErr('Firebase not ready. Check your config.');return;}
@@ -706,6 +707,23 @@ function LoginScreen({onLogin}){
     }
   };
 
+  /* ── FORGOT PASSWORD ── */
+  const forgotPw=async()=>{
+    if(!auth){setErr('Firebase not connected.');return;}
+    const uname=selectedAcc?selectedAcc.username:newUser.trim();
+    if(!uname){setErr('Enter your username first.');return;}
+    setBusy(true);setErr('');
+    try{
+      await auth.sendPasswordResetEmail(toEmail(uname));
+      setBusy(false);
+      alert('Reset email sent!\n\nNote: AbsidiFinance uses usernames (not real emails) so the reset email may not arrive. Try "Sign in with Google" for easier recovery.');
+    }catch(e){
+      setBusy(false);
+      if(e.code==='auth/user-not-found')setErr('No account found with that username.');
+      else setErr('Could not send reset email. Try signing in with Google instead.');
+    }
+  };
+
   /* ── REMOVE ACCOUNT ── */
   const resetAccount=async()=>{
     setBusy(true);
@@ -737,6 +755,37 @@ function LoginScreen({onLogin}){
       </div>
       <h1 style={{fontSize:'22px',fontWeight:'800',color:'#1e293b',margin:'0 0 3px'}}>AbsidiFinance</h1>
       {firebaseReady&&<span style={{fontSize:'11px',color:'#10b981',fontWeight:'700',display:'inline-flex',alignItems:'center',gap:'4px',marginTop:'4px'}}><Ico n="fire" s={12} c="#10b981"/>Firebase connected</span>}
+    </div>
+  );
+
+  /* FORGOT PASSWORD SCREEN */
+  if(showForgotPw)return(
+    <div style={BG}>
+      <div className="card fade" style={CARD}>
+        <Logo/>
+        <div style={{textAlign:'center',marginBottom:'20px'}}>
+          <div style={{fontSize:'40px',marginBottom:'12px'}}>🔑</div>
+          <h2 style={{fontSize:'17px',fontWeight:'800',color:'#1e293b',margin:'0 0 10px'}}>Forgot your password?</h2>
+          <p style={{color:'#64748b',fontSize:'13px',margin:'0 0 10px',lineHeight:'1.6'}}>
+            AbsidiFinance uses <strong>usernames</strong> instead of real emails, so automatic password reset emails won&apos;t reach your inbox.
+          </p>
+          <p style={{color:'#64748b',fontSize:'13px',margin:0,lineHeight:'1.6'}}>
+            The easiest fix: <strong>sign in with Google</strong>. Once you&apos;re in, use <em>Settings → Transfer All Data to Google Account</em> to bring your data over from your old account.
+          </p>
+        </div>
+        <div className="col">
+          <GoogleBtn/>
+          <div style={{background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:'10px',padding:'12px 14px',fontSize:'12px',color:'#0369a1',lineHeight:'1.5'}}>
+            💡 <strong>Still logged in on another device?</strong><br/>
+            Open AbsidiFinance there → Settings ⚙️ → <em>Transfer All Data to Google Account</em> — then come back and sign in with Google here.
+          </div>
+          <button onClick={forgotPw} disabled={busy} style={{background:'none',border:'1px solid #e2e8f0',borderRadius:'9px',color:'#64748b',fontSize:'12px',cursor:'pointer',padding:'9px',width:'100%',opacity:busy?.6:1}}>
+            {busy?'Sending…':'Try sending a reset email anyway'}
+          </button>
+          {err&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',padding:'10px 14px',borderRadius:'9px',fontSize:'13px'}}>{err}</div>}
+          <button onClick={()=>setShowForgotPw(false)} style={{background:'none',border:'none',color:'#94a3b8',fontSize:'12px',cursor:'pointer',textDecoration:'underline',padding:0,textAlign:'center'}}>← Back to login</button>
+        </div>
+      </div>
     </div>
   );
 
@@ -778,7 +827,7 @@ function LoginScreen({onLogin}){
           <button className="btn bp" style={{width:'100%',justifyContent:'center',padding:'12px',opacity:busy?.6:1}} onClick={login} disabled={busy}>{busy?'Signing in…':'Login'}</button>
           <div style={{display:'flex',justifyContent:'space-between'}}>
             <button onClick={()=>{setMode('pick');setErr('');}} style={{background:'none',border:'none',color:'#94a3b8',fontSize:'12px',cursor:'pointer',textDecoration:'underline',padding:0}}>← Back</button>
-            <button onClick={()=>setShowReset(true)} style={{background:'none',border:'none',color:'#ef4444',fontSize:'12px',cursor:'pointer',textDecoration:'underline',padding:0}}>Forgot password?</button>
+            <button onClick={()=>setShowForgotPw(true)} style={{background:'none',border:'none',color:'#6366f1',fontSize:'12px',cursor:'pointer',textDecoration:'underline',padding:0}}>Forgot password?</button>
           </div>
         </div>
       </div>
@@ -812,6 +861,7 @@ function LoginScreen({onLogin}){
             {busy?(authTab==='signin'?'Signing in…':'Creating…'):(authTab==='signin'?'Sign In':'Create Account')}
           </button>
           {localUsers.length>0&&<button onClick={()=>{setMode('pick');setErr('');setNewUser('');setPass('');}} style={{background:'none',border:'none',color:'#94a3b8',fontSize:'12px',cursor:'pointer',textDecoration:'underline',textAlign:'center',padding:'2px 0'}}>← Back to saved accounts</button>}
+          {authTab==='signin'&&<button onClick={()=>setShowForgotPw(true)} style={{background:'none',border:'none',color:'#6366f1',fontSize:'12px',cursor:'pointer',textDecoration:'underline',textAlign:'center',padding:'2px 0',display:'block',margin:'0 auto'}}>Forgot password?</button>}
           <p style={{fontSize:'11px',color:firebaseReady?'#10b981':'#94a3b8',textAlign:'center',margin:'2px 0 0',fontWeight:firebaseReady?'700':'400'}}>{firebaseReady?'✓ Credentials stored securely in Firebase':'Credentials saved locally in this browser.'}</p>
         </div>
       </div>
@@ -1158,7 +1208,26 @@ function App(){
       return;
     }
     /* Handle redirect result first (for mobile Google sign-in) */
-    auth.getRedirectResult().catch(()=>{});
+    auth.getRedirectResult().then(async(result)=>{
+      if(result&&result.user){
+        const pending=localStorage.getItem('_af_pending_transfer');
+        if(pending){
+          try{
+            const{oldUid,data}=JSON.parse(pending);
+            const newUid=result.user.uid;
+            if(newUid&&newUid!==oldUid&&data){
+              for(const[k,v]of Object.entries(data)){
+                const newDocKey=`${k}_${newUid}`;
+                localStorage.setItem(newDocKey,v);
+                if(db){try{await db.collection('absidifinance').doc(newDocKey).set({v});}catch(e){}}
+              }
+              alert('All data transferred to your Google account!');
+            }
+          }catch(e){}
+          localStorage.removeItem('_af_pending_transfer');
+        }
+      }
+    }).catch(()=>{});
     const unsub=auth.onAuthStateChanged(async user=>{
       if(user){
         ls.set('af_current_id',user.uid);
@@ -1828,6 +1897,64 @@ function MainApp({onLogout}){
     setShowSettings(false);
   };
 
+  /* ── TRANSFER ALL DATA TO GOOGLE ACCOUNT ── */
+  const transferToGoogle=async()=>{
+    if(!auth){alert('Firebase not connected. Cannot transfer.');return;}
+    const oldUid=auth.currentUser?.uid;
+    if(!oldUid){alert('Not signed in.');return;}
+    if(!window.confirm('This will copy ALL your data (income, expenses, payroll, accounts, clients, cards, employees, subscriptions) to your Google account.\n\nAfter the transfer you will be signed in with Google.\n\nMake sure you pick the RIGHT Google account in the popup.\n\nContinue?'))return;
+
+    const KEYS=['ph_income','ph_exp','ph_subs','ph_payroll','ph_clients','ph_accts','ph_cards','ph_emps'];
+    const dataMap={};
+
+    /* Read from localStorage first — always accessible without auth change */
+    for(const k of KEYS){
+      const lsKey=`${k}_${oldUid}`;
+      const lsVal=localStorage.getItem(lsKey);
+      if(lsVal&&lsVal!=='null'&&lsVal!=='[]'&&lsVal!=='{}')dataMap[k]=lsVal;
+    }
+    /* Fill gaps from Firestore while still authenticated as current user */
+    if(db){
+      for(const k of KEYS){
+        if(dataMap[k])continue;
+        try{
+          const doc=await db.collection('absidifinance').doc(`${k}_${oldUid}`).get();
+          if(doc.exists)dataMap[k]=doc.data().v;
+        }catch(e){}
+      }
+    }
+    if(Object.keys(dataMap).length===0){alert('No data found to transfer. Make sure you are logged in to the right account.');return;}
+
+    /* Sign in with Google — this changes auth state */
+    try{
+      const provider=new firebase.auth.GoogleAuthProvider();
+      let result;
+      try{result=await auth.signInWithPopup(provider);}
+      catch(e){
+        if(e.code==='auth/popup-blocked'||e.code==='auth/cancelled-popup-request'){
+          localStorage.setItem('_af_pending_transfer',JSON.stringify({oldUid,data:dataMap}));
+          await auth.signInWithRedirect(provider);
+          return;
+        }
+        if(e.code==='auth/popup-closed-by-user')return;
+        throw e;
+      }
+      const newUid=result.user.uid;
+      if(newUid===oldUid){alert('You are already signed in with this Google account — no transfer needed!');return;}
+
+      /* Write all data to new Google UID keys */
+      for(const[k,v]of Object.entries(dataMap)){
+        const newDocKey=`${k}_${newUid}`;
+        localStorage.setItem(newDocKey,v);
+        if(db){try{await db.collection('absidifinance').doc(newDocKey).set({v});}catch(e){}}
+      }
+      alert('All data transferred to your Google account! Reloading now…');
+      setTimeout(()=>window.location.reload(),400);
+    }catch(e){
+      alert('Transfer failed: '+(e.message||e.code||'Unknown error'));
+    }
+  };
+
   /* ── PDF financial report (print-to-PDF) ── */
   const exportPDF=()=>{
     const _sc='</scr'+'ipt>';/* avoid HTML-parser eating the outer <script> tag */
@@ -2047,8 +2174,12 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
                     </div>
                     <button className="dmi-btn" onClick={()=>{setShowSettings(false);setShowReset(true);}} style={{color:'#ef4444',borderTop:'1px solid var(--border)'}}
                     ><Ico n="warning" s={15} c="#ef4444"/>Reset All Data</button>
-                    <button className="dmi-btn" onClick={onLogout} style={{color:'#64748b',borderTop:'1px solid var(--border)'}}
-                    ><Ico n="logout" s={15} c="#64748b"/>Logout</button>
+                    <button className="dmi-btn" onClick={()=>{setShowSettings(false);transferToGoogle();}} style={{color:'#4285F4',borderTop:'1px solid var(--border)'}}>
+                      <svg viewBox="0 0 48 48" width="15" height="15" style={{flexShrink:0}}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+                      Transfer to Google Account
+                    </button>
+                    <button className="dmi-btn" onClick={onLogout} style={{color:'#64748b',borderTop:'1px solid var(--border)'}}>
+                    <Ico n="logout" s={15} c="#64748b"/>Logout</button>
                   </div>
                 )}
               </div>
