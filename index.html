@@ -1513,6 +1513,8 @@ function MainApp({onLogout}){
   /* mInc = real income only — excludes transfer_in, allocation_in, savings_in, investment_in
      (those are internal money movements, not actual earned income) */
   const mInc=byMonth(income).filter(x=>!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
+  /* Non-titheable income — recorded for balance & AI, excluded from tithe base */
+  const mIncNoTithe=byMonth(income).filter(x=>!x.alloc&&x.noTithe).reduce((s,x)=>s+(x.amount||0),0);
   const expectedFromClients=clients.reduce((s,c)=>s+(c.rate||0)*(fxRates[c.currency]||57),0);
   /* mPay = actual payroll paid — from Payroll tab entries + any expenses tagged category 'Payroll' */
   const mPayFromExp=byMonth(expenses).filter(x=>x.category==='Payroll'&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
@@ -1599,7 +1601,7 @@ function MainApp({onLogout}){
       const mk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       const logEntry=titheLog.find(t=>(t.month||t.week)===mk);
       if(logEntry?.skipped)continue;
-      const mI=income.filter(x=>!x.alloc&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const mI=income.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       if(!mI)continue;
       const mP=payroll.filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       const owed=Math.max(0,(mI-mP)*(settings.tithePct||10)/100);
@@ -1631,7 +1633,7 @@ function MainApp({onLogout}){
      - Never uses the 3-month average — always actual income */
   const investActualAmt=budgetFixed?(settings.investAmt||0):(mInc*settings.investPct)/100;
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
-  const titheBase=Math.max(0,(mInc-mPay)-(investMovedThisMonth?investActualAmt:0));
+  const titheBase=Math.max(0,(mInc-mIncNoTithe-mPay)-(investMovedThisMonth?investActualAmt:0));
   const tithe=(titheBase*settings.tithePct)/100; /* always % — tithe is non-negotiable, not a fixed amount */
   /* Desires carry-over: if last month overspent, penalise this month */
   const lastMK=(()=>{const d=new Date(yr,selMonth-1,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;})();
@@ -1649,7 +1651,7 @@ function MainApp({onLogout}){
   const totalFixed=settings.tithePct+settings.investPct+settings.desiresPct+settings.savingsPct; /* % total, used in % mode */
 
   /* Per-account tithe breakdown — real income only, no transfers */
-  const mIncByAcct=byMonth(income).filter(x=>x.accountId&&!x.alloc);
+  const mIncByAcct=byMonth(income).filter(x=>x.accountId&&!x.alloc&&!x.noTithe);
   const totalMInc=mIncByAcct.reduce((s,x)=>s+(x.amount||0),0);
   const byAcctTithe=accounts.map(a=>{
     const aInc=mIncByAcct.filter(x=>x.accountId===a.id).reduce((s,x)=>s+(x.amount||0),0);
@@ -1667,13 +1669,13 @@ function MainApp({onLogout}){
 
   const exportCSV=()=>{
     let csv=`AbsidiFinance Export — Year ${yr}\n\n`;
-    csv+=`INCOME\nDate,Type,Client,Account,Amount,Status,Alloc,Note\n`;
+    csv+=`INCOME\nDate,Type,Client,Account,Amount,Status,Alloc,Note,NoTithe\n`;
     byYear(income).forEach(x=>{
       const cl=clients.find(c=>c.id===x.clientId);
       const ac=accounts.find(a=>a.id===x.accountId);
       const note=(x.note||'').replace(/"/g,'""');
       const cln=(cl?.name||'').replace(/"/g,'""');
-      csv+=`${x.date},${x.type},"${cln}","${ac?.name||''}",${x.amount},${x.status||''},${x.alloc||''},"${note}"\n`;
+      csv+=`${x.date},${x.type},"${cln}","${ac?.name||''}",${x.amount},${x.status||''},${x.alloc||''},"${note}",${x.noTithe?'true':''}\n`;
     });
     csv+=`\nEXPENSES\nDate,Category,Account,Card,Amount,Alloc,TransferID,Note\n`;
     byYear(expenses).forEach(x=>{
@@ -1729,7 +1731,7 @@ function MainApp({onLogout}){
       const clientId=clients.find(c=>c.name===cln)?.id||'';
       const accountId=accounts.find(a=>a.name===acn)?.id||'';
       const alloc=row.Alloc!==undefined?(row.Alloc||''):(type==='Account Transfer'?'transfer_in':type==='Allocation Transfer In'?'allocation_in':'');
-      newIncome.push({id:uid(),date,type,clientId,accountId,amount,status:row.Status||'',alloc,note:row.Note||'',transferId:row.TransferID||''});
+      newIncome.push({id:uid(),date,type,clientId,accountId,amount,status:row.Status||'',alloc,note:row.Note||'',transferId:row.TransferID||'',noTithe:row.NoTithe==='true'});
     });
     const newExpenses=[];
     const _tidMap={};
@@ -4543,16 +4545,17 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
   const[status,setStatus]=useState('Paid');
   const[editId,setEditId]=useState(null);
   const[filterAccId,setFilterAccId]=useState('');
+  const[noTithe,setNoTithe]=useState(false);
 
-  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setType('VA Salary');setClientId('');setAccountId('');setStatus('Paid');};
-  const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');};
+  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setType('VA Salary');setClientId('');setAccountId('');setStatus('Paid');setNoTithe(false);};
+  const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');setNoTithe(i.noTithe||false);};
   const save=()=>{
     if(!amount)return;
     const amt=parseFloat(amount)||0;
     if(editId){
-      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:amt,type,clientId,accountId,status}:x));
+      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:amt,type,clientId,accountId,status,noTithe}:x));
     }else{
-      setIncome([...allIncome,{id:uid(),date,amount:amt,type,clientId,accountId,status}]);
+      setIncome([...allIncome,{id:uid(),date,amount:amt,type,clientId,accountId,status,noTithe}]);
     }
     if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'income'),80);
     reset();
@@ -4569,6 +4572,15 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
           <div><span className="fl">Deposited To</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
           <div><span className="fl">Status</span><select className="fi" value={status} onChange={e=>setStatus(e.target.value)}><option>Paid</option><option>Pending</option></select></div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:noTithe?'#fef9ec':'var(--card2)',border:'1.5px solid',borderColor:noTithe?'#fbbf24':'var(--border)',borderRadius:'9px',cursor:'pointer',transition:'all .15s'}} onClick={()=>setNoTithe(v=>!v)}>
+            <div>
+              <p style={{fontWeight:'700',fontSize:'13px',color:noTithe?'#92400e':'var(--text2)',margin:'0 0 2px'}}>No Tithe Required</p>
+              <p style={{fontSize:'11px',color:noTithe?'#b45309':'var(--text4)',margin:0}}>{noTithe?'Excluded from tithe calculation':'Tap to mark as non-titheable'}</p>
+            </div>
+            <div style={{width:'36px',height:'20px',borderRadius:'99px',background:noTithe?'#f59e0b':'var(--border)',position:'relative',flexShrink:0,transition:'background .15s'}}>
+              <div style={{position:'absolute',top:'2px',left:noTithe?'18px':'2px',width:'16px',height:'16px',borderRadius:'50%',background:'#fff',boxShadow:'0 1px 3px rgba(0,0,0,.2)',transition:'left .15s'}}/>
+            </div>
+          </div>
           <div style={{display:'flex',gap:'8px'}}>
             <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}>
               <Ico n={editId?'check':'income'} s={14} c="#fff"/>{editId?'Save Changes':'Add Income'}
@@ -4611,6 +4623,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
                     <span style={{fontWeight:'700',color:'#1e293b',fontSize:'13px'}}>{i.type}</span>
                     <span className="badge" style={{background:i.status==='Paid'?'#f0fdf4':'#fff7ed',color:i.status==='Paid'?'#10b981':'#f59e0b'}}>{i.status||'Paid'}</span>
                     {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
+                    {i.noTithe&&<span className="badge" style={{background:'#fef9ec',color:'#b45309',border:'1px solid #fde68a'}}>No Tithe</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{i.date}{cl?` · ${cl.name}`:''}{ac?` → ${ac.name}`:''}</p>
                 </div>
