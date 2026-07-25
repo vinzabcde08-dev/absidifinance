@@ -2427,11 +2427,14 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
 function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expenses,setExpenses,income,setIncome,investLog,setInvestLog}){
   const[dest,setDest]=useState('external');
   const[destAcct,setDestAcct]=useState('');
+  const[srcAcct,setSrcAcct]=useState('');
   const markDone=(destLabel)=>{
     const note=`Invest ${curMonthKey}`;
-    const srcEntries=byAcctTithe.length>0
-      ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
-      :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
+    const srcEntries=srcAcct
+      ?[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:srcAcct,alloc:'investment_out',note}]
+      :byAcctTithe.length>0
+        ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
+        :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
     setExpenses(prev=>[...(prev||[]),...srcEntries]);
     if(dest==='account'&&destAcct){
       setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:invest,type:'Investment Transfer',accountId:destAcct,alloc:'investment_in',note}]);
@@ -2446,13 +2449,19 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
           <button key={o.v} onClick={()=>setDest(o.v)} style={{padding:'6px 14px',borderRadius:'7px',border:`2px solid ${dest===o.v?'#6366f1':'#e2e8f0'}`,background:dest===o.v?'#6366f1':'transparent',color:dest===o.v?'#fff':'#64748b',fontWeight:'700',fontSize:'13px',cursor:'pointer'}}>{o.l}</button>
         ))}
       </div>
+      {dest==='external'&&(
+        <select className="fi" style={{marginBottom:'10px'}} value={srcAcct} onChange={e=>setSrcAcct(e.target.value)}>
+          <option value="">— All accounts (proportional) —</option>
+          {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+        </select>
+      )}
       {dest==='account'&&(
         <select className="fi" style={{marginBottom:'10px'}} value={destAcct} onChange={e=>setDestAcct(e.target.value)}>
           <option value="">— Pick destination account —</option>
           {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
         </select>
       )}
-      <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':'External Broker')}>
+      <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':srcAcct?`External Broker (from ${acctLabel(accounts.find(a=>a.id===srcAcct)||{})})`:'External Broker')}>
         ✓ Done — Investment Moved
       </button>
     </div>
