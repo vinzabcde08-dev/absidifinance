@@ -6683,9 +6683,36 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
       return `${MONTH_NAMES[parseInt(mk.split('-')[1])-1]} ${mk.split('-')[0]}: Income ${P(inc)}, Expenses ${P(exp)}, Net ${P(inc-exp)}`;
     }).join('\n');
 
+    /* Account name resolver */
+    const acctName=id=>(accounts.find(a=>a.id===id)||{}).name||'';
     /* Recent expense details (last 30 entries) */
     const recentExpDetails=[...monthExpenses].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30)
-      .map(x=>`  - ${x.date} | ${x.category}${x.note?` | "${x.note}"`:''} | ${P(x.amount)}`).join('\n');
+      .map(x=>`  - ${x.date} | ${x.category}${acctName(x.accountId)?` | ${acctName(x.accountId)}`:''}${x.note?` | "${x.note}"`:''} | ${P(x.amount)}`).join('\n');
+    /* Subscriptions */
+    const subsList=(allSubs||[]).filter(x=>x.amount>0).map(x=>`  - ${x.name}: ${P(x.amount)}/mo${acctName(x.accountId)?` | Account: ${acctName(x.accountId)}`:''}`).join('\n');
+    /* Financial logs - last 6 months */
+    const recentMonths=[0,1,2,3,4,5].map(i=>{const d=new Date(yr,selMonth-i,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;});
+    const titheHistory=recentMonths.map(mk=>{
+      const entry=titheLog.find(t=>(t.month||t.week)===mk);
+      const paid=allExpenses.filter(x=>x.alloc==='tithe'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const mI=allIncome.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      if(!mI&&!paid)return null;
+      const status=entry?.skipped?'skipped':paid>0?`paid ${P(paid)}`:'unpaid';
+      return `  ${mk}: ${status}${mI?` (base: ${P(mI)})`:''}`;
+    }).filter(Boolean).join('\n');
+    const savingsHistory=recentMonths.map(mk=>{
+      const entry=savingsLog.find(s=>s.month===mk);
+      const moved=allExpenses.filter(x=>x.alloc==='savings_out'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      if(!entry&&!moved)return null;
+      return `  ${mk}: ${entry?.skipped?'skipped':entry?.done?`done — ${P(moved)} moved`:`in progress — ${P(moved)} so far`}`;
+    }).filter(Boolean).join('\n');
+    const investHistory=recentMonths.map(mk=>{
+      const entry=investLog.find(l=>l.month===mk);
+      const moved=allExpenses.filter(x=>x.alloc==='investment_out'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      if(!entry&&!moved)return null;
+      return `  ${mk}: ${entry?.skipped?'skipped':entry?.done?`done — ${P(entry.amount||moved)} to ${entry.destination||'broker'}`:moved>0?`partial — ${P(moved)} moved`:'pending'}`;
+    }).filter(Boolean).join('\n');
+    const payrollTotal=(allPayroll||[]).filter(x=>(x.date||'').startsWith(curMonthKey)).reduce((s,x)=>s+(x.amount||0),0);
 
     /* Category totals */
     const catSummary=Object.entries(byCategory).sort((a,b)=>b[1]-a[1])
@@ -6729,19 +6756,19 @@ ${recentExpDetails||'No expense details'}
 ${last3Summary}
 
 ## ACTIVE SUBSCRIPTIONS / RECURRING BILLS
-\${subsList||'No subscriptions recorded'}
-- Total monthly subscriptions: \${P((allSubs||[]).reduce((s,x)=>s+(x.amount||0),0))}
+${subsList||'No subscriptions recorded'}
+- Total monthly subscriptions: ${P((allSubs||[]).reduce((s,x)=>s+(x.amount||0),0))}
 
 ## TITHE PAYMENT HISTORY (last 6 months)
-\${titheHistory||'No tithe history'}
+${titheHistory||'No tithe history'}
 
 ## SAVINGS LOG (last 6 months)
-\${savingsHistory||'No savings log entries'}
+${savingsHistory||'No savings log entries'}
 
 ## INVESTMENT LOG (last 6 months)
-\${investHistory||'No investment log entries'}
+${investHistory||'No investment log entries'}
 
-\${payrollList?`## PAYROLL\n\${payrollList}`:''}
+${payrollTotal>0?'## PAYROLL\n  Total payroll this month: '+P(payrollTotal):''}
 
 ## ACTIVE LOANS / INSTALLMENT OBLIGATIONS
 ${(loans&&loans.length>0)?loans.map(l=>`- ${l.name} (${LOAN_TYPES.find(t=>t.id===l.type)?.label||l.type}): Outstanding ₱${(l.balance||0).toLocaleString('en-PH')}, Monthly payment ₱${(l.monthlyPayment||0).toLocaleString('en-PH')}${l.interestRate?`, ${l.interestRate}% p.a.`:''}${l.lender?`, Lender: ${l.lender}`:''}${l.endDate?`, target end: ${l.endDate}`:''}`).join('\n'):'No loans recorded'}
