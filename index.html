@@ -6661,6 +6661,8 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
   const BROKER_NAMES={col:'COL Financial',gcash:'GCash GInvest',bdo:'BDO Nomura',bpi:'BPI Trade',seedbox:'Seedbox Securities',firstmetro:'First Metro Securities',abcapital:'AB Capital',multiple:'Multiple Brokers'};
 
   const buildPrompt=()=>{
+    /* Derived tithe values */
+    const totalTitheOwed=tithe+titheCarryover;
     /* Income this month */
     const monthIncome=allIncome.filter(x=>!x.alloc&&(x.date||'').startsWith(curMonthKey));
     /* Expenses this month */
@@ -6693,6 +6695,10 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
 
 ## PERSONAL PROFILE
 - Name: ${userName}
+- Occupation: Virtual Assistant (primary job) — salary at least ₱150,000/month
+- Additional income (not recorded in app): Government Job Order ₱15,000/month
+- Music production commissions: ₱50,000 per song (irregular, recorded when received)
+- Family: Married with one son — financial decisions should account for family needs and dependents
 - Investment risk level: ${AGGR_LABELS[settings.investAggr||3]} (${settings.investAggr||3}/5)
 - Preferred broker/platform: ${BROKER_NAMES[settings.aiBroker||'col']}
 ${settings.aiContext?`- Personal context: ${settings.aiContext}`:''}
@@ -6711,7 +6717,7 @@ ${settings.aiContext?`- Personal context: ${settings.aiContext}`:''}
 ${acctList||'No accounts linked'}
 
 ## INCOME THIS MONTH
-${monthIncome.map(x=>`  - ${x.date}: ${P(x.amount)} (${x.type||'Income'}${x.note?` | ${x.note}`:''})`).join('\n')||'No income entries'}
+${monthIncome.map(x=>`  - ${x.date}: ${P(x.amount)} | ${x.type||'Income'}${acctName(x.accountId)?` | ${acctName(x.accountId)}`:''}${x.noTithe?' | [No Tithe]':''}${x.note?` | Note: ${x.note}`:''}`).join('\n')||'No income entries'}
 
 ## EXPENSES BY CATEGORY (${monthName})
 ${catSummary||'No expenses'}
@@ -6721,6 +6727,21 @@ ${recentExpDetails||'No expense details'}
 
 ## 3-MONTH TREND
 ${last3Summary}
+
+## ACTIVE SUBSCRIPTIONS / RECURRING BILLS
+\${subsList||'No subscriptions recorded'}
+- Total monthly subscriptions: \${P((allSubs||[]).reduce((s,x)=>s+(x.amount||0),0))}
+
+## TITHE PAYMENT HISTORY (last 6 months)
+\${titheHistory||'No tithe history'}
+
+## SAVINGS LOG (last 6 months)
+\${savingsHistory||'No savings log entries'}
+
+## INVESTMENT LOG (last 6 months)
+\${investHistory||'No investment log entries'}
+
+\${payrollList?`## PAYROLL\n\${payrollList}`:''}
 
 ## ACTIVE LOANS / INSTALLMENT OBLIGATIONS
 ${(loans&&loans.length>0)?loans.map(l=>`- ${l.name} (${LOAN_TYPES.find(t=>t.id===l.type)?.label||l.type}): Outstanding ₱${(l.balance||0).toLocaleString('en-PH')}, Monthly payment ₱${(l.monthlyPayment||0).toLocaleString('en-PH')}${l.interestRate?`, ${l.interestRate}% p.a.`:''}${l.lender?`, Lender: ${l.lender}`:''}${l.endDate?`, target end: ${l.endDate}`:''}`).join('\n'):'No loans recorded'}
