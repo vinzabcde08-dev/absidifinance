@@ -4273,7 +4273,7 @@ function AccountsTab({accounts,setAccounts,accBal,transfers,setTransfers,income,
   const[name,setName]=useState('');const[type,setType]=useState('Bank');const[bank,setBank]=useState('BDO');const[opening,setOpening]=useState('');
   const[editId,setEditId]=useState(null);
   const BANKS=['BDO','BPI','Metrobank','UnionBank','Landbank','PNB','RCBC','Security Bank','Eastwest','Other'];
-  const EW=['GCash','Maya','ShopeePay','GrabPay','PayPal','Wise'];
+  const EW=['GCash','Maya','ShopeePay','GrabPay','PayPal','Wise','MariBank'];
   const reset=()=>{setEditId(null);setName('');setType('Bank');setBank('BDO');setOpening('');};
   const startEdit=(a)=>{setEditId(a.id);setName(a.name);setType(a.type);setBank(a.subtype||'BDO');setOpening(String(a.openingBalance||0));};
   const save=()=>{
