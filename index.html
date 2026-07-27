@@ -4568,16 +4568,17 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
   const[editId,setEditId]=useState(null);
   const[filterAccId,setFilterAccId]=useState('');
   const[noTithe,setNoTithe]=useState(false);
+  const[note,setNote]=useState('');
 
-  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setType('VA Salary');setClientId('');setAccountId('');setStatus('Paid');setNoTithe(false);};
-  const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');setNoTithe(i.noTithe||false);};
+  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setType('VA Salary');setClientId('');setAccountId('');setStatus('Paid');setNoTithe(false);setNote('');};
+  const startEdit=(i)=>{setEditId(i.id);setDate(i.date);setAmount(String(i.amount));setType(i.type);setClientId(i.clientId||'');setAccountId(i.accountId||'');setStatus(i.status||'Paid');setNoTithe(i.noTithe||false);setNote(i.note||'');};
   const save=()=>{
     if(!amount)return;
     const amt=parseFloat(amount)||0;
     if(editId){
-      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:amt,type,clientId,accountId,status,noTithe}:x));
+      setIncome(allIncome.map(x=>x.id===editId?{...x,date,amount:amt,type,clientId,accountId,status,noTithe,note}:x));
     }else{
-      setIncome([...allIncome,{id:uid(),date,amount:amt,type,clientId,accountId,status,noTithe}]);
+      setIncome([...allIncome,{id:uid(),date,amount:amt,type,clientId,accountId,status,noTithe,note}]);
     }
     if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'income'),80);
     reset();
@@ -4594,6 +4595,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
           <div><span className="fl">Deposited To</span><select className="fi" value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">— Select account —</option>{accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}</select></div>
           <div><span className="fl">Amount (₱)</span><input className="fi" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></div>
           <div><span className="fl">Status</span><select className="fi" value={status} onChange={e=>setStatus(e.target.value)}><option>Paid</option><option>Pending</option></select></div>
+          <div><span className="fl">Note / Context <span style={{fontWeight:'400',color:'var(--text4)'}}}>(for AI analysis)</span></span><textarea className="fi" rows="2" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. Gov't JO salary for June, music commission from client X, refund from insurance..." style={{resize:'vertical',fontFamily:'inherit',fontSize:'13px'}}/></div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:noTithe?'#fef9ec':'var(--card2)',border:'1.5px solid',borderColor:noTithe?'#fbbf24':'var(--border)',borderRadius:'9px',cursor:'pointer',transition:'all .15s'}} onClick={()=>setNoTithe(v=>!v)}>
             <div>
               <p style={{fontWeight:'700',fontSize:'13px',color:noTithe?'#92400e':'var(--text2)',margin:'0 0 2px'}}>No Tithe Required</p>
@@ -4648,6 +4650,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
                     {i.noTithe&&<span className="badge" style={{background:'#fef9ec',color:'#b45309',border:'1px solid #fde68a'}}>No Tithe</span>}
                   </div>
                   <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{i.date}{cl?` · ${cl.name}`:''}{ac?` → ${ac.name}`:''}</p>
+                  {i.note&&<p style={{fontSize:'11px',color:'#6366f1',margin:'2px 0 0',fontStyle:'italic'}}>📝 {i.note}</p>}
                 </div>
               </div>
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
@@ -6639,6 +6642,7 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
   const[loading,setLoading]=useState(false);
   const[result,setResult]=useState(null);
   const[error,setError]=useState('');
+  const[sessionNote,setSessionNote]=useState('');
   const[activeSection,setActiveSection]=useState('summary');
   const[progress,setProgress]=useState(0);
   const[progressLabel,setProgressLabel]=useState('');
@@ -6696,9 +6700,14 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
       const entry=titheLog.find(t=>(t.month||t.week)===mk);
       const paid=allExpenses.filter(x=>x.alloc==='tithe'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       const mI=allIncome.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const mP=(allPayroll||[]).filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       if(!mI&&!paid)return null;
-      const status=entry?.skipped?'skipped':paid>0?`paid ${P(paid)}`:'unpaid';
-      return `  ${mk}: ${status}${mI?` (base: ${P(mI)})`:''}`;
+      const owed=Math.max(0,(mI-mP)*(settings.tithePct||10)/100);
+      const skippedAmt=(entry?.skips||[]).reduce((s,x)=>s+(x.amount||0),0);
+      const totalCovered=paid+skippedAmt;
+      const cleared=entry?.skipped||totalCovered>=owed*0.99;
+      if(entry?.skipped)return `  ${mk}: fully skipped (no tithe required)`;
+      return `  ${mk}: owed ${P(owed)} | paid ${P(paid)}${skippedAmt>0?` | exempted ${P(skippedAmt)}`:''} | ${cleared?'✓ CLEARED':`DEFICIT ${P(Math.max(0,owed-totalCovered))}`}`;
     }).filter(Boolean).join('\n');
     const savingsHistory=recentMonths.map(mk=>{
       const entry=savingsLog.find(s=>s.month===mk);
@@ -6718,7 +6727,7 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
     const catSummary=Object.entries(byCategory).sort((a,b)=>b[1]-a[1])
       .map(([cat,amt])=>`  ${cat}: ${P(amt)}`).join('\n');
 
-    return `You are a personal financial advisor for a Filipino professional. Today is ${TODAY}, analyzing ${monthName} ${yr}.
+    const sessionCtx=sessionNote.trim()?`\n\n## ADDITIONAL CONTEXT FROM USER (read carefully before analyzing)\n${sessionNote.trim()}`:'';    return `You are a personal financial advisor for a Filipino professional. Today is ${TODAY}, analyzing ${monthName} ${yr}.
 
 ## PERSONAL PROFILE
 - Name: ${userName}
@@ -6774,6 +6783,8 @@ ${payrollTotal>0?'## PAYROLL\n  Total payroll this month: '+P(payrollTotal):''}
 ${(loans&&loans.length>0)?loans.map(l=>`- ${l.name} (${LOAN_TYPES.find(t=>t.id===l.type)?.label||l.type}): Outstanding ₱${(l.balance||0).toLocaleString('en-PH')}, Monthly payment ₱${(l.monthlyPayment||0).toLocaleString('en-PH')}${l.interestRate?`, ${l.interestRate}% p.a.`:''}${l.lender?`, Lender: ${l.lender}`:''}${l.endDate?`, target end: ${l.endDate}`:''}`).join('\n'):'No loans recorded'}
 - Total outstanding loan balance: ₱${((loans||[]).reduce((s,l)=>s+(l.balance||0),0)).toLocaleString('en-PH')}
 - Total monthly loan amortization: ₱${((loans||[]).reduce((s,l)=>s+(l.monthlyPayment||0),0)).toLocaleString('en-PH')}
+
+${sessionCtx}
 
 ## RESPONSE FORMAT
 Return ONLY a valid JSON object — no markdown, no code fences, no extra text before or after. Use this exact schema:
@@ -7214,6 +7225,7 @@ Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 
             )}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:'8px',alignItems:'flex-end'}}>
+            <textarea value={sessionNote} onChange={e=>setSessionNote(e.target.value)} placeholder="Add context before analyzing… e.g. 'The ₱42,600 tithe exemption was a system glitch correction. My wife's surgery was covered by PhilHealth refund.' " rows="2" style={{width:'220px',background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.25)',borderRadius:'8px',color:'#fff',fontSize:'12px',padding:'8px 10px',resize:'vertical',fontFamily:'inherit',outline:'none'}} onFocus={e=>e.target.style.background='rgba(255,255,255,.18)'} onBlur={e=>e.target.style.background='rgba(255,255,255,.12)'}/>
             <button onClick={analyze} disabled={loading||!aiApiKey}
               style={{background:loading?'rgba(255,255,255,.2)':'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'#fff',borderRadius:'10px',padding:'10px 20px',cursor:loading||!aiApiKey?'not-allowed':'pointer',fontWeight:'700',fontSize:'13px',display:'flex',alignItems:'center',gap:'8px',opacity:!aiApiKey?0.5:1,transition:'background .2s'}}>
               {loading?<>
