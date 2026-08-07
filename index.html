@@ -1301,6 +1301,7 @@ function MainApp({onLogout}){
   const skipPayDate=(empId,date)=>setSkippedPayDates(prev=>[...prev.filter(s=>!(s.empId===empId&&s.date===date)),{empId,date}]);
   const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
   const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
+  const[savingsSrcAcctId,setSavingsSrcAcctId]=useState(()=>ls.get(uk('ph_savings_src_acct'),''));
   const[emergencyAcctId,setEmergencyAcctId]=useState(()=>ls.get(uk('ph_emerg_acct'),''));
   const[emergencyMonths,setEmergencyMonths]=useState(()=>ls.get(uk('ph_emerg_months'),3));
   const[year,setYear]=useState(String(CUR_YEAR));
@@ -1375,6 +1376,7 @@ function MainApp({onLogout}){
   useEffect(()=>{ls.set(uk('ph_ai_history'),aiHistory);},[aiHistory]);
   useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
+  useEffect(()=>{ls.set(uk('ph_savings_src_acct'),savingsSrcAcctId);},[savingsSrcAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_months'),emergencyMonths);},[emergencyMonths]);
 
@@ -2449,12 +2451,10 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
           <button key={o.v} onClick={()=>setDest(o.v)} style={{padding:'6px 14px',borderRadius:'7px',border:`2px solid ${dest===o.v?'#6366f1':'#e2e8f0'}`,background:dest===o.v?'#6366f1':'transparent',color:dest===o.v?'#fff':'#64748b',fontWeight:'700',fontSize:'13px',cursor:'pointer'}}>{o.l}</button>
         ))}
       </div>
-      {dest==='external'&&(
-        <select className="fi" style={{marginBottom:'10px'}} value={srcAcct} onChange={e=>setSrcAcct(e.target.value)}>
-          <option value="">— All accounts (proportional) —</option>
-          {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
-        </select>
-      )}
+      <select className="fi" style={{marginBottom:'10px'}} value={srcAcct} onChange={e=>setSrcAcct(e.target.value)}>
+        <option value="">— From: All accounts (proportional split) —</option>
+        {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+      </select>
       {dest==='account'&&(
         <select className="fi" style={{marginBottom:'10px'}} value={destAcct} onChange={e=>setDestAcct(e.target.value)}>
           <option value="">— Pick destination account —</option>
@@ -3325,6 +3325,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
       const srcEntries=byAcctTithe.length>0
         ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2)),category:'Savings Transfer',accountId:acct.id,alloc:'savings_out',note}))
         :[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:'',alloc:'savings_out',note}];
+      /* Note: Move All uses proportional split; use individual savings card for source account control */
       setExpenses(prev=>[...(prev||[]),...srcEntries]);
       setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}]);
     }
@@ -3648,12 +3649,21 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             {!savAcct&&(
               <p style={{fontSize:'12px',color:'#6366f1',margin:'0 0 12px',fontStyle:'italic'}}>💡 Go to the Savings tab to set your dedicated savings account.</p>
             )}
+            <div style={{marginBottom:'10px'}}>
+              <span style={{fontSize:'12px',fontWeight:'700',color:'#4f46e5',display:'block',marginBottom:'6px'}}>From account (source of funds)</span>
+              <select className="fi" value={savingsSrcAcctId} onChange={e=>setSavingsSrcAcctId(e.target.value)}>
+                <option value="">— All accounts (proportional split) —</option>
+                {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
+              </select>
+            </div>
             <div style={{display:'flex',gap:'8px'}}>
               <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={()=>{
                 const note=`Savings ${curMonthKey}`;
-                const srcEntries=byAcctTithe.length>0
-                  ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2)),category:'Savings Transfer',accountId:acct.id,alloc:'savings_out',note}))
-                  :[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:'',alloc:'savings_out',note}];
+                const srcEntries=savingsSrcAcctId
+                  ?[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:savingsSrcAcctId,alloc:'savings_out',note}]
+                  :byAcctTithe.length>0
+                    ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*savings).toFixed(2)),category:'Savings Transfer',accountId:acct.id,alloc:'savings_out',note}))
+                    :[{id:uid(),date:TODAY,amount:savings,category:'Savings Transfer',accountId:'',alloc:'savings_out',note}];
                 setExpenses(prev=>[...(prev||[]),...srcEntries]);
                 if(savingsAcctId){
                   setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:savings,type:'Savings Transfer',accountId:savingsAcctId,alloc:'savings_in',note}]);
