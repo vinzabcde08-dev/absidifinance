@@ -7235,7 +7235,7 @@ Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 
             )}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:'8px',alignItems:'flex-end'}}>
-            <textarea value={sessionNote} onChange={e=>setSessionNote(e.target.value)} placeholder="Add context before analyzing… e.g. 'The ₱42,600 tithe exemption was a system glitch correction. My wife's surgery was covered by PhilHealth refund.' " rows="2" style={{width:'220px',background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.25)',borderRadius:'8px',color:'#fff',fontSize:'12px',padding:'8px 10px',resize:'vertical',fontFamily:'inherit',outline:'none'}} onFocus={e=>e.target.style.background='rgba(255,255,255,.18)'} onBlur={e=>e.target.style.background='rgba(255,255,255,.12)'}/>
+            <textarea value={sessionNote} onChange={e=>setSessionNote(e.target.value)} placeholder="Add context before analyzing (e.g. tithe corrections, emergency fund info, special income notes...)" rows="2" style={{width:'220px',background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.25)',borderRadius:'8px',color:'#fff',fontSize:'12px',padding:'8px 10px',resize:'vertical',fontFamily:'inherit',outline:'none'}}/>
             <button onClick={analyze} disabled={loading||!aiApiKey}
               style={{background:loading?'rgba(255,255,255,.2)':'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.3)',color:'#fff',borderRadius:'10px',padding:'10px 20px',cursor:loading||!aiApiKey?'not-allowed':'pointer',fontWeight:'700',fontSize:'13px',display:'flex',alignItems:'center',gap:'8px',opacity:!aiApiKey?0.5:1,transition:'background .2s'}}>
               {loading?<>
