@@ -560,6 +560,7 @@ function Ico({n,s=16,c="currentColor",sw=1.75,style={}}){
     check:    [<polyline key="1" {...d} points="20,6 9,17 4,12"/>],
     edit:     [<path key="1" {...d} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>,<path key="2" {...d} d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>],
     send:     [<line key="1" {...d} x1="22" y1="2" x2="11" y2="13"/>,<polygon key="2" {...d} points="22,2 15,22 11,13 2,9"/>],
+    shield:   [<path key="1" {...d} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>],
   };
   return(
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" style={{flexShrink:0,display:'inline-block',verticalAlign:'middle',...style}}>
@@ -1666,7 +1667,13 @@ function MainApp({onLogout}){
     const i=income.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
     const e=expenses.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
     const p=payroll.filter(x=>x.accountId===id&&yK(x.date)===yr).reduce((s,x)=>s+x.amount,0);
-    return a.openingBalance+i-e-p;
+    /* Savings log backup: if a savings transfer was recorded FROM this account via savingsLog (srcAcctId),
+       subtract that amount — but only to the extent it's NOT already covered by savings_out expenses
+       (prevents double-counting if both exist, handles Firestore revert of expenses array) */
+    const savingsLogAmt=savingsLog.filter(x=>x.srcAcctId===id&&x.done&&parseInt((x.month||'0000').substring(0,4))===yr).reduce((s,x)=>s+(x.amount||0),0);
+    const savingsOutInExp=expenses.filter(x=>x.accountId===id&&x.alloc==='savings_out'&&yK(x.date)===yr).reduce((s,x)=>s+(x.amount||0),0);
+    const extraSavingsDeduct=Math.max(0,savingsLogAmt-savingsOutInExp);
+    return a.openingBalance+i-e-p-extraSavingsDeduct;
   };
 
   const exportCSV=()=>{
@@ -2239,7 +2246,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -3250,10 +3257,13 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,emergencyAcctId,emergencyMonths,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
   const net=mInc-mExp-mSub-mPayActual;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
+  const emergBalance=emergencyAcctId?accBal(emergencyAcctId):0;
+  const emergTarget=(emergencyMonths||3)*(lastMonthInc||avg3||mInc);
+  const spendable=totalOnHand-emergBalance;
 
   /* ── Quarterly trend ── */
   const curQ=Math.floor((selMonth!==undefined?selMonth:CUR_MONTH)/3); /* 0=Q1,1=Q2,2=Q3,3=Q4 */
@@ -3397,6 +3407,10 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
      info:`A suggestion only — not a hard limit.\n\nBased on last month's income as a stable reference (${P(lastMonthInc||avg3)}) so this number doesn't jump around as income arrives this month.\n\nFormula: (Last month income − allocations − subs − payroll − expenses so far) ÷ ${daysLeft} days left.`,title:'Daily Spend Estimate'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
      info:'Sum of all current balances in the Debt tab (credit cards, personal loans, and loans combined).',title:'Total Debt'},
+    {label:'Emergency Fund',value:P(emergBalance),color:'#d97706',bg:'#fffbeb',icon:'shield',
+     info:`Current balance in your emergency fund account${emergTarget>0?` · Target: ${P(emergTarget)} (${(emergencyMonths||3)} months of income) · ${emergTarget>0?Math.round(Math.min(100,emergBalance/emergTarget*100)):0}% funded`:''}${!emergencyAcctId?' · Set a dedicated account in the Budget tab':''}`,title:'Emergency Fund'},
+    {label:'Spendable Money',value:P(Math.max(0,spendable)),color:'#6366f1',bg:'#f5f3ff',icon:'dollar',
+     info:`Total on hand (${P(totalOnHand)}) minus emergency fund (${P(emergBalance)}) = freely spendable cash${!emergencyAcctId?' · Set emergency account in Budget tab to see this accurately':''}`,title:'Spendable Money'},
   ];
   return(
     <div className="col fade" style={{gap:'16px'}}>
@@ -3668,7 +3682,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                 if(savingsAcctId){
                   setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:savings,type:'Savings Transfer',accountId:savingsAcctId,alloc:'savings_in',note}]);
                 }
-                setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY}]);
+                setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY,srcAcctId:savingsSrcAcctId||null}]);
               }}>
                 ✓ Done — Transferred
               </button>
