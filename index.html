@@ -2249,7 +2249,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
         {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
-        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExpAll+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
+        {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
@@ -3272,7 +3272,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const qYear=yr||CUR_YEAR;
   const qData=qMonths.map(m=>{
     const key=`${qYear}-${String(m+1).padStart(2,'0')}`;
-    const inc=(allIncome||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const inc=(allIncome||[]).filter(x=>x.date&&mK(x.date)===key&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
     const exp=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
     const sub=(allSubs||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
     const pay=(allPayroll||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
@@ -4453,8 +4453,8 @@ function ClientsTab({clients,setClients,income,expenses,mExp,monthName,expectedF
     reset();
   };
 
-  const totalPaid=income.filter(i=>i.status==='Paid'||!i.status).reduce((s,i)=>s+i.amount,0);
-  const totalPending=income.filter(i=>i.status==='Pending').reduce((s,i)=>s+i.amount,0);
+  const totalPaid=income.filter(i=>!i.alloc&&(i.status==='Paid'||!i.status)).reduce((s,i)=>s+i.amount,0);
+  const totalPending=income.filter(i=>!i.alloc&&i.status==='Pending').reduce((s,i)=>s+i.amount,0);
   const totalExpected=totalPaid+totalPending;
   const totalExpenses=mExp||0;
   const netClientExpected=(expectedFromClients||0)-(mPay||0);
