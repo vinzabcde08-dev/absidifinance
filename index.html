@@ -475,7 +475,9 @@ const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifi
    This prevents the race condition where a new device initialises state as [] from empty
    localStorage and immediately overwrites Firebase with empty data before the snapshot fires. ── */
 const _fbReady={};
-const _GUARDED_KEYS=['ph_income','ph_exp','ph_subs','ph_payroll','ph_clients','ph_accts','ph_cards','ph_emps'];
+const _GUARDED_KEYS=['ph_income','ph_exp','ph_subs','ph_payroll','ph_clients','ph_accts','ph_cards'];
+/* ph_emps intentionally excluded: deleting the last employee must write [] to Firestore,
+   otherwise the onSnapshot listener restores the deleted employee (ghost payroll bug) */
 const ls={
   get:(k,def)=>{try{return JSON.parse(localStorage.getItem(k))??def}catch{return def}},
   set:(k,v)=>{
@@ -3264,6 +3266,12 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const emergBalance=emergencyAcctId?accBal(emergencyAcctId):0;
   const emergTarget=(emergencyMonths||3)*(lastMonthInc||avg3||mInc);
   const spendable=totalOnHand-emergBalance;
+  /* Total Cash Out — everything leaving accounts this month */
+  const mLoanPay=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='loan_payment').reduce((s,x)=>s+(x.amount||0),0);
+  const mInvestOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
+  const mSavingsOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
+  const mTitheOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
+  const totalCashOut=mExp+mSub+mPayActual+mLoanPay+mInvestOut+mSavingsOut+mTitheOut;
 
   /* ── Quarterly trend ── */
   const curQ=Math.floor((selMonth!==undefined?selMonth:CUR_MONTH)/3); /* 0=Q1,1=Q2,2=Q3,3=Q4 */
@@ -3399,10 +3407,12 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
      info:'Sum of real income entries this month (paid + pending). Excludes internal transfers — account transfers, tithe consolidations, and savings/investment moves are not counted here.',title:'Monthly Income'},
     {label:'Total On Hand',value:P(totalOnHand),color:'#0891b2',bg:'#f0f9ff',icon:'bank',
      info:'Sum of all account balances: Opening Balance + Income − Expenses − Payroll − Transfers Out + Transfers In, for each account.',title:'Total On Hand'},
-    {label:'Total Expenses',value:P(mExp+mSub+mPayActual),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
-     info:`Actual spending this month (paid only):\n• Day-to-day expenses: ${P(mExp)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPayActual)}\nTotal: ${P(mExp+mSub+mPayActual)}\n\nNote: Pending/unpaid payroll, tithe, loan amortizations, and investment & savings transfers are NOT counted here.`,title:'Total Expenses'},
+    {label:'Spending (No Loans)',value:P(mExp+mSub+mPayActual),color:'#ef4444',bg:'#fff5f5',icon:'expenses',
+     info:`Day-to-day spending this month:\n• Regular expenses: ${P(mExp)}\n• Subscriptions: ${P(mSub)}\n• Payroll paid: ${P(mPayActual)}\nTotal: ${P(mExp+mSub+mPayActual)}\n\nDoes NOT include loan payments, investments, savings transfers, or tithes — those are shown in "Total Cash Out" below.`,title:'Spending (No Loans)'},
+    {label:'Total Cash Out',value:P(totalCashOut),color:'#dc2626',bg:'#fff1f2',icon:'expenses',
+     info:`Everything that left your accounts this month:\n• Regular spending: ${P(mExp+mSub+mPayActual)}\n${mTitheOut>0?`• Tithes: ${P(mTitheOut)}\n`:''}${mLoanPay>0?`• Loan payments: ${P(mLoanPay)}\n`:''}${mInvestOut>0?`• Investments: ${P(mInvestOut)}\n`:''}${mSavingsOut>0?`• Savings transfers: ${P(mSavingsOut)}\n`:''}\nTotal: ${P(totalCashOut)}`,title:'Total Cash Out'},
     {label:`Net This Month`,value:P(net),color:net>=0?'#10b981':'#ef4444',bg:net>=0?'#f0fdf4':'#fff5f5',icon:'dollar',
-     info:`Monthly Income (${P(mInc)}) minus actual spending (${P(mExp+mSub+mPayActual)}) = ${P(net)}.\n\nOnly counts what has actually been paid out. Pending payroll (${P(mPay-mPayActual)} unpaid) is shown in the Payroll tab.\n\nPositive = you earned more than you spent.`,title:'Net This Month'},
+     info:`Monthly Income (${P(mInc)}) minus day-to-day spending (${P(mExp+mSub+mPayActual)}) = ${P(net)}.\n\nDoes not deduct loan payments (those reduce debt, not income) or investments/savings (those move money, not lose it).\n\nFor the full picture of money leaving your accounts, see "Total Cash Out".`,title:'Net This Month'},
     {label:'Daily Spend Est.',value:'~'+P(dailyCap),color:'#f59e0b',bg:'#fffbeb',icon:'calendar',
      info:`A suggestion only — not a hard limit.\n\nBased on last month's income as a stable reference (${P(lastMonthInc||avg3)}) so this number doesn't jump around as income arrives this month.\n\nFormula: (Last month income − allocations − subs − payroll − expenses so far) ÷ ${daysLeft} days left.`,title:'Daily Spend Estimate'},
     {label:'Total Debt',value:P(totalDebt),color:'#ef4444',bg:'#fff5f5',icon:'warning',
@@ -4794,26 +4804,80 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
           const ac=accounts.find(a=>a.id===e.accountId);const cd=cards.find(c=>c.id===e.cardId);
           const noAcct=!e.accountId&&!e.cardId;
           const isEditing=editId===e.id;
+          /* Visual hint for special alloc types */
+          const allocBadge=e.alloc==='loan_payment'?{label:'Loan Payment',bg:'#fffbeb',clr:'#f59e0b'}:
+                           e.alloc==='investment_out'?{label:'Investment',bg:'#eff6ff',clr:'#3b82f6'}:
+                           e.alloc==='savings_out'?{label:'Savings Transfer',bg:'#f0f9ff',clr:'#0891b2'}:
+                           e.alloc==='tithe'?{label:'Tithe',bg:'#fffbeb',clr:'#d97706'}:null;
           return(
-            <div key={e.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':noAcct?'3px solid #f59e0b':'3px solid transparent',background:isEditing?'#f5f3ff':noAcct?'#fffdf5':'#fff',transition:'all .15s'}}>
+            <div key={e.id} className="card row" style={{padding:'14px 18px',borderLeft:isEditing?'3px solid #6366f1':noAcct?'3px solid #f59e0b':allocBadge?`3px solid ${allocBadge.clr}`:'3px solid transparent',background:isEditing?'#f5f3ff':noAcct?'#fffdf5':'#fff',transition:'all .15s'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                 <div style={{width:'34px',height:'34px',background:'#fff5f5',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n="expenses" s={15} c="#ef4444" sw={2}/></div>
                 <div>
                   <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap',marginBottom:'3px'}}>
                     {(()=>{const m=getCatMeta(e.category);return(<><span style={{width:'8px',height:'8px',borderRadius:'50%',background:m.color,flexShrink:0,display:'inline-block'}}/><p style={{fontWeight:'700',color:'#1e293b',fontSize:'13px',margin:0}}>{e.category}</p><span style={{fontSize:'10px',color:m.color,background:m.color+'18',padding:'1px 5px',borderRadius:'4px',fontWeight:'700'}}>{m.bucket}</span></>);})()}
+                    {allocBadge&&<span style={{fontSize:'10px',fontWeight:'700',color:allocBadge.clr,background:allocBadge.bg,padding:'1px 6px',borderRadius:'4px'}}>{allocBadge.label}</span>}
                     {noAcct&&<span className="badge" style={{background:'#fef3c7',color:'#92400e'}}>⚠ No account</span>}
                   </div>
-                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}</p>
+                  <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>{e.date}{ac?` · ${ac.name}`:''}{cd?` · ${cd.name}`:''}{e.note?` · ${e.note}`:''}</p>
                 </div>
               </div>
               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
-                <span style={{fontWeight:'800',fontSize:'15px',color:'#ef4444'}}>{P(e.amount)}</span>
+                <span style={{fontWeight:'800',fontSize:'15px',color:allocBadge?allocBadge.clr:'#ef4444'}}>{P(e.amount)}</span>
                 <button className="ib" style={{color:isEditing?'#6366f1':'#94a3b8',background:isEditing?'#eef2ff':'transparent'}} onClick={()=>isEditing?reset():startEdit(e)} title="Edit"><Ico n="edit" s={15}/></button>
                 <button className="ib" onClick={()=>{if(isEditing)reset();setExpenses(allExpenses.filter(x=>x.id!==e.id));}} title="Delete"><Ico n="trash" s={15}/></button>
               </div>
             </div>
           );
         })}
+        {/* ── Expense Totals Summary ── */}
+        {(()=>{
+          const allFiltered=[...expenses].filter(e=>e.alloc!=='transfer_out'&&e.alloc!=='transfer_in'&&e.alloc!=='allocation_in'&&(!filterAccId||e.accountId===filterAccId)&&(!filterCardId||e.cardId===filterCardId));
+          if(allFiltered.length===0)return null;
+          const regularTotal=allFiltered.filter(e=>(!e.alloc||e.alloc==='transfer_fee')&&e.category!=='Payroll').reduce((s,e)=>s+(e.amount||0),0);
+          const loanTotal=allFiltered.filter(e=>e.alloc==='loan_payment').reduce((s,e)=>s+(e.amount||0),0);
+          const investTotal=allFiltered.filter(e=>e.alloc==='investment_out').reduce((s,e)=>s+(e.amount||0),0);
+          const savingsOutTotal=allFiltered.filter(e=>e.alloc==='savings_out').reduce((s,e)=>s+(e.amount||0),0);
+          const titheTotal=allFiltered.filter(e=>e.alloc==='tithe').reduce((s,e)=>s+(e.amount||0),0);
+          const payrollFromExp=(payroll||[]).filter(p=>!filterAccId&&!filterCardId||(filterAccId&&p.accountId===filterAccId)).reduce((s,p)=>s+(p.amount||0),0);
+          const hasExtras=loanTotal>0||investTotal>0||savingsOutTotal>0||titheTotal>0||payrollFromExp>0;
+          const grandTotal=regularTotal+loanTotal+investTotal+savingsOutTotal+titheTotal+payrollFromExp;
+          return(
+            <div style={{background:'#f8fafc',borderRadius:'10px',padding:'12px 16px',border:'1px solid #e2e8f0',marginTop:'4px'}}>
+              <p style={{fontSize:'11px',fontWeight:'800',color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em',margin:'0 0 8px'}}>This Month Breakdown</p>
+              <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#1e293b',fontWeight:'700'}}>Regular Spending <span style={{fontWeight:'400',color:'#94a3b8'}}>(shown in dashboard Total Expenses)</span></span>
+                  <span style={{fontWeight:'800',color:'#ef4444'}}>{P(regularTotal)}</span>
+                </div>
+                {payrollFromExp>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#7c3aed',fontWeight:'600'}}>Payroll Paid</span>
+                  <span style={{fontWeight:'700',color:'#7c3aed'}}>{P(payrollFromExp)}</span>
+                </div>}
+                {titheTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#d97706',fontWeight:'600'}}>Tithes <span style={{fontWeight:'400',color:'#94a3b8'}}>(tracked in Home tab)</span></span>
+                  <span style={{fontWeight:'700',color:'#d97706'}}>{P(titheTotal)}</span>
+                </div>}
+                {loanTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#f59e0b',fontWeight:'600'}}>Loan Payments <span style={{fontWeight:'400',color:'#94a3b8'}}>(tracked in Debt/Loans tab)</span></span>
+                  <span style={{fontWeight:'700',color:'#f59e0b'}}>{P(loanTotal)}</span>
+                </div>}
+                {investTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#3b82f6',fontWeight:'600'}}>Investments <span style={{fontWeight:'400',color:'#94a3b8'}}>(tracked in Home tab)</span></span>
+                  <span style={{fontWeight:'700',color:'#3b82f6'}}>{P(investTotal)}</span>
+                </div>}
+                {savingsOutTotal>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#0891b2',fontWeight:'600'}}>Savings Transfers <span style={{fontWeight:'400',color:'#94a3b8'}}>(tracked in Home tab)</span></span>
+                  <span style={{fontWeight:'700',color:'#0891b2'}}>{P(savingsOutTotal)}</span>
+                </div>}
+                {hasExtras&&<div style={{borderTop:'1px solid #e2e8f0',paddingTop:'4px',marginTop:'2px',display:'flex',justifyContent:'space-between',fontSize:'12px'}}>
+                  <span style={{color:'#1e293b',fontWeight:'700'}}>Total Cash Out</span>
+                  <span style={{fontWeight:'900',color:'#1e293b'}}>{P(grandTotal)}</span>
+                </div>}
+              </div>
+            </div>
+          );
+        })()}
         </div>
       </div>
     </div>
@@ -5594,8 +5658,14 @@ function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay
   /* Category budget limits state */
   const catBudgets=settings.categoryBudgets||[];
   const[showCatForm,setShowCatForm]=useState(false);
-  const[newCatLabel,setNewCatLabel]=useState('Groceries');
+  const[newCatLabel,setNewCatLabel]=useState('Food');
   const[newCatAmt,setNewCatAmt]=useState('');
+  /* All expense categories — same list the Expenses tab uses so the budget label always matches */
+  const ALL_EXPENSE_CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Shopping','Entertainment','Other',
+    ...Object.keys(CATEGORY_META).filter(c=>!['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Shopping','Entertainment','Other','Payroll','Tithes','Investment','Savings Transfer','Bank Fees','Desires'].includes(c))];
+  /* Merge in any custom user-defined cats from localStorage */
+  const _userCustomCats=(()=>{try{return JSON.parse(localStorage.getItem('absidi_custom_cats')||'[]').map(c=>c.name);}catch{return[];}})();
+  const budgetCatOptions=[...new Set([...ALL_EXPENSE_CATS,..._userCustomCats])];
 
   /* Compute per-category spending from this month's expenses */
   const catSpending=React.useMemo(()=>{
@@ -5893,12 +5963,10 @@ function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay
           <div style={{display:'grid',gridTemplateColumns:'1fr 130px auto',gap:'8px',marginBottom:'12px',alignItems:'end'}}>
             <div>
               <span className="fl">Category name</span>
-              <input className="fi" type="text" value={newCatLabel}
-                onChange={e=>setNewCatLabel(e.target.value)} placeholder="e.g. Groceries, Fuel, Other…"
-                list="catSuggestions"/>
-              <datalist id="catSuggestions">
-                {['Groceries','Fuel','Electricity','Water','Rent','Medicine','School','Dining','Transportation','Other'].map(s=><option key={s} value={s}/>)}
-              </datalist>
+              <select className="fi" value={newCatLabel} onChange={e=>setNewCatLabel(e.target.value)}>
+                {budgetCatOptions.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              <span style={{fontSize:'10px',color:'#94a3b8',marginTop:'3px',display:'block'}}>Must match an expense category exactly</span>
             </div>
             <div>
               <span className="fl">Monthly Budget (₱)</span>
