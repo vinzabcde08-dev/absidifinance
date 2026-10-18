@@ -4125,37 +4125,45 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                       opacity:d.isFuture?.3:1
                     }}/>
                   </div>
-                  {/* Expense column: overlapping bars — light red (total cash out) behind, dark red (core spending) in front */}
+                  {/* Expense column: current month shows overlapping (light red behind = total cash out, dark red front = spending); other months show dark red only */}
                   <div style={{width:'38%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',position:'relative'}}>
-                    {!d.isFuture&&d.totalCashOut>0&&(
+                    {!d.isFuture&&(
                       <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:'2px',gap:'1px'}}>
-                        <span style={{fontSize:'8px',color:'#fca5a5',fontWeight:'700',whiteSpace:'nowrap'}}>
-                          {d.totalCashOut>=1000?`${(d.totalCashOut/1000).toFixed(1)}k`:Math.round(d.totalCashOut)}
-                        </span>
-                        <span style={{fontSize:'8px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap'}}>
-                          {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
-                        </span>
+                        {d.isCurrent&&d.totalCashOut>d.totalExp&&(
+                          <span style={{fontSize:'8px',color:'#fca5a5',fontWeight:'700',whiteSpace:'nowrap'}}>
+                            {d.totalCashOut>=1000?`${(d.totalCashOut/1000).toFixed(1)}k`:Math.round(d.totalCashOut)}
+                          </span>
+                        )}
+                        {d.totalExp>0&&(
+                          <span style={{fontSize:'8px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap'}}>
+                            {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
+                          </span>
+                        )}
                       </div>
                     )}
-                    <div style={{width:'100%',position:'relative',height:`${Math.max(Math.round((d.isFuture?0:d.totalCashOut/qMaxVal)*100),d.isFuture?0:2)}%`,minHeight:d.isFuture?'4px':'0'}}>
-                      {/* light red behind = total cash out */}
-                      <div style={{
-                        position:'absolute',bottom:0,left:0,right:0,
-                        height:'100%',
-                        background:d.isFuture?'#f1f5f9':'#fca5a5',
-                        borderRadius:'5px 5px 0 0',
-                        transition:'height .5s',
-                        opacity:d.isFuture?.3:1
-                      }}/>
-                      {/* dark red in front = core spending only */}
+                    <div style={{width:'100%',position:'relative',height:`${Math.max(Math.round((d.isFuture?0:(d.isCurrent?d.totalCashOut:d.totalExp)/qMaxVal)*100),d.isFuture?0:2)}%`,minHeight:d.isFuture?'4px':'0'}}>
+                      {/* light red behind = total cash out (current month only) */}
+                      {d.isCurrent&&(
+                        <div style={{
+                          position:'absolute',bottom:0,left:0,right:0,
+                          height:'100%',
+                          background:'#fca5a5',
+                          borderRadius:'5px 5px 0 0',
+                          transition:'height .5s'
+                        }}/>
+                      )}
+                      {/* dark red in front = core spending */}
                       {!d.isFuture&&d.totalExp>0&&(
                         <div style={{
                           position:'absolute',bottom:0,left:0,right:0,
-                          height:`${Math.round((d.totalExp/Math.max(d.totalCashOut,1))*100)}%`,
+                          height:d.isCurrent?`${Math.round((d.totalExp/Math.max(d.totalCashOut,1))*100)}%`:'100%',
                           background:'#ef4444',
                           borderRadius:'5px 5px 0 0',
                           transition:'height .5s'
                         }}/>
+                      )}
+                      {d.isFuture&&(
+                        <div style={{position:'absolute',bottom:0,left:0,right:0,height:'100%',background:'#f1f5f9',borderRadius:'5px 5px 0 0',opacity:.3}}/>
                       )}
                     </div>
                   </div>
