@@ -4101,71 +4101,72 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
         {/* Grouped bar chart */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'20px'}}>
           {qData.map((d,i)=>{
-            const incH=d.isFuture?0:Math.round((d.inc/qMaxVal)*100);
-            const BAR_H=100;
+            const BAR_H=110; /* px — fixed canvas height */
+            /* pixel heights computed from qMaxVal so bars are proportionally accurate */
+            const incPx=d.isFuture?0:Math.max(Math.round((d.inc/qMaxVal)*BAR_H),d.inc>0?2:0);
+            const cashOutPx=d.isFuture?0:Math.max(Math.round(((d.isCurrent?d.totalCashOut:d.totalExp)/qMaxVal)*BAR_H),(d.isCurrent?d.totalCashOut:d.totalExp)>0?2:0);
+            const coreExpPx=(!d.isFuture&&d.totalExp>0)?(d.isCurrent?Math.max(Math.round((d.totalExp/Math.max(d.totalCashOut,1))*cashOutPx),2):cashOutPx):0;
+            const fmt1=v=>v>=1000?`${(v/1000).toFixed(1)}k`:Math.round(v);
             return(
               <div key={i} style={{textAlign:'center'}}>
-                <div style={{fontSize:'11px',color:d.isCurrent?'#6366f1':'#94a3b8',fontWeight:d.isCurrent?'800':'600',marginBottom:'6px',letterSpacing:'.03em'}}>
+                <div style={{fontSize:'11px',color:d.isCurrent?'#6366f1':'#94a3b8',fontWeight:d.isCurrent?'800':'600',marginBottom:'4px',letterSpacing:'.03em'}}>
                   {d.month}{d.isCurrent?'*':''}
                 </div>
-                {/* bars */}
-                <div style={{display:'flex',justifyContent:'center',alignItems:'flex-end',gap:'4px',height:`${BAR_H}px`,marginBottom:'8px'}}>
-                  <div style={{width:'32%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}}>
+                {/* labels row — fixed height ABOVE bars so they never distort bar heights */}
+                <div style={{height:'32px',display:'flex',justifyContent:'center',alignItems:'flex-end',gap:'4px',marginBottom:'4px'}}>
+                  <div style={{width:'38%',textAlign:'center'}}>
                     {!d.isFuture&&d.inc>0&&(
-                      <span style={{fontSize:'9px',color:'#6366f1',fontWeight:'700',marginBottom:'2px',whiteSpace:'nowrap'}}>
-                        {d.inc>=1000?`${(d.inc/1000).toFixed(1)}k`:Math.round(d.inc)}
-                      </span>
+                      <span style={{fontSize:'9px',color:'#6366f1',fontWeight:'700',whiteSpace:'nowrap',display:'block'}}>{fmt1(d.inc)}</span>
                     )}
+                  </div>
+                  <div style={{width:'44%',textAlign:'center'}}>
+                    {!d.isFuture&&d.isCurrent&&d.totalCashOut>d.totalExp&&(
+                      <span style={{fontSize:'8px',color:'#fca5a5',fontWeight:'700',whiteSpace:'nowrap',display:'block'}}>{fmt1(d.totalCashOut)}</span>
+                    )}
+                    {!d.isFuture&&d.totalExp>0&&(
+                      <span style={{fontSize:'8px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap',display:'block'}}>{fmt1(d.totalExp)}</span>
+                    )}
+                  </div>
+                </div>
+                {/* bars — fixed pixel canvas, bars positioned from bottom */}
+                <div style={{position:'relative',height:`${BAR_H}px`,display:'flex',justifyContent:'center',alignItems:'flex-end',gap:'4px',marginBottom:'8px'}}>
+                  {/* Income bar */}
+                  <div style={{width:'38%',position:'relative',height:`${BAR_H}px`}}>
                     <div style={{
-                      width:'100%',height:`${Math.max(incH,d.isFuture?0:2)}%`,
-                      background:d.isFuture?'#f1f5f9':'#6366f1',
+                      position:'absolute',bottom:0,left:0,right:0,
+                      height:`${incPx}px`,
+                      background:d.isFuture?'#e2e8f0':'#6366f1',
                       borderRadius:'5px 5px 0 0',
                       transition:'height .5s',
-                      minHeight:d.isFuture?'4px':'0',
-                      opacity:d.isFuture?.3:1
+                      opacity:d.isFuture?.4:1,
+                      minHeight:d.isFuture?'4px':'0'
                     }}/>
                   </div>
-                  {/* Expense column: current month shows overlapping (light red behind = total cash out, dark red front = spending); other months show dark red only */}
-                  <div style={{width:'38%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',position:'relative'}}>
-                    {!d.isFuture&&(
-                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:'2px',gap:'1px'}}>
-                        {d.isCurrent&&d.totalCashOut>d.totalExp&&(
-                          <span style={{fontSize:'8px',color:'#fca5a5',fontWeight:'700',whiteSpace:'nowrap'}}>
-                            {d.totalCashOut>=1000?`${(d.totalCashOut/1000).toFixed(1)}k`:Math.round(d.totalCashOut)}
-                          </span>
-                        )}
-                        {d.totalExp>0&&(
-                          <span style={{fontSize:'8px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap'}}>
-                            {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
-                          </span>
-                        )}
-                      </div>
+                  {/* Expense bar — current month: light red behind + dark red front; other months: dark red only */}
+                  <div style={{width:'44%',position:'relative',height:`${BAR_H}px`}}>
+                    {/* light red = total cash out (current month only) */}
+                    {d.isCurrent&&cashOutPx>0&&(
+                      <div style={{
+                        position:'absolute',bottom:0,left:0,right:0,
+                        height:`${cashOutPx}px`,
+                        background:'#fca5a5',
+                        borderRadius:'5px 5px 0 0',
+                        transition:'height .5s'
+                      }}/>
                     )}
-                    <div style={{width:'100%',position:'relative',height:`${Math.max(Math.round((d.isFuture?0:(d.isCurrent?d.totalCashOut:d.totalExp)/qMaxVal)*100),d.isFuture?0:2)}%`,minHeight:d.isFuture?'4px':'0'}}>
-                      {/* light red behind = total cash out (current month only) */}
-                      {d.isCurrent&&(
-                        <div style={{
-                          position:'absolute',bottom:0,left:0,right:0,
-                          height:'100%',
-                          background:'#fca5a5',
-                          borderRadius:'5px 5px 0 0',
-                          transition:'height .5s'
-                        }}/>
-                      )}
-                      {/* dark red in front = core spending */}
-                      {!d.isFuture&&d.totalExp>0&&(
-                        <div style={{
-                          position:'absolute',bottom:0,left:0,right:0,
-                          height:d.isCurrent?`${Math.round((d.totalExp/Math.max(d.totalCashOut,1))*100)}%`:'100%',
-                          background:'#ef4444',
-                          borderRadius:'5px 5px 0 0',
-                          transition:'height .5s'
-                        }}/>
-                      )}
-                      {d.isFuture&&(
-                        <div style={{position:'absolute',bottom:0,left:0,right:0,height:'100%',background:'#f1f5f9',borderRadius:'5px 5px 0 0',opacity:.3}}/>
-                      )}
-                    </div>
+                    {/* dark red = core spending */}
+                    {coreExpPx>0&&(
+                      <div style={{
+                        position:'absolute',bottom:0,left:0,right:0,
+                        height:`${coreExpPx}px`,
+                        background:'#ef4444',
+                        borderRadius:'5px 5px 0 0',
+                        transition:'height .5s'
+                      }}/>
+                    )}
+                    {d.isFuture&&(
+                      <div style={{position:'absolute',bottom:0,left:0,right:0,height:'4px',background:'#e2e8f0',borderRadius:'5px 5px 0 0',opacity:.4}}/>
+                    )}
                   </div>
                 </div>
                 {/* net pill */}
