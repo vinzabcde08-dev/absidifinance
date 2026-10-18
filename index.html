@@ -2253,7 +2253,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
-        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast}/>}
+        {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast} accBal={accBal}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
         {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
         {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} exportXLSX={exportXLSX} exportPDF={exportPDF} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
@@ -3284,12 +3284,18 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     const exp=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
     const sub=(allSubs||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
     const pay=(allPayroll||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const loans=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='loan_payment').reduce((s,x)=>s+(x.amount||0),0);
+    const invest=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
+    const savOut=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
+    const tithe=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
     const isFuture=qYear>CUR_YEAR||(qYear===CUR_YEAR&&m>CUR_MONTH);
-    return{month:MONTH_NAMES[m].substring(0,3),inc,totalExp:exp+sub+pay,net:inc-(exp+sub+pay),isFuture,isCurrent:qYear===CUR_YEAR&&m===CUR_MONTH};
+    const coreExp=exp+sub+pay; /* spending only — no loans/invest/savings */
+    const totalCashOut=coreExp+loans+invest+savOut+tithe; /* everything out */
+    return{month:MONTH_NAMES[m].substring(0,3),inc,totalExp:coreExp,totalCashOut,net:inc-totalCashOut,isFuture,isCurrent:qYear===CUR_YEAR&&m===CUR_MONTH};
   });
-  const qMaxVal=Math.max(...qData.map(d=>Math.max(d.inc,d.totalExp)),1);
+  const qMaxVal=Math.max(...qData.map(d=>Math.max(d.inc,d.totalCashOut)),1);
   const qTotalInc=qData.reduce((s,d)=>s+d.inc,0);
-  const qTotalExp=qData.reduce((s,d)=>s+d.totalExp,0);
+  const qTotalExp=qData.reduce((s,d)=>s+d.totalCashOut,0);
   const qNet=qTotalInc-qTotalExp;
   const Q_NAMES=['Q1 (Jan–Mar)','Q2 (Apr–Jun)','Q3 (Jul–Sep)','Q4 (Oct–Dec)'];
   /* graph */
@@ -4084,7 +4090,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             <p style={{fontSize:'12px',color:'#94a3b8',margin:'4px 0 0'}}>Resets every quarter. Future months shown as empty.</p>
           </div>
           <div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}>
-            {[{c:'#6366f1',l:'Income'},{c:'#ef4444',l:'Expenses'}].map(x=>(
+            {[{c:'#6366f1',l:'Income'},{c:'#ef4444',l:'Spending'},{c:'#fca5a5',l:'Total Cash Out'}].map(x=>(
               <span key={x.l} style={{fontSize:'11px',fontWeight:'700',color:x.c,display:'flex',alignItems:'center',gap:'5px'}}>
                 <span style={{width:'10px',height:'10px',borderRadius:'3px',background:x.c,display:'inline-block'}}/>
                 {x.l}
@@ -4096,7 +4102,6 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'20px'}}>
           {qData.map((d,i)=>{
             const incH=d.isFuture?0:Math.round((d.inc/qMaxVal)*100);
-            const expH=d.isFuture?0:Math.round((d.totalExp/qMaxVal)*100);
             const BAR_H=100;
             return(
               <div key={i} style={{textAlign:'center'}}>
@@ -4120,20 +4125,39 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                       opacity:d.isFuture?.3:1
                     }}/>
                   </div>
-                  <div style={{width:'32%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%'}}>
-                    {!d.isFuture&&d.totalExp>0&&(
-                      <span style={{fontSize:'9px',color:'#ef4444',fontWeight:'700',marginBottom:'2px',whiteSpace:'nowrap'}}>
-                        {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
-                      </span>
+                  {/* Expense column: overlapping bars — light red (total cash out) behind, dark red (core spending) in front */}
+                  <div style={{width:'38%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',position:'relative'}}>
+                    {!d.isFuture&&d.totalCashOut>0&&(
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:'2px',gap:'1px'}}>
+                        <span style={{fontSize:'8px',color:'#fca5a5',fontWeight:'700',whiteSpace:'nowrap'}}>
+                          {d.totalCashOut>=1000?`${(d.totalCashOut/1000).toFixed(1)}k`:Math.round(d.totalCashOut)}
+                        </span>
+                        <span style={{fontSize:'8px',color:'#ef4444',fontWeight:'700',whiteSpace:'nowrap'}}>
+                          {d.totalExp>=1000?`${(d.totalExp/1000).toFixed(1)}k`:Math.round(d.totalExp)}
+                        </span>
+                      </div>
                     )}
-                    <div style={{
-                      width:'100%',height:`${Math.max(expH,d.isFuture?0:2)}%`,
-                      background:d.isFuture?'#f1f5f9':'#ef4444',
-                      borderRadius:'5px 5px 0 0',
-                      transition:'height .5s',
-                      minHeight:d.isFuture?'4px':'0',
-                      opacity:d.isFuture?.3:1
-                    }}/>
+                    <div style={{width:'100%',position:'relative',height:`${Math.max(Math.round((d.isFuture?0:d.totalCashOut/qMaxVal)*100),d.isFuture?0:2)}%`,minHeight:d.isFuture?'4px':'0'}}>
+                      {/* light red behind = total cash out */}
+                      <div style={{
+                        position:'absolute',bottom:0,left:0,right:0,
+                        height:'100%',
+                        background:d.isFuture?'#f1f5f9':'#fca5a5',
+                        borderRadius:'5px 5px 0 0',
+                        transition:'height .5s',
+                        opacity:d.isFuture?.3:1
+                      }}/>
+                      {/* dark red in front = core spending only */}
+                      {!d.isFuture&&d.totalExp>0&&(
+                        <div style={{
+                          position:'absolute',bottom:0,left:0,right:0,
+                          height:`${Math.round((d.totalExp/Math.max(d.totalCashOut,1))*100)}%`,
+                          background:'#ef4444',
+                          borderRadius:'5px 5px 0 0',
+                          transition:'height .5s'
+                        }}/>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {/* net pill */}
@@ -4702,7 +4726,7 @@ function IncomeTab({income,allIncome,setIncome,clients,accounts,showBalToast}){
 }
 
 /* ════════  EXPENSES  ════════ */
-function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,employees,showBalToast}){
+function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,employees,showBalToast,accBal}){
   const[date,setDate]=useState(TODAY);
   const[amount,setAmount]=useState('');
   const[category,setCategory]=useState('Food');
@@ -4713,6 +4737,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   const[filterAccId,setFilterAccId]=useState('');
   const[filterCardId,setFilterCardId]=useState('');
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
+  const[balOpen,setBalOpen]=useState(false);
 
   const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');setNote('');};
   const startEdit=(e)=>{setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');setNote(e.note||'');};
@@ -4731,7 +4756,110 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   };
 
   return(
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start'}} className="fade __form-grid">
+    <div style={{position:'relative'}}>
+    {/* ── STICKY ACCOUNT BALANCE STRIP ── */}
+    {accBal&&accounts&&accounts.length>0&&(
+      <>
+        {/* Sticky bar */}
+        <div style={{
+          position:'sticky',top:0,zIndex:50,
+          background:'linear-gradient(135deg,#1e293b 0%,#0f172a 100%)',
+          borderBottom:'1px solid #334155',
+          padding:'10px 16px',
+          display:'flex',alignItems:'center',gap:'0',
+          overflowX:'auto',
+          WebkitOverflowScrolling:'touch',
+          scrollbarWidth:'none',
+          msOverflowStyle:'none',
+        }}>
+          <span style={{fontSize:'10px',fontWeight:'800',color:'#64748b',textTransform:'uppercase',letterSpacing:'.08em',whiteSpace:'nowrap',marginRight:'12px',flexShrink:0}}>Balances</span>
+          <div style={{display:'flex',gap:'10px',overflowX:'auto',WebkitOverflowScrolling:'touch',scrollbarWidth:'none',flex:1}}>
+            {accounts.map(a=>{
+              const bal=accBal(a.id);
+              const isNeg=bal<0;
+              return(
+                <div key={a.id} style={{
+                  flexShrink:0,
+                  background:'rgba(255,255,255,.06)',
+                  border:`1px solid ${isNeg?'#ef444440':'#33415580'}`,
+                  borderRadius:'8px',
+                  padding:'6px 12px',
+                  minWidth:'110px',
+                  textAlign:'center'
+                }}>
+                  <div style={{fontSize:'9px',color:'#94a3b8',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:'2px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'100px'}}>{a.name}</div>
+                  <div style={{fontSize:'12px',fontWeight:'900',color:isNeg?'#f87171':'#34d399',whiteSpace:'nowrap'}}>
+                    {isNeg?'-':''}{'₱'}{Math.abs(bal).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0})}
+                  </div>
+                </div>
+              );
+            })}
+            {/* Total */}
+            <div style={{
+              flexShrink:0,
+              background:'rgba(99,102,241,.15)',
+              border:'1px solid #6366f140',
+              borderRadius:'8px',
+              padding:'6px 12px',
+              minWidth:'110px',
+              textAlign:'center'
+            }}>
+              <div style={{fontSize:'9px',color:'#a5b4fc',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:'2px'}}>TOTAL</div>
+              <div style={{fontSize:'12px',fontWeight:'900',color:'#818cf8',whiteSpace:'nowrap'}}>
+                {(()=>{const t=accounts.reduce((s,a)=>s+accBal(a.id),0);return(t<0?'-':'')+'₱'+Math.abs(t).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0});})()}
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Floating arrow button for mobile */}
+        <button
+          onClick={()=>setBalOpen(v=>!v)}
+          style={{
+            position:'fixed',bottom:'90px',right:'16px',zIndex:100,
+            width:'44px',height:'44px',borderRadius:'50%',
+            background:'linear-gradient(135deg,#1e293b,#334155)',
+            border:'2px solid #6366f1',
+            color:'#a5b4fc',fontSize:'18px',cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:'0 4px 14px rgba(0,0,0,.4)',
+          }}
+          title="View account balances"
+        >💳</button>
+        {/* Floating expanded view */}
+        {balOpen&&(
+          <div style={{
+            position:'fixed',bottom:'145px',right:'16px',zIndex:101,
+            background:'#1e293b',border:'1px solid #334155',borderRadius:'14px',
+            padding:'14px',boxShadow:'0 8px 30px rgba(0,0,0,.5)',
+            minWidth:'220px',maxWidth:'280px',
+          }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+              <span style={{fontSize:'11px',fontWeight:'800',color:'#64748b',textTransform:'uppercase',letterSpacing:'.08em'}}>Account Balances</span>
+              <button onClick={()=>setBalOpen(false)} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:'16px',lineHeight:1}}>×</button>
+            </div>
+            {accounts.map(a=>{
+              const bal=accBal(a.id);
+              const isNeg=bal<0;
+              return(
+                <div key={a.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:'1px solid #33415560'}}>
+                  <span style={{fontSize:'12px',color:'#cbd5e1',fontWeight:'600'}}>{a.name}</span>
+                  <span style={{fontSize:'13px',fontWeight:'900',color:isNeg?'#f87171':'#34d399'}}>
+                    {isNeg?'-':''}{'₱'}{Math.abs(bal).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </span>
+                </div>
+              );
+            })}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0 0'}}>
+              <span style={{fontSize:'12px',color:'#a5b4fc',fontWeight:'800'}}>TOTAL</span>
+              <span style={{fontSize:'14px',fontWeight:'900',color:'#818cf8'}}>
+                {(()=>{const t=accounts.reduce((s,a)=>s+accBal(a.id),0);return(t<0?'-':'')+'₱'+Math.abs(t).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});})()}
+              </span>
+            </div>
+          </div>
+        )}
+      </>
+    )}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px',alignItems:'start',marginTop:'12px'}} className="fade __form-grid">
       <div className="card" style={{padding:'22px',border:editId?'2px solid #6366f1':'2px solid transparent',transition:'border-color .2s'}}>
         <p className="sect">{editId?'Edit Expense Entry':'Log Expense'}</p>
         <div className="col">
@@ -4880,6 +5008,7 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
         })()}
         </div>
       </div>
+    </div>
     </div>
   );
 }
