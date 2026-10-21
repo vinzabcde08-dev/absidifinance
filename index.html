@@ -7249,22 +7249,43 @@ Rules:
     setTimeout(()=>chatEndRef.current?.scrollIntoView({behavior:'smooth'}),50);
     try{
       /* Build a concise financial context to include as system prompt */
+      const P2=v=>`₱${(v||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+      const acctLines=(accounts||[]).map(a=>`  - ${a.name} (${a.type||'Bank'}): ${P2(accBal(a.id))}`).join('\n');
+      const totalAcctBal=(accounts||[]).reduce((s,a)=>s+accBal(a.id),0);
+      const expLines=allExpenses.filter(x=>(x.date||'').startsWith(curMonthKey)).slice(-20)
+        .map(x=>`  - ${x.date} ${x.category} ${P2(x.amount)}${x.alloc?` [${x.alloc}]`:''}${x.note?` "${x.note}"`:''}`)
+        .join('\n');
+      const incLines=allIncome.filter(x=>(x.date||'').startsWith(curMonthKey))
+        .map(x=>`  - ${x.date} ${x.type||'Income'} ${P2(x.amount)}${(accounts||[]).find(a=>a.id===x.accountId)?` → ${(accounts||[]).find(a=>a.id===x.accountId).name}`:''}`)
+        .join('\n');
       const ctx=`You are a personal finance assistant for a Filipino professional named ${userName}.
-They are analyzing ${monthName} ${yr}.
-Key financial snapshot:
-- Monthly income: ₱${mInc.toLocaleString('en-PH')}
-- Tithes: ₱${tithe.toLocaleString('en-PH')} | Investments: ₱${invest.toLocaleString('en-PH')} | Savings: ₱${savings.toLocaleString('en-PH')}
-- Daily spending cap: ₱${dailyCap.toLocaleString('en-PH')}
-${loans&&loans.length>0?`- Active loans: ${loans.map(l=>`${l.name} (balance ₱${(l.balance||0).toLocaleString('en-PH')}, monthly ₱${(l.monthlyPayment||0).toLocaleString('en-PH')})`).join(', ')}`:''}
-${result?`Previous AI analysis summary: Health score ${result.healthScore}/10. ${result.summary}`:''}
-Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 sentences unless more detail is needed. Use Philippine Peso (₱). No markdown formatting — plain text only.`;
+They are analyzing ${monthName} ${yr}. Today is ${TODAY}.
+
+## ACCOUNT BALANCES (current, calculated from all transactions)
+${acctLines||'No accounts set up yet'}
+Total across all accounts: ${P2(totalAcctBal)}
+
+## THIS MONTH INCOME (${monthName} ${yr})
+${incLines||'No income entries this month'}
+Total income: ${P2(mInc)}
+
+## THIS MONTH EXPENSES (${monthName} ${yr})
+${expLines||'No expense entries this month'}
+
+## BUDGET TARGETS
+- Tithes: ${P2(tithe)} | Investments: ${P2(invest)} | Savings: ${P2(savings)}
+- Daily spending cap: ${P2(dailyCap)}
+${loans&&loans.length>0?`\n## ACTIVE LOANS\n${loans.map(l=>`  - ${l.name}: balance ${P2(l.balance)}, monthly ${P2(l.monthlyPayment)}`).join('\n')}`:''}
+${result?`\n## PREVIOUS AI ANALYSIS SUMMARY\nHealth score ${result.healthScore}/10. ${result.summary}`:''}
+
+You have FULL access to the user's account balances, income, and expense data above. Always reference the specific numbers and account names when answering. Answer in a friendly, practical, Filipino-context-aware way. Use Philippine Peso (₱). Format bullet points and lists using markdown (- for bullets, **bold** for emphasis, numbered lists with 1. 2. 3.) since the chat renders markdown.`;
 
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':aiApiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({
           model:settings.aiModel||'claude-haiku-4-5-20251001',
-          max_tokens:512,
+          max_tokens:1024,
           stream:true,
           system:ctx,
           messages:updatedMsgs.map(m=>({role:m.role,content:m.content})),
@@ -7928,9 +7949,49 @@ Answer in a friendly, practical, Filipino-context-aware way. Be concise — 2-4 
                       background:msg.role==='user'?'linear-gradient(135deg,#4f46e5,#7c3aed)':'var(--card2)',
                       border:msg.role==='assistant'?'1px solid var(--border)':'none',
                       color:msg.role==='user'?'#fff':'var(--text)',
-                      fontSize:'13px',lineHeight:'1.55',
+                      fontSize:'13px',lineHeight:'1.6',
                     }}>
-                      {msg.content}
+                      {msg.role==='user'?msg.content:(()=>{
+                        /* lightweight markdown renderer for AI responses */
+                        const lines=msg.content.split('\n');
+                        const out=[];
+                        let i=0;
+                        while(i<lines.length){
+                          const line=lines[i];
+                          /* blank line */
+                          if(!line.trim()){out.push(<div key={i} style={{height:'6px'}}/>);i++;continue;}
+                          /* heading ### */
+                          if(line.startsWith('### ')){out.push(<p key={i} style={{fontWeight:'800',fontSize:'13px',margin:'8px 0 4px',color:'var(--text)'}}>{line.slice(4)}</p>);i++;continue;}
+                          if(line.startsWith('## ')){out.push(<p key={i} style={{fontWeight:'800',fontSize:'14px',margin:'10px 0 4px',color:'var(--text)'}}>{line.slice(3)}</p>);i++;continue;}
+                          if(line.startsWith('# ')){out.push(<p key={i} style={{fontWeight:'900',fontSize:'15px',margin:'10px 0 6px',color:'var(--text)'}}>{line.slice(2)}</p>);i++;continue;}
+                          /* bullet - or * */
+                          if(/^[-*•]\s/.test(line)){
+                            const bullets=[];
+                            while(i<lines.length&&/^[-*•]\s/.test(lines[i])){
+                              const txt=lines[i].replace(/^[-*•]\s/,'');
+                              bullets.push(<li key={i} style={{marginBottom:'4px',lineHeight:'1.5'}} dangerouslySetInnerHTML={{__html:txt.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code style="background:rgba(99,102,241,.1);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')}}/>);
+                              i++;
+                            }
+                            out.push(<ul key={'ul'+i} style={{paddingLeft:'18px',margin:'4px 0',listStyle:'disc'}}>{bullets}</ul>);
+                            continue;
+                          }
+                          /* numbered list */
+                          if(/^\d+\.\s/.test(line)){
+                            const items=[];
+                            while(i<lines.length&&/^\d+\.\s/.test(lines[i])){
+                              const txt=lines[i].replace(/^\d+\.\s/,'');
+                              items.push(<li key={i} style={{marginBottom:'4px',lineHeight:'1.5'}} dangerouslySetInnerHTML={{__html:txt.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code style="background:rgba(99,102,241,.1);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')}}/>);
+                              i++;
+                            }
+                            out.push(<ol key={'ol'+i} style={{paddingLeft:'18px',margin:'4px 0'}}>{items}</ol>);
+                            continue;
+                          }
+                          /* regular paragraph with inline bold/code */
+                          out.push(<p key={i} style={{margin:'2px 0',lineHeight:'1.6'}} dangerouslySetInnerHTML={{__html:line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code style="background:rgba(99,102,241,.1);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')}}/>);
+                          i++;
+                        }
+                        return out;
+                      })()}
                     </div>
                     {msg.role==='user'&&(
                       <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'#e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginBottom:'2px',fontSize:'13px'}}>
