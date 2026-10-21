@@ -7278,7 +7278,14 @@ ${expLines||'No expense entries this month'}
 ${loans&&loans.length>0?`\n## ACTIVE LOANS\n${loans.map(l=>`  - ${l.name}: balance ${P2(l.balance)}, monthly ${P2(l.monthlyPayment)}`).join('\n')}`:''}
 ${result?`\n## PREVIOUS AI ANALYSIS SUMMARY\nHealth score ${result.healthScore}/10. ${result.summary}`:''}
 
-You have FULL access to the user's account balances, income, and expense data above. Always reference the specific numbers and account names when answering. Answer in a friendly, practical, Filipino-context-aware way. Use Philippine Peso (₱). Format bullet points and lists using markdown (- for bullets, **bold** for emphasis, numbered lists with 1. 2. 3.) since the chat renders markdown.`;
+You have FULL access to the user's account balances, income, and expense data above. Always reference the specific numbers and account names when answering. Answer in a friendly, practical, Filipino-context-aware way. Use Philippine Peso (₱).
+
+CRITICAL FORMATTING RULES — the chat renders markdown, so you MUST follow these exactly:
+- Every bullet point MUST start on its OWN NEW LINE beginning with "- " (dash space). NEVER write bullets inline separated by " - " within a paragraph.
+- Use **bold** for section headers or key labels (e.g. **CURRENT BALANCES:**)
+- Use blank lines between sections
+- For date plans, use a format like:\n**OCTOBER 31**\n- Step one\n- Step two\n\n**NOVEMBER 1**\n- Step one
+- NEVER run multiple bullets together in one paragraph. Each bullet = its own line.`;
 
       const resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
@@ -7953,7 +7960,16 @@ You have FULL access to the user's account balances, income, and expense data ab
                     }}>
                       {msg.role==='user'?msg.content:(()=>{
                         /* lightweight markdown renderer for AI responses */
-                        const lines=msg.content.split('\n');
+                        /* Pre-process: convert inline " --- " section breaks and inline " - item" patterns to newlines */
+                        let raw=msg.content;
+                        /* "--- SECTION HEADER ---" or " --- " → newline + header */
+                        raw=raw.replace(/\s*---\s*([A-Z][^-\n]+?)\s*---\s*/g,'\n\n**$1**\n');
+                        /* Remaining " --- " → double newline */
+                        raw=raw.replace(/\s*---\s*/g,'\n\n');
+                        /* Inline " - item" after a sentence/colon → newline bullet (only when not already at line start) */
+                        raw=raw.replace(/([^\n]) - ([A-Z✅🔴💡📌🏦💰])/g,'$1\n- $2');
+                        raw=raw.replace(/([^\n]) - ((?:If |After |Set |Open |Do |Transfer |BDO|Union|Mari|PayPal|Nov|Oct|Brandit))/g,'$1\n- $2');
+                        const lines=raw.split('\n');
                         const out=[];
                         let i=0;
                         while(i<lines.length){
