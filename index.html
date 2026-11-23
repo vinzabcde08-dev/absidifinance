@@ -237,6 +237,7 @@ self.addEventListener('fetch',e=>{
 const{useState,useEffect,useRef}=React;
 
 /* ── Safety net: if any screen throws, show a message instead of a blank page ── */
+const isOpex=x=>!x.alloc&&(x.opex===true||(x.opex===undefined&&(x.category==='Payroll'||x.category==='Operational')));
 class ErrorBoundary extends React.Component{
   constructor(p){super(p);this.state={err:null};}
   static getDerivedStateFromError(err){return{err};}
@@ -330,7 +331,7 @@ function CategorySelect({value,onChange,extraCats=[],style={}}){
     document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);
   },[]);
   const saveCustomCats=(updated)=>{setCustomCats(updated);localStorage.setItem('absidi_custom_cats',JSON.stringify(updated));};
-  const allCats=[...(extraCats.length?extraCats:['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other']),...customCats.map(c=>c.name)];
+  const allCats=[...(extraCats.length?extraCats:['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Operational','Shopping','Entertainment','Other']),...customCats.map(c=>c.name)];
   const getMeta=(cat)=>{
     const custom=customCats.find(c=>c.name===cat);
     if(custom)return{bucket:custom.bucket,color:BUCKET_COLORS[custom.bucket]||'#94a3b8'};
@@ -1547,6 +1548,8 @@ function MainApp({onLogout}){
   /* mPay = actual payroll paid — from Payroll tab entries + any expenses tagged category 'Payroll' */
   const mPayFromExp=byMonth(expenses).filter(x=>x.category==='Payroll'&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
   const mPay=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0)+mPayFromExp;
+  /* mOpex = operational costs deducted BEFORE tithe: legacy payroll entries + any expense flagged operational (Payroll/Operational categories default on, toggle per expense) */
+  const mOpex=byMonth(payroll).reduce((s,x)=>s+(x.amount||0),0)+byMonth(expenses).filter(isOpex).reduce((s,x)=>s+(x.amount||0),0);
   /* mExp = essentials spending only: excludes tithe/invest/savings/transfer alloc entries
      AND excludes Payroll category expenses (those are already counted in mPay above) */
   const mExp=byMonth(expenses).filter(x=>(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
@@ -1556,7 +1559,7 @@ function MainApp({onLogout}){
   /* Static monthly salary sum — used for display labels in HomeTab/BudgetTab */
   const expectedPayroll=employees.reduce((s,e)=>s+(e.salary||0),0);
   /* Pending payroll = actual obligations from pay schedule (overdue + upcoming), mirrors PayrollTab logic */
-  const pendingPayroll=employees.reduce((sum,emp)=>{
+  const pendingPayroll=0*employees.reduce((sum,emp)=>{
     const freq=emp.frequency||'Monthly';
     const sal=emp.salary||0;
     const pc=freq==='Biweekly'?Math.round(sal/2):freq==='Weekly'?Math.round(sal/4):sal;
@@ -1635,7 +1638,7 @@ function MainApp({onLogout}){
       const mI=income.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       if(!mI)continue;
       const mP=payroll.filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0)
-        +expenses.filter(x=>x.category==='Payroll'&&!x.alloc&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+        +expenses.filter(x=>isOpex(x)&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       /* Investment transferred that month is deducted from the tithe base (same as the live calculation) */
       const mInv=expenses.filter(x=>x.alloc==='investment_out'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       const owed=Math.max(0,(mI-mP-mInv)*(settings.tithePct||10)/100);
@@ -1676,7 +1679,7 @@ function MainApp({onLogout}){
      - Never uses the 3-month average — always actual income */
   const investActualAmt=budgetFixed?(settings.investAmt||0):(mInc*settings.investPct)/100;
   const investMovedThisMonth=mInvestActual>=(invest*0.9);
-  const titheBase=Math.max(0,(mInc-mIncNoTithe-mPay)-(investMovedThisMonth?investActualAmt:0));
+  const titheBase=Math.max(0,(mInc-mIncNoTithe-mOpex)-(investMovedThisMonth?investActualAmt:0));
   const tithe=(titheBase*settings.tithePct)/100; /* always % — tithe is non-negotiable, not a fixed amount */
   /* Desires carry-over: if last month overspent, penalise this month */
   const lastMK=(()=>{const d=new Date(yr,selMonth-1,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;})();
@@ -2155,7 +2158,6 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
     {id:'income',icon:'expenses',label:'Income'},
     {id:'expenses',icon:'income',label:'Expenses'},
     {id:'subs',icon:'calendar',label:'Subs'},
-    {id:'payroll',icon:'users',label:'Payroll'},
     {id:'budget',icon:'chart',label:'Budget'},
     {id:'savings',icon:'bank',label:'Savings'},
     {id:'debt',icon:'warning',label:'Debt'},
@@ -2298,8 +2300,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
         {tab==='income'&&<IncomeTab income={byMonth(income)} allIncome={income} setIncome={setIncome} clients={clients} accounts={accounts} showBalToast={showBalToast}/>}
         {tab==='expenses'&&<ExpensesTab expenses={byMonth(expenses)} allExpenses={expenses} setExpenses={setExpenses} accounts={accounts} cards={cards} payroll={byMonth(payroll)} employees={employees} showBalToast={showBalToast} accBal={accBal}/>}
         {tab==='subs'&&<SubsTab subs={byMonth(subs)} allSubs={subs} setSubs={setSubs} accounts={accounts} cards={cards} fxRates={fxRates} fxLoaded={fxLoaded} allExpenses={expenses} setExpenses={setExpenses}/>}
-        {tab==='payroll'&&<PayrollTab payroll={byMonth(payroll)} allPayroll={payroll} setPayroll={setPayroll} employees={employees} setEmployees={setEmployees} accounts={accounts} accBal={accBal} skippedPayDates={skippedPayDates} skipPayDate={skipPayDate} unskipPayDate={unskipPayDate} showBalToast={showBalToast}/>}
-        {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} exportXLSX={exportXLSX} exportPDF={exportPDF} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
+                {tab==='budget'&&<BudgetTab base={base} avg3={avg3} mInc={mInc} titheBase={titheBase} settings={settings} setSettings={setSettings} mExp={mExp} mSub={mSub} mPay={mPayBudget} mPayActual={mPay} expectedPayroll={expectedPayroll} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} tithe={tithe} invest={invest} desires={desires} savings={savings} totalFixed={totalFixed} budgetFixed={budgetFixed} lastMonthInc={lastMonthInc} exportCSV={exportCSV} exportXLSX={exportXLSX} exportPDF={exportPDF} mTitheActual={mTitheActual} mInvestActual={mInvestActual} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} desiresCarryPenalty={desiresCarryPenalty} investMovedThisMonth={investMovedThisMonth} accounts={accounts} accBal={accBal} emergencyAcctId={emergencyAcctId} setEmergencyAcctId={setEmergencyAcctId} emergencyMonths={emergencyMonths} setEmergencyMonths={setEmergencyMonths} expenses={byMonth(expenses)}/>}
         {tab==='savings'&&<SavingsTab savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} setSavingsAcctId={setSavingsAcctId} accounts={accounts} savings={savings} savingsPct={settings.savingsPct} curMonthKey={curMonthKey} income={income} byMonth={byMonth}/>}
         {tab==='debt'&&<DebtTab debts={debts} setDebts={setDebts}/>}
         {tab==='loans'&&<LoansTab loans={loans} setLoans={setLoans} accounts={accounts} accBal={accBal} setExpenses={setExpenses} showBalToast={showBalToast}/>}
@@ -2426,7 +2427,6 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
           {id:'income',icon:'expenses',label:'Income'},
           {id:'expenses',icon:'income',label:'Expenses'},
           {id:'budget',icon:'chart',label:'Budget'},
-          {id:'payroll',icon:'users',label:'Payroll'},
         ];
         const MORE_TABS=TABS.filter(t=>!BOT_TABS.find(b=>b.id===t.id));
         const moreActive=MORE_TABS.some(t=>t.id===tab);
@@ -3003,7 +3003,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
     return dates.sort();
   };
 
-  const planEmpSchedules=(employees&&employees.length>0)?employees.map(emp=>{
+  const planEmpSchedules=false?employees.map(emp=>{
     const empPays=(allPayroll||[]).filter(p=>p.employeeId===emp.id).sort((a,b)=>b.date.localeCompare(a.date));
     const freq=emp.frequency||'Monthly';
     const sal=emp.salary||0;
@@ -3533,7 +3533,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
               <div>
                 <p style={{fontWeight:'900',color:'#92400e',margin:'0 0 2px',fontSize:'15px'}}>🙏 {MONTH_NAMES[selMonth]} Tithes</p>
-                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of net income (after payroll{investMovedThisMonth?' + investment':''}) · Non-negotiable · Only the selected account is affected</p>
+                <p style={{fontSize:'12px',color:'#b45309',margin:0}}>{settings.tithePct}% of net income (after operational costs{investMovedThisMonth?' + investment':''}) · Non-negotiable · Only the selected account is affected</p>
               </div>
               <div style={{textAlign:'right'}}>
                 <p style={{fontSize:'22px',fontWeight:'900',color:'#b45309',margin:0,lineHeight:1}}>{P(remainingTithe)}<InfoIcon text={`Total owed: ${P(totalTitheOwed)}\n  This month: ${P(tithe)} (${settings.tithePct}% of ${P(titheBase)})${titheCarryover>0?`\n  Carried over: ${P(titheCarryover)}`:''}${!investMovedThisMonth?'\n  ⚠ Investment not moved — once moved, tithe base will reduce':''}\n\nAlready paid: ${P(mTitheActual)}${mTitheSkipped>0?`\nExempted: ${P(mTitheSkipped)}`:''}\nRemaining: ${P(remainingTithe)}\n\nPay any amount — it all counts. Log a Tithes expense in the Expenses tab and it reduces this balance too.`} title="Tithe Balance"/></p>
@@ -4897,22 +4897,26 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
   const[cardId,setCardId]=useState('');
   const[editId,setEditId]=useState(null);
   const[note,setNote]=useState('');
+  const[opexSel,setOpexSel]=useState(null);
   const[filterAccId,setFilterAccId]=useState('');
   const[filterCardId,setFilterCardId]=useState('');
   const CATS=['Food','Groceries','Fuel','Transportation','Baby Supplies','Healthcare','Utilities','Subscriptions','Credit Card Payment','Payroll','Shopping','Entertainment','Other'];
   const[balOpen,setBalOpen]=useState(false);
 
-  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');setNote('');};
-  const startEdit=(e)=>{setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');setNote(e.note||'');};
+  const reset=()=>{setEditId(null);setDate(TODAY);setAmount('');setCategory('Food');setAccountId('');setCardId('');setNote('');setOpexSel(null);};
+  const startEdit=(e)=>{setOpexSel(e.opex===undefined?null:e.opex);setEditId(e.id);setDate(e.date);setAmount(String(e.amount));setCategory(e.category);setAccountId(e.accountId||'');setCardId(e.cardId||'');setNote(e.note||'');};
   const save=()=>{
     if(!amount)return;
     const amt=parseFloat(amount)||0;
     /* Auto-tag Tithes category with alloc:'tithe' so it counts in the tithe balance tracker */
     const titheTag=category==='Tithes'?{alloc:'tithe'}:{};
+    const opexAuto=category==='Payroll'||category==='Operational';
+    const opexVal=opexSel===null?opexAuto:opexSel;
+    const opexTag=(opexVal===opexAuto)?{opex:undefined}:{opex:opexVal};
     if(editId){
-      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:amt,category,accountId,cardId,note,...titheTag}:x));
+      setExpenses(allExpenses.map(x=>x.id===editId?{...x,date,amount:amt,category,accountId,cardId,note,...titheTag,...opexTag}:x));
     }else{
-      setExpenses([...allExpenses,{id:uid(),date,amount:amt,category,accountId,cardId,note,...titheTag}]);
+      setExpenses([...allExpenses,{id:uid(),date,amount:amt,category,accountId,cardId,note,...titheTag,...opexTag}]);
     }
     if(accountId&&showBalToast)setTimeout(()=>showBalToast(accountId,amt,'expense'),80);
     reset();
@@ -5035,6 +5039,11 @@ function ExpensesTab({expenses,allExpenses,setExpenses,accounts,cards,payroll,em
             <span className="fl">Description / Note <span style={{fontWeight:'400',color:'#94a3b8'}}>(for AI analysis)</span></span>
             <input className="fi" type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. McDonald's lunch with team, SM groceries for the week..."/>
           </div>
+          {(()=>{const auto=category==='Payroll'||category==='Operational';const on=opexSel===null?auto:opexSel;return(
+            <label style={{display:'flex',gap:'10px',alignItems:'flex-start',padding:'10px 12px',background:on?'#eef2ff':'#f8fafc',border:'1px solid '+(on?'#c7d2fe':'#e2e8f0'),borderRadius:'10px',cursor:'pointer'}}>
+              <input type="checkbox" checked={on} onChange={e=>setOpexSel(e.target.checked)} style={{marginTop:'3px'}}/>
+              <span style={{fontSize:'12px',color:'#475569',lineHeight:1.4}}><b style={{color:'#1e293b'}}>Operational cost (deduct before tithe)</b><br/>{on?'Subtracted from income first, so tithe is only on what is left.':'Not deducted. Tithe is computed on income without removing this.'}</span>
+            </label>);})()}
           <div style={{display:'flex',gap:'8px'}}>
             <button className="btn bp" style={{flex:1,justifyContent:'center'}} onClick={save}>
               <Ico n={editId?'check':'expenses'} s={14} c="#fff"/>{editId?'Save Changes':'Add Expense'}
@@ -6061,7 +6070,7 @@ function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay
         {!budgetFixed&&(
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'12px',marginBottom:'14px'}}>
             {[
-              {label:'Tithes %',key:'tithePct',color:'#f59e0b',amt:tithe,note:`of actual income after payroll (${P(titheBase)})`},
+              {label:'Tithes %',key:'tithePct',color:'#f59e0b',amt:tithe,note:`of actual income after operational costs (${P(titheBase)})`},
               {label:'Investment %',key:'investPct',color:'#6366f1'},
               {label:'Savings %',key:'savingsPct',color:'#10b981'},
               {label:'Desires %',key:'desiresPct',color:'#ec4899'},
@@ -6222,7 +6231,7 @@ function BudgetTab({base,avg3,mInc,titheBase,settings,setSettings,mExp,mSub,mPay
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'4px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
             <span style={{fontSize:'14px',fontWeight:'800',color:'var(--text)'}}>🏠 Essentials</span>
-            <InfoIcon text={`What's left after all allocations: ${settings.budgetMode==='avg'?'3-month avg base':'This month income'} (${P(base)}) − Tithes (${P(tithe)}, 10% of actual income after payroll: ${P(titheBase)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll budget (${P(mPay)}${expectedPayroll>0&&mPay===expectedPayroll&&(mPayActual||0)<expectedPayroll?` — expected from ${expectedPayroll>0?'employee salaries':'recorded entries'}, actual paid: ${P(mPayActual||0)}`:''}${expectedPayroll>0&&(mPayActual||0)>expectedPayroll?` — actual paid`:''}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc. Note: tithes are computed on this month's actual income (not the budget average) since they're non-negotiable.`} title="Essentials Budget"/>
+            <InfoIcon text={`What's left after all allocations: ${settings.budgetMode==='avg'?'3-month avg base':'This month income'} (${P(base)}) − Tithes (${P(tithe)}, 10% of actual income after operational costs: ${P(titheBase)}) − Investment (${P(invest)}) − Savings (${P(savings)}) − Desires (${P(desires)}) − Subscriptions (${P(mSub)}) − Payroll budget (${P(mPay)}${expectedPayroll>0&&mPay===expectedPayroll&&(mPayActual||0)<expectedPayroll?` — expected from ${expectedPayroll>0?'employee salaries':'recorded entries'}, actual paid: ${P(mPayActual||0)}`:''}${expectedPayroll>0&&(mPayActual||0)>expectedPayroll?` — actual paid`:''}) = ${P(essentialsAllowed)}. This is your budget for food, bills, transport, etc. Note: tithes are computed on this month's actual income (not the budget average) since they're non-negotiable.`} title="Essentials Budget"/>
           </div>
           <div style={{textAlign:'right'}}>
             <span style={{fontSize:'18px',fontWeight:'900',color:essentialsSpent>essentialsAllowed?'#ef4444':'var(--text)'}}>{P(essentialsAllowed)}</span>
@@ -7084,7 +7093,7 @@ function AIAdvisorTab({aiApiKey,settings,accounts,accBal,allIncome,allExpenses,a
       const entry=titheLog.find(t=>(t.month||t.week)===mk);
       const paid=allExpenses.filter(x=>x.alloc==='tithe'&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       const mI=allIncome.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
-      const mP=(allPayroll||[]).filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
+      const mP=(allPayroll||[]).filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0)+allExpenses.filter(x=>isOpex(x)&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       if(!mI&&!paid)return null;
       const owed=Math.max(0,(mI-mP)*(settings.tithePct||10)/100);
       const skippedAmt=(entry?.skips||[]).reduce((s,x)=>s+(x.amount||0),0);
