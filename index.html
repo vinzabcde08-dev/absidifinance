@@ -1641,6 +1641,11 @@ function MainApp({onLogout}){
       deficit+=(owed-paid-skippedAmt); /* negative = advance credit, positive = unpaid deficit */
       rows.push({mk,owed,paid,skippedAmt,net:owed-paid-skippedAmt});
     }
+    /* Manual adjustments: +amount = still owed, -amount = advance paid. Apply from their start month onward. */
+    titheLog.filter(t=>t.adj&&(t.from||'')<=curMonthKey).forEach(t=>{
+      deficit+=(t.amount||0);
+      rows.push({mk:t.from,adj:true,id:t.month,note:t.note||'',net:(t.amount||0)});
+    });
     return{total:parseFloat(deficit.toFixed(2)),rows};
   })();
   const titheCarryover=_tc.total;
@@ -3347,6 +3352,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const[titheWithdrawAcct,setTitheWithdrawAcct]=useState('');
   const[titheWithdrawAmount,setTitheWithdrawAmount]=useState(''); /* custom amount input — blank = full remaining */
   const[titheSkipAmt,setTitheSkipAmt]=useState('');
+  const[adjType,setAdjType]=useState('owed');const[adjAmt,setAdjAmt]=useState('');const[adjNote,setAdjNote]=useState('');const[adjFrom,setAdjFrom]=useState('');
   const[titheSkipNote,setTitheSkipNote]=useState('');
 
   /* ── Consolidate & Withdraw modal ── */
@@ -3540,27 +3546,6 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                 <span style={{fontSize:'16px',fontWeight:'900',color:'#b45309',flexShrink:0}}>{P(titheCarryover)}</span>
               </div>
             )}
-            {titheCarryover!==0&&(titheCarryDetail||[]).length>0&&(
-              <details style={{marginBottom:'10px',fontSize:'11px',color:'#92400e'}}>
-                <summary style={{cursor:'pointer',fontWeight:'700'}}>Where does the carryover come from?</summary>
-                <div style={{marginTop:'6px',overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'11px'}}>
-                    <thead><tr style={{textAlign:'right',color:'#b45309'}}><th style={{textAlign:'left'}}>Month</th><th>Owed</th><th>Paid</th><th>Exempt</th><th>Net</th></tr></thead>
-                    <tbody>
-                      {titheCarryDetail.map(r=>(
-                        <tr key={r.mk} style={{textAlign:'right',borderTop:'1px solid rgba(245,158,11,.25)'}}>
-                          <td style={{textAlign:'left'}}>{MONTH_NAMES[parseInt(r.mk.split('-')[1])-1].slice(0,3)} {r.mk.split('-')[0]}</td>
-                          {r.skipped?<td colSpan={4} style={{color:'#94a3b8'}}>Month skipped (not counted)</td>:<>
-                            <td>{P(r.owed)}</td><td>{P(r.paid)}</td><td>{P(r.skippedAmt)}</td>
-                            <td style={{fontWeight:'800',color:r.net>0.005?'#b45309':r.net<-0.005?'#059669':'#94a3b8'}}>{r.net>0.005?'':''}{P(r.net)}</td></>}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p style={{margin:'6px 0 0',color:'#b45309'}}>Positive Net = unpaid. Negative = paid ahead. Use "Skip entire month's tithe" in that month to remove it from this list.</p>
-                </div>
-              </details>
-            )}
             {titheCarryover<0&&(
               <div style={{background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.4)',borderRadius:'8px',padding:'9px 14px',marginBottom:'10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <div>
@@ -3694,6 +3679,75 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               Skip entire month's tithe
             </button>
           </div>
+        );
+      })()}
+
+
+      {/* TITHE BALANCE & ADJUSTMENTS */}
+      {(()=>{
+        const rows=(titheCarryDetail||[]);
+        const addAdj=()=>{
+          const a=parseFloat(adjAmt)||0;
+          if(a<=0)return;
+          const signed=adjType==='owed'?a:-a;
+          setTitheLog(prev=>[...(prev||[]),{month:'adj-'+uid(),adj:true,from:adjFrom||curMonthKey,amount:signed,note:adjNote,date:TODAY}]);
+          setAdjAmt('');setAdjNote('');
+        };
+        const markPaid=(mk,net)=>setTitheLog(prev=>{
+          const ex=(prev||[]).find(t=>t.month===mk)||{};
+          return [...(prev||[]).filter(t=>t.month!==mk),{...ex,month:mk,skips:[...(ex.skips||[]),{amount:parseFloat(net.toFixed(2)),date:TODAY,note:'Paid outside the app'}]}];
+        });
+        const clearExempt=(mk)=>setTitheLog(prev=>(prev||[]).map(t=>t.month===mk?{...t,skips:[]}:t));
+        const fmtMk=(mk)=>MONTH_NAMES[parseInt(mk.split('-')[1])-1].slice(0,3)+' '+mk.split('-')[0];
+        const bal=titheCarryover;
+        return(
+          <details className="card" style={{padding:'12px 16px'}}>
+            <summary style={{cursor:'pointer',fontWeight:'800',fontSize:'13px',color:'#92400e',display:'flex',justifyContent:'space-between',gap:'8px'}}>
+              <span>🙏 Tithe balance and adjustments</span>
+              <span style={{color:bal>0.005?'#b45309':bal<-0.005?'#059669':'#94a3b8'}}>{bal>0.005?`Owed ${P(bal)}`:bal<-0.005?`Advance ${P(Math.abs(bal))}`:'Settled'}</span>
+            </summary>
+            <div style={{marginTop:'10px'}}>
+              <p style={{fontSize:'11px',color:'#64748b',margin:'0 0 6px'}}>Carried into {MONTH_NAMES[selMonth]} {yr}. Positive = still owed, negative = paid ahead.</p>
+              {rows.length>0&&(
+                <div style={{overflowX:'auto',marginBottom:'12px'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'11px'}}>
+                    <thead><tr style={{textAlign:'right',color:'#b45309'}}><th style={{textAlign:'left'}}>Month</th><th>Owed</th><th>Paid</th><th>Exempt</th><th>Net</th><th></th></tr></thead>
+                    <tbody>
+                      {rows.map((r,i)=>(
+                        <tr key={(r.id||r.mk)+i} style={{textAlign:'right',borderTop:'1px solid rgba(148,163,184,.25)'}}>
+                          <td style={{textAlign:'left'}}>{fmtMk(r.mk||curMonthKey)}{r.adj?` · adjustment${r.note?` (${r.note})`:''}`:''}</td>
+                          {r.adj?<td colSpan={3} style={{color:'#94a3b8'}}>{r.net>0?'Still owed':'Advance paid'}</td>
+                            :r.skipped?<td colSpan={3} style={{color:'#94a3b8'}}>Month skipped</td>
+                            :<><td>{P(r.owed)}</td><td>{P(r.paid)}</td><td>{P(r.skippedAmt)}</td></>}
+                          <td style={{fontWeight:'800',color:r.net>0.005?'#b45309':r.net<-0.005?'#059669':'#94a3b8'}}>{r.skipped?'':P(r.net)}</td>
+                          <td style={{whiteSpace:'nowrap'}}>
+                            {r.adj&&<button onClick={()=>setTitheLog(prev=>(prev||[]).filter(t=>t.month!==r.id))} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#ef4444'}}>Remove</button>}
+                            {!r.adj&&!r.skipped&&r.net>0.005&&<button onClick={()=>markPaid(r.mk,r.net)} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#16a34a'}}>Mark paid</button>}
+                            {!r.adj&&!r.skipped&&r.skippedAmt>0&&<button onClick={()=>clearExempt(r.mk)} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#64748b'}}>Clear exempt</button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p style={{fontSize:'10px',color:'#94a3b8',margin:'6px 0 0'}}>Mark paid = records that month's balance as paid outside the app (adds an exemption). Clear exempt = removes that month's exemptions.</p>
+                </div>
+              )}
+              <p style={{fontSize:'11px',fontWeight:'800',color:'#64748b',margin:'0 0 6px',textTransform:'uppercase',letterSpacing:'.5px'}}>Add a custom adjustment</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+                <div><span className="fl">Type</span>
+                  <select className="fi" value={adjType} onChange={e=>setAdjType(e.target.value)}>
+                    <option value="owed">Still owed (adds to tithe due)</option>
+                    <option value="advance">Advance paid (credit)</option>
+                  </select></div>
+                <div><span className="fl">Amount (₱)</span><input type="number" className="fi" min="0" step="0.01" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="0.00"/></div>
+                <div><span className="fl">Applies from</span><input type="month" className="fi" value={adjFrom||curMonthKey} onChange={e=>setAdjFrom(e.target.value)}/></div>
+                <div><span className="fl">Note (optional)</span><input type="text" className="fi" value={adjNote} onChange={e=>setAdjNote(e.target.value)} placeholder="e.g. paid ahead at church"/></div>
+              </div>
+              <button className="btn bs" style={{width:'100%',justifyContent:'center'}} onClick={addAdj}>
+                {adjType==='owed'?'➕ Add still-owed tithe':'➕ Add advance tithe credit'}{adjAmt?` of ${P(parseFloat(adjAmt)||0)}`:''}
+              </button>
+            </div>
+          </details>
         );
       })()}
 
