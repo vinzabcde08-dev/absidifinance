@@ -1644,7 +1644,7 @@ function MainApp({onLogout}){
     /* Manual adjustments: +amount = still owed, -amount = advance paid. Apply from their start month onward. */
     titheLog.filter(t=>t.adj&&(t.from||'')<=curMonthKey).forEach(t=>{
       deficit+=(t.amount||0);
-      rows.push({mk:t.from,adj:true,id:t.month,note:t.note||'',net:(t.amount||0)});
+      rows.push({mk:t.from,adj:true,id:t.month,note:t.note||'',acct:t.accountId||'',net:(t.amount||0)});
     });
     return{total:parseFloat(deficit.toFixed(2)),rows};
   })();
@@ -3352,7 +3352,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const[titheWithdrawAcct,setTitheWithdrawAcct]=useState('');
   const[titheWithdrawAmount,setTitheWithdrawAmount]=useState(''); /* custom amount input — blank = full remaining */
   const[titheSkipAmt,setTitheSkipAmt]=useState('');
-  const[adjType,setAdjType]=useState('owed');const[adjAmt,setAdjAmt]=useState('');const[adjNote,setAdjNote]=useState('');const[adjFrom,setAdjFrom]=useState('');
+  const[adjType,setAdjType]=useState('owed');const[adjAmt,setAdjAmt]=useState('');const[adjNote,setAdjNote]=useState('');const[adjAcct,setAdjAcct]=useState('');const[adjFrom,setAdjFrom]=useState('');
   const[titheSkipNote,setTitheSkipNote]=useState('');
 
   /* ── Consolidate & Withdraw modal ── */
@@ -3689,9 +3689,16 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
         const addAdj=()=>{
           const a=parseFloat(adjAmt)||0;
           if(a<=0)return;
-          const signed=adjType==='owed'?a:-a;
-          setTitheLog(prev=>[...(prev||[]),{month:'adj-'+uid(),adj:true,from:adjFrom||curMonthKey,amount:signed,note:adjNote,date:TODAY}]);
-          setAdjAmt('');setAdjNote('');
+          const isAdv=adjType==='advance';
+          if(isAdv&&!adjAcct)return; /* advance tithe must say which account the money came from */
+          const signed=isAdv?-a:a;
+          const adjKey='adj-'+uid();
+          if(isAdv){
+            /* Deduct from the chosen account. Uses its own alloc so it is not double-counted as a monthly tithe payment. */
+            setExpenses(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:parseFloat(a.toFixed(2)),category:'Tithes',accountId:adjAcct,alloc:'tithe_advance',adjId:adjKey,note:`Advance tithe${adjNote?': '+adjNote:''}`}]);
+          }
+          setTitheLog(prev=>[...(prev||[]),{month:adjKey,adj:true,from:adjFrom||curMonthKey,amount:signed,note:adjNote,date:TODAY,accountId:isAdv?adjAcct:''}]);
+          setAdjAmt('');setAdjNote('');setAdjAcct('');
         };
         const markPaid=(mk,net)=>setTitheLog(prev=>{
           const ex=(prev||[]).find(t=>t.month===mk)||{};
@@ -3715,13 +3722,13 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                     <tbody>
                       {rows.map((r,i)=>(
                         <tr key={(r.id||r.mk)+i} style={{textAlign:'right',borderTop:'1px solid rgba(148,163,184,.25)'}}>
-                          <td style={{textAlign:'left'}}>{fmtMk(r.mk||curMonthKey)}{r.adj?` · adjustment${r.note?` (${r.note})`:''}`:''}</td>
+                          <td style={{textAlign:'left'}}>{fmtMk(r.mk||curMonthKey)}{r.adj?` · adjustment${r.note?` (${r.note})`:''}${r.acct?` · from ${acctLabel(accounts.find(a=>a.id===r.acct)||{})||'account'}`:''}`:''}</td>
                           {r.adj?<td colSpan={3} style={{color:'#94a3b8'}}>{r.net>0?'Still owed':'Advance paid'}</td>
                             :r.skipped?<td colSpan={3} style={{color:'#94a3b8'}}>Month skipped</td>
                             :<><td>{P(r.owed)}</td><td>{P(r.paid)}</td><td>{P(r.skippedAmt)}</td></>}
                           <td style={{fontWeight:'800',color:r.net>0.005?'#b45309':r.net<-0.005?'#059669':'#94a3b8'}}>{r.skipped?'':P(r.net)}</td>
                           <td style={{whiteSpace:'nowrap'}}>
-                            {r.adj&&<button onClick={()=>setTitheLog(prev=>(prev||[]).filter(t=>t.month!==r.id))} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#ef4444'}}>Remove</button>}
+                            {r.adj&&<button onClick={()=>{setTitheLog(prev=>(prev||[]).filter(t=>t.month!==r.id));setExpenses(prev=>(prev||[]).filter(x=>x.adjId!==r.id));}} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#ef4444'}}>Remove</button>}
                             {!r.adj&&!r.skipped&&r.net>0.005&&<button onClick={()=>markPaid(r.mk,r.net)} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#16a34a'}}>Mark paid</button>}
                             {!r.adj&&!r.skipped&&r.skippedAmt>0&&<button onClick={()=>clearExempt(r.mk)} style={{fontSize:'10px',marginLeft:'6px',padding:'2px 6px',border:'1px solid #e2e8f0',borderRadius:'6px',background:'none',cursor:'pointer',color:'#64748b'}}>Clear exempt</button>}
                           </td>
@@ -3740,11 +3747,18 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                     <option value="advance">Advance paid (credit)</option>
                   </select></div>
                 <div><span className="fl">Amount (₱)</span><input type="number" className="fi" min="0" step="0.01" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="0.00"/></div>
+                {adjType==='advance'&&(
+                  <div style={{gridColumn:'1 / -1'}}><span className="fl">Paid from account (required, will be deducted)</span>
+                    <select className="fi" value={adjAcct} onChange={e=>setAdjAcct(e.target.value)}>
+                      <option value="">— pick account —</option>
+                      {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)} · {P(accBal(a.id))}</option>)}
+                    </select></div>
+                )}
                 <div><span className="fl">Applies from</span><input type="month" className="fi" value={adjFrom||curMonthKey} onChange={e=>setAdjFrom(e.target.value)}/></div>
                 <div><span className="fl">Note (optional)</span><input type="text" className="fi" value={adjNote} onChange={e=>setAdjNote(e.target.value)} placeholder="e.g. paid ahead at church"/></div>
               </div>
-              <button className="btn bs" style={{width:'100%',justifyContent:'center'}} onClick={addAdj}>
-                {adjType==='owed'?'➕ Add still-owed tithe':'➕ Add advance tithe credit'}{adjAmt?` of ${P(parseFloat(adjAmt)||0)}`:''}
+              <button className="btn bs" style={{width:'100%',justifyContent:'center',opacity:(adjType==='advance'&&!adjAcct)?.5:1}} onClick={addAdj}>
+                {adjType==='owed'?'➕ Add still-owed tithe':(adjAcct?'➕ Add advance tithe credit':'Pick an account first')}{adjAmt?` of ${P(parseFloat(adjAmt)||0)}`:''}
               </button>
             </div>
           </details>
