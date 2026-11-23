@@ -1679,7 +1679,7 @@ function MainApp({onLogout}){
     const extraSavingsDeduct=Math.max(0,savingsLogAmt-savingsOutInExp);
     /* Destination backup: if savings were directed to this account (dstAcctId in savingsLog)
        but the savings_in income entry is missing (Firestore revert), credit the difference */
-    const savingsDstFromLog=savingsLog.filter(x=>x.dstAcctId===id&&x.done&&parseInt((x.month||'0000').substring(0,4))===yr).reduce((s,x)=>s+(x.amount||0),0);
+    const savingsDstFromLog=savingsLog.filter(x=>(x.dstAcctId?x.dstAcctId===id:savingsAcctId===id)&&x.done&&parseInt((x.month||'0000').substring(0,4))===yr).reduce((s,x)=>s+(x.amount||0),0);
     const savingsInActual=income.filter(x=>x.accountId===id&&x.alloc==='savings_in'&&yK(x.date)===yr).reduce((s,x)=>s+(x.amount||0),0);
     const extraSavingsCredit=Math.max(0,savingsDstFromLog-savingsInActual);
     return a.openingBalance+i-e-p-extraSavingsDeduct+extraSavingsCredit;
