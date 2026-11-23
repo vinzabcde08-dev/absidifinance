@@ -3312,7 +3312,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
   const mLoanPay=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='loan_payment').reduce((s,x)=>s+(x.amount||0),0);
   const mInvestOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
   const mSavingsOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
-  const mTitheOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
+  const mTitheOut=(allExpenses||[]).filter(x=>mK(x.date||'')===curMonthKey&&(x.alloc==='tithe'||x.alloc==='tithe_advance')).reduce((s,x)=>s+(x.amount||0),0);
   const totalCashOut=mExp+mSub+mPayActual+mLoanPay+mInvestOut+mSavingsOut+mTitheOut;
 
   /* ── Quarterly trend ── */
@@ -3325,11 +3325,12 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     const inc=(allIncome||[]).filter(x=>x.date&&mK(x.date)===key&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
     const exp=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&(!x.alloc||x.alloc==='transfer_fee')&&x.category!=='Payroll').reduce((s,x)=>s+(x.amount||0),0);
     const sub=(allSubs||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
-    const pay=(allPayroll||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0);
+    const pay=(allPayroll||[]).filter(x=>x.date&&mK(x.date)===key).reduce((s,x)=>s+(x.amount||0),0)
+      +(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.category==='Payroll'&&!x.alloc).reduce((s,x)=>s+(x.amount||0),0);
     const loans=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='loan_payment').reduce((s,x)=>s+(x.amount||0),0);
     const invest=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='investment_out').reduce((s,x)=>s+(x.amount||0),0);
     const savOut=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='savings_out').reduce((s,x)=>s+(x.amount||0),0);
-    const tithe=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&x.alloc==='tithe').reduce((s,x)=>s+(x.amount||0),0);
+    const tithe=(allExpenses||[]).filter(x=>x.date&&mK(x.date)===key&&(x.alloc==='tithe'||x.alloc==='tithe_advance')).reduce((s,x)=>s+(x.amount||0),0);
     const isFuture=qYear>CUR_YEAR||(qYear===CUR_YEAR&&m>CUR_MONTH);
     const coreExp=exp+sub+pay; /* spending only — no loans/invest/savings */
     const totalCashOut=coreExp+loans+invest+savOut+tithe; /* everything out */
@@ -4160,7 +4161,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               {label:'Client Expected Income',sub:`From ${clients.length} client(s) · after payroll: ${P(netClientExpected||0)}`,value:expectedFromClients||0,color:'#8b5cf6',mixed:false},
               {label:'Billed Income',sub:'Paid + Pending entries',value:gExpected,color:'#6366f1',mixed:true,paid:gPaid,pending:gPending},
               {label:'Actual Received',sub:'Paid entries only',value:gPaid,color:'#10b981',mixed:false},
-              {label:'Total Expenses',sub:`Expenses ${P(mExpAll)} · Subs ${P(mSub)} · Payroll ${P(mPay)}`,value:gExp,color:'#ef4444',mixed:false},
+              {label:'Total Expenses',sub:`Spending ${P(mExp)} · Subs ${P(mSub)} · Payroll ${P(mPayActual)}`,value:gExp,color:'#ef4444',mixed:false},
             ].map(b=>(
               <div key={b.label}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
@@ -4214,10 +4215,23 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
             <div style={{padding:'14px 18px',borderRadius:'10px',background:gNet>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'4px'}}>
               <div>
                 <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>{gNet>=0?'✓ Net This Month':'⚠ Net This Month (shortfall)'}</p>
-                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Total Income − Total Expenses</p>
+                <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Income − spending, subs and payroll (not counting loans, tithe, savings or investment)</p>
               </div>
               <span style={{fontSize:'20px',fontWeight:'900',color:gNet>=0?'#10b981':'#ef4444'}}>{gNet>=0?'+':''}{P(gNet)}</span>
             </div>
+            {(()=>{
+              const cashOut=gExp+mLoanPay+mInvestOut+mSavingsOut+mTitheOut;
+              const after=mInc-cashOut;
+              return(
+                <div style={{padding:'12px 18px',borderRadius:'10px',background:after>=0?'#f0fdf4':'#fff5f5',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <p style={{fontWeight:'700',fontSize:'13px',color:'#64748b',margin:'0 0 2px'}}>After everything that left your accounts</p>
+                    <p style={{fontSize:'11px',color:'#94a3b8',margin:0}}>Also takes out loans {P(mLoanPay)} · tithe {P(mTitheOut)} · savings {P(mSavingsOut)} · investment {P(mInvestOut)}. This is the number the chart below uses.</p>
+                  </div>
+                  <span style={{fontSize:'17px',fontWeight:'900',color:after>=0?'#10b981':'#ef4444',flexShrink:0,marginLeft:'10px'}}>{after>=0?'+':''}{P(after)}</span>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
