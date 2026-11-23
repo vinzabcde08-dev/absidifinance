@@ -1305,6 +1305,7 @@ function MainApp({onLogout}){
   const unskipPayDate=(empId,date)=>setSkippedPayDates(prev=>prev.filter(s=>!(s.empId===empId&&s.date===date)));
   const[savingsAcctId,setSavingsAcctId]=useState(()=>ls.get(uk('ph_savings_acct'),''));
   const[savingsSrcAcctId,setSavingsSrcAcctId]=useState(()=>ls.get(uk('ph_savings_src_acct'),''));
+  const[investSrcAcctId,setInvestSrcAcctId]=useState(()=>ls.get(uk('ph_invest_src_acct'),''));
   const[emergencyAcctId,setEmergencyAcctId]=useState(()=>ls.get(uk('ph_emerg_acct'),''));
   const[emergencyMonths,setEmergencyMonths]=useState(()=>ls.get(uk('ph_emerg_months'),3));
   const[year,setYear]=useState(String(CUR_YEAR));
@@ -1380,6 +1381,7 @@ function MainApp({onLogout}){
   useEffect(()=>{localStorage.setItem('absidi_skip_pay',JSON.stringify(skippedPayDates));},[skippedPayDates]);
   useEffect(()=>{ls.set(uk('ph_savings_acct'),savingsAcctId);},[savingsAcctId]);
   useEffect(()=>{ls.set(uk('ph_savings_src_acct'),savingsSrcAcctId);},[savingsSrcAcctId]);
+  useEffect(()=>{ls.set(uk('ph_invest_src_acct'),investSrcAcctId);},[investSrcAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_acct'),emergencyAcctId);},[emergencyAcctId]);
   useEffect(()=>{ls.set(uk('ph_emerg_months'),emergencyMonths);},[emergencyMonths]);
 
@@ -1675,7 +1677,12 @@ function MainApp({onLogout}){
     const savingsLogAmt=savingsLog.filter(x=>x.srcAcctId===id&&x.done&&parseInt((x.month||'0000').substring(0,4))===yr).reduce((s,x)=>s+(x.amount||0),0);
     const savingsOutInExp=expenses.filter(x=>x.accountId===id&&x.alloc==='savings_out'&&yK(x.date)===yr).reduce((s,x)=>s+(x.amount||0),0);
     const extraSavingsDeduct=Math.max(0,savingsLogAmt-savingsOutInExp);
-    return a.openingBalance+i-e-p-extraSavingsDeduct;
+    /* Destination backup: if savings were directed to this account (dstAcctId in savingsLog)
+       but the savings_in income entry is missing (Firestore revert), credit the difference */
+    const savingsDstFromLog=savingsLog.filter(x=>x.dstAcctId===id&&x.done&&parseInt((x.month||'0000').substring(0,4))===yr).reduce((s,x)=>s+(x.amount||0),0);
+    const savingsInActual=income.filter(x=>x.accountId===id&&x.alloc==='savings_in'&&yK(x.date)===yr).reduce((s,x)=>s+(x.amount||0),0);
+    const extraSavingsCredit=Math.max(0,savingsDstFromLog-savingsInActual);
+    return a.openingBalance+i-e-p-extraSavingsDeduct+extraSavingsCredit;
   };
 
   const exportCSV=()=>{
@@ -2435,14 +2442,13 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
   );
 }
 
-function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expenses,setExpenses,income,setIncome,investLog,setInvestLog}){
+function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expenses,setExpenses,income,setIncome,investLog,setInvestLog,investSrcAcctId,setInvestSrcAcctId}){
   const[dest,setDest]=useState('external');
   const[destAcct,setDestAcct]=useState('');
-  const[srcAcct,setSrcAcct]=useState('');
   const markDone=(destLabel)=>{
     const note=`Invest ${curMonthKey}`;
-    const srcEntries=srcAcct
-      ?[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:srcAcct,alloc:'investment_out',note}]
+    const srcEntries=investSrcAcctId
+      ?[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:investSrcAcctId,alloc:'investment_out',note}]
       :byAcctTithe.length>0
         ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
         :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
@@ -2460,7 +2466,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
           <button key={o.v} onClick={()=>setDest(o.v)} style={{padding:'6px 14px',borderRadius:'7px',border:`2px solid ${dest===o.v?'#6366f1':'#e2e8f0'}`,background:dest===o.v?'#6366f1':'transparent',color:dest===o.v?'#fff':'#64748b',fontWeight:'700',fontSize:'13px',cursor:'pointer'}}>{o.l}</button>
         ))}
       </div>
-      <select className="fi" style={{marginBottom:'10px'}} value={srcAcct} onChange={e=>setSrcAcct(e.target.value)}>
+      <select className="fi" style={{marginBottom:'10px'}} value={investSrcAcctId} onChange={e=>setInvestSrcAcctId(e.target.value)}>
         <option value="">— From: All accounts (proportional split) —</option>
         {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
       </select>
@@ -2470,7 +2476,7 @@ function InvestDonePanel({invest,accounts,curMonthKey,byAcctTithe,totalMInc,expe
           {accounts.map(a=><option key={a.id} value={a.id}>{acctLabel(a)}</option>)}
         </select>
       )}
-      <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':srcAcct?`External Broker (from ${acctLabel(accounts.find(a=>a.id===srcAcct)||{})})`:'External Broker')}>
+      <button className="btn bp" style={{width:'100%',justifyContent:'center'}} onClick={()=>markDone(dest==='account'&&destAcct?acctLabel(accounts.find(a=>a.id===destAcct)||{})||'Bank Account':investSrcAcctId?`External Broker (from ${acctLabel(accounts.find(a=>a.id===investSrcAcctId)||{})})`:'External Broker')}>
         ✓ Done — Investment Moved
       </button>
     </div>
@@ -3356,9 +3362,11 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
     /* — Invest — */
     if(consoInvest&&!investDone&&invest>0){
       const note=`Invest ${curMonthKey}`;
-      const srcEntries=byAcctTithe.length>0
-        ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
-        :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
+      const srcEntries=investSrcAcctId
+        ?[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:investSrcAcctId,alloc:'investment_out',note}]
+        :byAcctTithe.length>0
+          ?byAcctTithe.map(({acct,inc})=>({id:uid(),date:TODAY,amount:parseFloat(((inc/Math.max(totalMInc,1))*invest).toFixed(2)),category:'Investment',accountId:acct.id,alloc:'investment_out',note}))
+          :[{id:uid(),date:TODAY,amount:invest,category:'Investment',accountId:'',alloc:'investment_out',note}];
       setExpenses(prev=>[...(prev||[]),...srcEntries]);
       setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:invest,type:'Investment Transfer',accountId:consoDest,alloc:'investment_in',note:`Invest ${curMonthKey}`}]);
       setInvestLog(prev=>[...prev.filter(l=>l.month!==curMonthKey),{month:curMonthKey,done:true,amount:invest,destination:destAcct?acctLabel(destAcct):'Consolidated',date:TODAY}]);
@@ -3698,7 +3706,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                 if(savingsAcctId){
                   setIncome(prev=>[...(prev||[]),{id:uid(),date:TODAY,amount:savings,type:'Savings Transfer',accountId:savingsAcctId,alloc:'savings_in',note}]);
                 }
-                setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY,srcAcctId:savingsSrcAcctId||null}]);
+                setSavingsLog(prev=>[...prev.filter(s=>s.month!==curMonthKey),{month:curMonthKey,done:true,amount:savings,date:TODAY,srcAcctId:savingsSrcAcctId||null,dstAcctId:savingsAcctId||null}]);
               }}>
                 ✓ Done — Transferred
               </button>
@@ -3744,7 +3752,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               </div>
               <span style={{fontSize:'22px',fontWeight:'900',color:'#4f46e5',lineHeight:1}}>{P(invest)}</span>
             </div>
-            <InvestDonePanel invest={invest} accounts={accounts} curMonthKey={curMonthKey} byAcctTithe={byAcctTithe} totalMInc={totalMInc} expenses={allExpenses} setExpenses={setExpenses} income={allIncome} setIncome={setIncome} investLog={investLog} setInvestLog={setInvestLog}/>
+            <InvestDonePanel invest={invest} accounts={accounts} curMonthKey={curMonthKey} byAcctTithe={byAcctTithe} totalMInc={totalMInc} expenses={allExpenses} setExpenses={setExpenses} income={allIncome} setIncome={setIncome} investLog={investLog} setInvestLog={setInvestLog} investSrcAcctId={investSrcAcctId} setInvestSrcAcctId={setInvestSrcAcctId}/>
             <button className="btn bs" style={{marginTop:'10px',width:'100%',justifyContent:'center'}} onClick={()=>setInvestLog(prev=>[...prev.filter(l=>l.month!==curMonthKey),{month:curMonthKey,skipped:true,date:TODAY}])}>
               Skip this month
             </button>
