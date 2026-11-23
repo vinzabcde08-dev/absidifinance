@@ -236,6 +236,27 @@ self.addEventListener('fetch',e=>{
 <script type="text/babel">
 const{useState,useEffect,useRef}=React;
 
+/* ── Safety net: if any screen throws, show a message instead of a blank page ── */
+class ErrorBoundary extends React.Component{
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(err){return{err};}
+  componentDidCatch(err,info){console.error('AbsidiFinance render error:',err,info);}
+  render(){
+    if(this.state.err)return(
+      <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'24px',background:'#f1f5f9'}}>
+        <div style={{maxWidth:'420px',background:'#fff',borderRadius:'16px',padding:'24px',boxShadow:'0 8px 30px rgba(0,0,0,.1)',textAlign:'center'}}>
+          <p style={{fontSize:'32px',margin:'0 0 8px'}}>⚠️</p>
+          <p style={{fontWeight:'800',fontSize:'16px',margin:'0 0 6px',color:'#1e293b'}}>Something went wrong</p>
+          <p style={{fontSize:'12px',color:'#64748b',margin:'0 0 14px',wordBreak:'break-word'}}>{String(this.state.err&&this.state.err.message||this.state.err)}</p>
+          <button onClick={()=>this.setState({err:null})} style={{padding:'10px 18px',borderRadius:'10px',border:'none',background:'#6366f1',color:'#fff',fontWeight:'700',cursor:'pointer',marginRight:'8px'}}>Try again</button>
+          <button onClick={()=>location.reload()} style={{padding:'10px 18px',borderRadius:'10px',border:'1px solid #e2e8f0',background:'#fff',color:'#1e293b',fontWeight:'700',cursor:'pointer'}}>Reload</button>
+        </div>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 /* ═══ FIREBASE CONFIG — fill these in from your Firebase console ═══ */
 const FIREBASE_CONFIG={apiKey:"AIzaSyAhRAc1CUJZW7n0ZYWFPgIJ4JXbE5fVZX0",authDomain:"absidifinance.firebaseapp.com",projectId:"absidifinance",storageBucket:"absidifinance.firebasestorage.app",messagingSenderId:"774596841212",appId:"1:774596841212:web:06686b8bfb1d7d7d1a9179"};
 let db=null,auth=null;
@@ -1265,7 +1286,7 @@ function App(){
   );
 
   if(!loggedIn)return<LoginScreen onLogin={()=>setLoggedIn(true)}/>;
-  return<MainApp onLogout={handleLogout}/>;
+  return<ErrorBoundary><MainApp onLogout={handleLogout}/></ErrorBoundary>;
 }
 
 /* ════════════════
@@ -2255,7 +2276,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3} investSrcAcctId={investSrcAcctId} setInvestSrcAcctId={setInvestSrcAcctId}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -3265,7 +3286,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,emergencyAcctId,emergencyMonths,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,emergencyAcctId,emergencyMonths,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3,investSrcAcctId,setInvestSrcAcctId}){
   const net=mInc-mExp-mSub-mPayActual;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
