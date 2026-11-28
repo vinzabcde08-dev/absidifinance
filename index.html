@@ -497,6 +497,7 @@ const toEmail=(u)=>u.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@absidifi
    This prevents the race condition where a new device initialises state as [] from empty
    localStorage and immediately overwrites Firebase with empty data before the snapshot fires. ── */
 const _fbReady={};
+const _lastCloud={}; /* last raw value received from / written to the cloud per doc, to stop echo writes */
 const _GUARDED_KEYS=['ph_income','ph_exp','ph_subs','ph_payroll','ph_clients','ph_accts','ph_cards'];
 /* ph_emps intentionally excluded: deleting the last employee must write [] to Firestore,
    otherwise the onSnapshot listener restores the deleted employee (ghost payroll bug) */
@@ -517,7 +518,7 @@ const ls={
         }
       }
       localStorage.setItem(k,JSON.stringify(v));
-      if(db&&_fbReady[k])db.collection('absidifinance').doc(k).set({v:JSON.stringify(v)}).catch(()=>{});
+      if(db&&_fbReady[k]){const raw=JSON.stringify(v);if(_lastCloud[k]!==raw){_lastCloud[k]=raw;db.collection('absidifinance').doc(k).set({v:raw}).catch(()=>{});}}
     }catch{}
   },
   del:(k)=>{try{localStorage.removeItem(k);}catch{}},
@@ -1429,17 +1430,25 @@ function MainApp({onLogout}){
       {k:'ph_savings_log',set:setSavingsLog,def:[]},
       {k:'ph_invest_log',set:setInvestLog,def:[]},
       {k:'ph_transfers',set:setTransfers,def:[]},
+      {k:'ph_plans',set:setPlans,def:[]},
+      {k:'ph_savings_acct',set:setSavingsAcctId,def:''},
+      {k:'ph_savings_src_acct',set:setSavingsSrcAcctId,def:''},
+      {k:'ph_invest_src_acct',set:setInvestSrcAcctId,def:''},
+      {k:'ph_emerg_acct',set:setEmergencyAcctId,def:''},
+      {k:'ph_emerg_months',set:setEmergencyMonths,def:3},
     ];
     const unsubs=watches.map(({k,set})=>{
       const docKey=k+'_'+userId;
       return db.collection('absidifinance').doc(docKey).onSnapshot(doc=>{
         /* mark this key as Firebase-ready on first snapshot — must happen BEFORE the
            hasPendingWrites early-return so writes from here on are always allowed */
-        _fbReady[docKey]=true;
+        /* A cached snapshot (fromCache) can be stale on a phone: apply it for display but do NOT
+           unlock writes until the server has confirmed, otherwise the stale copy overwrites the cloud */
+        if(!doc.metadata.fromCache)_fbReady[docKey]=true;
         /* skip writes that originated from THIS device to avoid loops */
         if(doc.metadata.hasPendingWrites)return;
-        if(doc.exists){const d=doc.data();if(d&&d.v!==undefined){try{const v=JSON.parse(d.v);localStorage.setItem(docKey,d.v);set(v);}catch(e){}}}
-        else{
+        if(doc.exists){const d=doc.data();if(d&&d.v!==undefined){try{const v=JSON.parse(d.v);_lastCloud[docKey]=d.v;localStorage.setItem(docKey,d.v);set(v);}catch(e){}}}
+        else if(!doc.metadata.fromCache){
           /* Firebase doc doesn't exist.
              If this device's localStorage still has data, push it back up to Firebase
              (auto-restore after an accidental wipe). Never seed hardcoded data —
@@ -1626,8 +1635,11 @@ function MainApp({onLogout}){
   /* Carry-over: unpaid tithe from previous months (up to 24 months back) */
   const _tc=(()=>{
     let deficit=0;const rows=[];
-    /* "Start fresh" baseline: months before the latest baseline (on or before the viewed month) are ignored */
-    const baseKey=titheLog.filter(t=>t.baseline&&(t.from||'')<=curMonthKey).map(t=>t.from).sort().pop()||'';
+    
+    /* Automatic tracking start (no manual control): the earliest legacy marker if one exists, otherwise the month of the first tithe payment on record */
+    const _legacy=titheLog.filter(t=>t.baseline&&t.from).map(t=>t.from).sort()[0]||'';
+    const _firstPaid=expenses.filter(x=>x.alloc==='tithe'&&x.date).map(x=>x.date.slice(0,7)).sort()[0]||'';
+    const baseKey=_legacy||_firstPaid||'';
     for(let i=1;i<=24;i++){
       const d=new Date(yr,selMonth-i,1);
       if(d.getFullYear()<2020)break;
@@ -1636,7 +1648,8 @@ function MainApp({onLogout}){
       const logEntry=titheLog.find(t=>(t.month||t.week)===mk);
       if(logEntry?.skipped){rows.push({mk,skipped:true});continue;}
       const mI=income.filter(x=>!x.alloc&&!x.noTithe&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
-      if(!mI)continue;
+      const _paidAny=expenses.some(x=>x.alloc==='tithe'&&(x.date||'').startsWith(mk));
+      if(!mI&&!_paidAny)continue;
       const mP=payroll.filter(x=>(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0)
         +expenses.filter(x=>isOpex(x)&&(x.date||'').startsWith(mk)).reduce((s,x)=>s+(x.amount||0),0);
       /* Investment transferred that month is deducted from the tithe base (same as the live calculation) */
@@ -2293,7 +2306,7 @@ ${(aiHistory&&aiHistory.length>0)?`<div class="section"><h2>AI Financial Analysi
 
       {/* CONTENT */}
       <div className="__content" style={{maxWidth:'1100px',margin:'0 auto',padding:'24px 20px'}}>
-        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3} investSrcAcctId={investSrcAcctId} setInvestSrcAcctId={setInvestSrcAcctId} titheCarryDetail={titheCarryDetail} titheBaseKey={titheBaseKey}/>}
+        {tab==='home'&&<HomeTab mInc={mInc} mExp={mExp} mExpAll={mExpAll} mSub={mSub} mPay={mPayBudget} base={base} tithe={tithe} invest={invest} desires={desires} savings={savings} spendBudget={spendBudget} dailyCap={dailyCap} daysLeft={daysLeft} accounts={accounts} accBal={accBal} settings={settings} totalFixed={totalFixed} debts={debts} monthName={MONTH_NAMES[selMonth]} income={byMonth(income)} unlinkedIncome={income.filter(i=>!i.accountId).length} unlinkedExpenses={expenses.filter(e=>!e.accountId&&!e.cardId).length} allIncome={income} setIncome={setIncome} allExpenses={expenses} setExpenses={setExpenses} allSubs={subs} allPayroll={payroll} yr={yr} selMonth={selMonth} clients={clients} cards={cards} setTab={setTab} expectedFromClients={expectedFromClients} netClientExpected={netClientExpected} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} titheLog={titheLog} setTitheLog={setTitheLog} savingsLog={savingsLog} setSavingsLog={setSavingsLog} savingsAcctId={savingsAcctId} savingsSrcAcctId={savingsSrcAcctId} setSavingsSrcAcctId={setSavingsSrcAcctId} emergencyAcctId={emergencyAcctId} emergencyMonths={emergencyMonths} byAcctTithe={byAcctTithe} totalMInc={totalMInc} curMonthKey={curMonthKey} investLog={investLog} setInvestLog={setInvestLog} mInvestActual={mInvestActual} mTitheActual={mTitheActual} mTitheSkipped={mTitheSkipped} titheCarryover={titheCarryover} mSavingsActual={mSavingsActual} mDesiresActual={mDesiresActual} mExpReg={mExpReg} transfers={transfers} setTransfers={setTransfers} investMovedThisMonth={investMovedThisMonth} employees={employees} expectedPayroll={expectedPayroll} mPayActual={mPay} titheBase={titheBase} investActualAmt={investActualAmt} lastMonthInc={lastMonthInc} avg3={avg3} investSrcAcctId={investSrcAcctId} setInvestSrcAcctId={setInvestSrcAcctId} titheCarryDetail={titheCarryDetail} titheBaseKey={titheBaseKey} titheBreak={{inc:mInc-mIncNoTithe,opex:mOpex,inv:investMovedThisMonth?investActualAmt:0,pct:settings.tithePct}}/>}
         {tab==='accounts'&&<AccountsTab accounts={accounts} setAccounts={setAccounts} accBal={accBal} transfers={transfers} setTransfers={setTransfers} income={income} setIncome={setIncome} expenses={expenses} setExpenses={setExpenses} curMonthKey={curMonthKey} showBalToast={showBalToast}/>}
         {tab==='cards'&&<CardsTab cards={cards} setCards={setCards} expenses={byMonth(expenses)}/>}
         {tab==='clients'&&<ClientsTab clients={clients} setClients={setClients} income={byMonth(income)} expenses={byMonth(expenses)} mExp={mExp+mSub+mPay} monthName={MONTH_NAMES[selMonth]} expectedFromClients={expectedFromClients} fxRates={fxRates} fxLoaded={fxLoaded} fxUpdatedAt={fxUpdatedAt} mPay={mPay}/>}
@@ -3301,7 +3314,7 @@ function PlansTab({plans,setPlans,accounts,accBal,setExpenses,employees,payroll,
 }
 
 /* ════════  HOME  ════════ */
-function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,emergencyAcctId,emergencyMonths,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3,investSrcAcctId,setInvestSrcAcctId,titheCarryDetail,titheBaseKey}){
+function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,spendBudget,dailyCap,daysLeft,accounts,accBal,settings,totalFixed,debts,monthName,income,unlinkedIncome,unlinkedExpenses,allIncome,setIncome,allExpenses,setExpenses,allSubs,allPayroll,yr,selMonth,clients,cards,setTab,expectedFromClients,netClientExpected,fxLoaded,fxUpdatedAt,titheLog,setTitheLog,savingsLog,setSavingsLog,savingsAcctId,savingsSrcAcctId,setSavingsSrcAcctId,emergencyAcctId,emergencyMonths,byAcctTithe,totalMInc,curMonthKey,investLog,setInvestLog,mInvestActual,mTitheActual,mTitheSkipped,titheCarryover,mSavingsActual,mDesiresActual,mExpReg,transfers,setTransfers,investMovedThisMonth,employees,expectedPayroll,mPayActual,titheBase,investActualAmt,lastMonthInc,avg3,investSrcAcctId,setInvestSrcAcctId,titheCarryDetail,titheBaseKey,titheBreak}){
   const net=mInc-mExp-mSub-mPayActual;
   const totalDebt=(debts||[]).reduce((s,d)=>s+(d.balance||0),0);
   const totalOnHand=accounts.reduce((s,a)=>s+accBal(a.id),0);
@@ -3500,6 +3513,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                 <p style={{fontSize:'12px',color:'#94a3b8',margin:0}}>
                   {totalTitheOwed<=0?`Fully covered by advance payment · New income reopens this automatically`:`${P(mTitheActual)} withdrawn${mTitheSkipped>0?` · ${P(mTitheSkipped)} exempted`:''} · Total: ${P(totalTitheCovered)} of ${P(totalTitheOwed)} · New income reopens this automatically`}
                 </p>
+                {titheBreak&&<p style={{fontSize:'11px',color:'#64748b',margin:'4px 0 0'}}>Due = {titheBreak.pct}% × (income {P(titheBreak.inc)} − operational {P(titheBreak.opex)}{titheBreak.inv?` − investment ${P(titheBreak.inv)}`:''})</p>}
               </div>
               <button onClick={()=>{
                 setExpenses(prev=>(prev||[]).filter(x=>!(x.note===`Tithe ${wk}`&&x.alloc==='tithe')));
@@ -3719,7 +3733,7 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
               <span style={{color:bal>0.005?'#b45309':bal<-0.005?'#059669':'#94a3b8'}}>{bal>0.005?`Owed ${P(bal)}`:bal<-0.005?`Advance ${P(Math.abs(bal))}`:'Settled'}</span>
             </summary>
             <div style={{marginTop:'10px'}}>
-              <p style={{fontSize:'11px',color:'#64748b',margin:'0 0 6px'}}>Carried into {MONTH_NAMES[selMonth]} {yr}. Positive = still owed, negative = paid ahead.</p>
+              <p style={{fontSize:'11px',color:'#64748b',margin:'0 0 6px'}}>Carried into {MONTH_NAMES[selMonth]} {yr}. Updates automatically: tithe paid above what is due becomes an advance and is used up by your next income. Positive = still owed, negative = paid ahead.</p>
               {rows.length>0&&(
                 <div style={{overflowX:'auto',marginBottom:'12px'}}>
                   <table style={{width:'100%',borderCollapse:'collapse',fontSize:'11px'}}>
@@ -3744,25 +3758,13 @@ function HomeTab({mInc,mExp,mExpAll,mSub,mPay,base,tithe,invest,desires,savings,
                   <p style={{fontSize:'10px',color:'#94a3b8',margin:'6px 0 0'}}>Mark paid = records that month's balance as paid outside the app (adds an exemption). Clear exempt = removes that month's exemptions.</p>
                 </div>
               )}
-              <div style={{background:'rgba(148,163,184,.08)',border:'1px solid rgba(148,163,184,.25)',borderRadius:'8px',padding:'10px 12px',marginBottom:'12px'}}>
-                <p style={{fontSize:'11px',fontWeight:'800',color:'#64748b',margin:'0 0 4px',textTransform:'uppercase',letterSpacing:'.5px'}}>Start fresh</p>
-                <p style={{fontSize:'11px',color:'#64748b',margin:'0 0 8px'}}>
-                  {titheBaseKey?`Balance starts fresh from ${fmtMk(titheBaseKey)}. Earlier months are ignored.`:'Ignore every month before the one you are viewing, so the balance starts from zero here. Your tithe payments and records are not deleted.'}
-                </p>
-                <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-                  <button className="btn bs" style={{fontSize:'12px'}} onClick={()=>setTitheLog(prev=>[...(prev||[]).filter(t=>!(t.baseline&&t.from===curMonthKey)),{month:'baseline-'+curMonthKey,baseline:true,from:curMonthKey,date:TODAY}])}>
-                    Start fresh from {MONTH_NAMES[selMonth]} {yr}
-                  </button>
-                  {titheBaseKey&&<button className="btn bs" style={{fontSize:'12px'}} onClick={()=>setTitheLog(prev=>(prev||[]).filter(t=>!t.baseline))}>Undo start fresh</button>}
-                </div>
-              </div>
               <p style={{fontSize:'11px',fontWeight:'800',color:'#64748b',margin:'0 0 6px',textTransform:'uppercase',letterSpacing:'.5px'}}>Add a custom adjustment</p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
-                <div><span className="fl">Type</span>
-                  <select className="fi" value={adjType} onChange={e=>setAdjType(e.target.value)}>
-                    <option value="owed">Still owed (adds to tithe due)</option>
-                    <option value="advance">Advance paid (credit)</option>
-                  </select></div>
+                <div style={{gridColumn:'1 / -1'}}><span className="fl">Type</span>
+                  <div style={{display:'flex',gap:'8px'}}>
+                    <button type="button" onClick={()=>setAdjType('advance')} style={{flex:1,padding:'10px',borderRadius:'8px',fontWeight:'800',fontSize:'13px',cursor:'pointer',border:'2px solid '+(adjType==='advance'?'#059669':'#e2e8f0'),background:adjType==='advance'?'#d1fae5':'transparent',color:adjType==='advance'?'#047857':'#64748b'}}>Advanced</button>
+                    <button type="button" onClick={()=>setAdjType('owed')} style={{flex:1,padding:'10px',borderRadius:'8px',fontWeight:'800',fontSize:'13px',cursor:'pointer',border:'2px solid '+(adjType==='owed'?'#d97706':'#e2e8f0'),background:adjType==='owed'?'#fef3c7':'transparent',color:adjType==='owed'?'#b45309':'#64748b'}}>Still Owed</button>
+                  </div></div>
                 <div><span className="fl">Amount (₱)</span><input type="number" className="fi" min="0" step="0.01" value={adjAmt} onChange={e=>setAdjAmt(e.target.value)} placeholder="0.00"/></div>
                 {adjType==='advance'&&(
                   <div style={{gridColumn:'1 / -1'}}><span className="fl">Paid from account (required, will be deducted)</span>
@@ -6889,6 +6891,38 @@ function LoansTab({loans,setLoans,accounts,accBal,setExpenses,showBalToast}){
 }
 
 function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
+  const[syncBusy,setSyncBusy]=useState(false);
+  const[syncMsg,setSyncMsg]=useState('');
+  const SYNC_KEYS=['ph_subs','ph_income','ph_exp','ph_clients','ph_accts','ph_cards','ph_emps','ph_payroll','ph_settings','ph_debts','ph_loans','ph_ai_history','ph_tithe_log','ph_savings_log','ph_invest_log','ph_transfers','ph_plans','ph_savings_acct','ph_savings_src_acct','ph_invest_src_acct','ph_emerg_acct','ph_emerg_months'];
+  const pullCloud=async()=>{
+    if(!db){setSyncMsg('Cloud is not connected on this device.');return;}
+    if(!confirm('Replace the data on THIS device with the cloud copy?'))return;
+    setSyncBusy(true);setSyncMsg('Pulling from cloud...');
+    try{
+      const u=getUid();let n=0;
+      for(const k of SYNC_KEYS){
+        const d=await db.collection('absidifinance').doc(k+'_'+u).get({source:'server'});
+        if(d.exists&&d.data().v!==undefined){localStorage.setItem(k+'_'+u,d.data().v);n++;}
+        else localStorage.removeItem(k+'_'+u);
+      }
+      setSyncMsg('Pulled '+n+' items. Reloading...');
+      setTimeout(()=>location.reload(),600);
+    }catch(e){setSyncMsg('Pull failed: '+(e&&e.message||e)+'. Check your internet and try again.');setSyncBusy(false);}
+  };
+  const pushCloud=async()=>{
+    if(!db){setSyncMsg('Cloud is not connected on this device.');return;}
+    if(!confirm('Overwrite the CLOUD with the data on THIS device? Only do this on the device with the correct numbers.'))return;
+    setSyncBusy(true);setSyncMsg('Pushing to cloud...');
+    try{
+      const u=getUid();let n=0;
+      for(const k of SYNC_KEYS){
+        const raw=localStorage.getItem(k+'_'+u);
+        if(raw!==null){await db.collection('absidifinance').doc(k+'_'+u).set({v:raw});_lastCloud[k+'_'+u]=raw;n++;}
+      }
+      setSyncMsg('Pushed '+n+' items. Your other devices will update on their own.');
+    }catch(e){setSyncMsg('Push failed: '+(e&&e.message||e));}
+    setSyncBusy(false);
+  };
   const[showKey,setShowKey]=useState(false);
   const[keyDraft,setKeyDraft]=useState(aiApiKey);
   const[saved,setSaved]=useState(false);
@@ -6926,6 +6960,18 @@ function SettingsTab({aiApiKey,setAiApiKey,settings,setSettings}){
 
   return(
     <div className="fade" style={{maxWidth:'700px',margin:'0 auto',display:'flex',flexDirection:'column',gap:'20px',padding:'4px 0 40px'}}>
+
+      {/* ── CLOUD SYNC ── */}
+      <div className="card" style={{padding:'24px'}}>
+        <p style={{fontWeight:'800',color:'var(--text)',margin:0,fontSize:'16px'}}>Cloud Sync</p>
+        <p style={{fontSize:'12px',color:'var(--text3)',margin:'4px 0 14px'}}>If this device shows different numbers from your other one, pick the device with the correct data and use the matching button.</p>
+        <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+          <button className="btn bp" disabled={syncBusy} onClick={pullCloud}>⬇ Pull cloud to this device</button>
+          <button className="btn bs" disabled={syncBusy} onClick={pushCloud}>⬆ Push this device to cloud</button>
+        </div>
+        {syncMsg&&<p style={{fontSize:'12px',color:'#475569',margin:'12px 0 0'}}>{syncMsg}</p>}
+        <p style={{fontSize:'11px',color:'var(--text3)',margin:'10px 0 0'}}>Use Pull on the phone (cloud holds the laptop data). Use Push only on the device that has the correct data.</p>
+      </div>
 
       {/* ── CLAUDE API ── */}
       <div className="card" style={{padding:'24px'}}>
